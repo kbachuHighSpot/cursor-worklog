@@ -242,13 +242,35 @@ Led infrastructure work for new dedicated content auth service:
 
 ---
 
-## Documentation Created
+## Presentations & Demos
 
-- Content CDN Alerts Runbook
-- Local dev setup for content-cdn environment
-- Content immutability and caching rules
-- Qualtrics integration tech spec
+- **Eng All-Hands Demo on CDN** - Presented Content CDN architecture and rollout to engineering org
 
 ---
 
-*Generated from Jira tickets and GitHub PRs for 2025*
+## Dashboards & Analytics
+
+- **New Relic Dashboards** - Created before/after comparison dashboards for CDN rollout
+- **Deep Insights** - Analysis of various CDN and Magma-API metrics for performance monitoring
+
+---
+
+## Technical Documents Created
+
+| Document | Description |
+|----------|-------------|
+| Qualtrics Tech Spec | Integration design for NPS survey platform |
+| Notifications Tech Spec | Architecture for notifications system |
+| CDN Roll Out Plan | Phased deployment strategy for Content CDN |
+| CDN Bug Bash | Testing plan and bug tracking for CDN release |
+| CDN Tech Spec for HTML Sites (zipped and DOP) | Security approval pending |
+| CDN - Default KMS Key vs CMEK vs HYOK Challenges | Tech spec addressing encryption key management |
+| CIC Performance and Scalability of Windows Workers | Tech spec for CIC infrastructure |
+| CIC Workerless Event-Driven Video Processing | Tech spec for event-driven architecture |
+| Content CDN Alerts Runbook | Operational runbook for CDN alerting |
+| Local dev setup for content-cdn environment | Developer setup guide |
+| Content immutability and caching rules | Caching strategy documentation |
+
+---
+
+*Generated from Jira tickets, GitHub PRs, and project contributions for 2025*
