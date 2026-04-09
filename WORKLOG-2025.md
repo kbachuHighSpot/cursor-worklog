@@ -206,6 +206,7 @@ Led infrastructure work for new dedicated content auth service:
 | magma-ops | 5+ | Deployment manifests |
 | hex | 3+ | AppSet configurations |
 | content-cdn-lambda-handler | 1 | Repository setup and README |
+| [cdn-utils](https://github.com/highspot/cdn-utils) | - | Created repo - Local tools to test CDN (July 2025) |
 
 ---
 
@@ -235,7 +236,8 @@ Led infrastructure work for new dedicated content auth service:
 - Improved cookie authentication flow
 
 ### 5. Infrastructure Improvements
-- Moved Lambda code to dedicated repository
+- Moved Lambda code to dedicated repository (`content-cdn-lambda-handler`)
+- Created [cdn-utils](https://github.com/highspot/cdn-utils) repository for local CDN testing tools
 - Implemented origin shield for improved caching
 - Added Lambda retry logic for transient errors
 - Fine-tuned NewRelic alerts to reduce false positives
