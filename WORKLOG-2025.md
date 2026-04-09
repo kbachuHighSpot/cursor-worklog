@@ -139,10 +139,20 @@ Major refactoring of Magma content auth handlers:
 
 ### content-cdn-lambda-handler Repository
 
-Created dedicated repository for CDN Lambda code:
-- Moved Lambda code from terraform repo
-- Improved maintainability and deployment
+**Highlight:** To improve developer maintenance and deployment velocity, moved CDN's Lambda function out of terraform repo to a new dedicated repository [content-cdn-lambda-handler](https://github.com/highspot/content-cdn-lambda-handler) with its own CI pipeline.
+
+**Benefits:**
+- Faster iteration cycles - Lambda changes no longer require terraform deployments
+- Independent CI/CD pipeline for Lambda code
+- Cleaner separation of concerns between infrastructure and application code
+- Improved code review process focused on Lambda functionality
+- Easier onboarding for developers working on CDN Lambda
+
+**Implementation:**
+- Extracted Lambda code from monolithic terraform repo
+- Set up dedicated CI pipeline for testing and packaging
 - Added proper README and documentation
+- Established versioned releases consumed by terraform
 
 ---
 
