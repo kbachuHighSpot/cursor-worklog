@@ -252,8 +252,18 @@ Led infrastructure work for new dedicated content auth service:
 
 ## Dashboards & Analytics
 
-- **New Relic Dashboards** - Created before/after comparison dashboards for CDN rollout
-- **Deep Insights** - Analysis of various CDN and Magma-API metrics for performance monitoring
+Created comprehensive New Relic dashboards for CDN and Magma-API monitoring (significant time investment):
+
+| Dashboard | Link | Description |
+|-----------|------|-------------|
+| Magma-API Dashboard | [onenr.io/01wZ1YaXZQ6](https://onenr.io/01wZ1YaXZQ6) | Magma API performance metrics, latency, error rates |
+| CloudFront Dashboard | [onenr.io/0bRmm4E9zRy](https://onenr.io/0bRmm4E9zRy) | CDN performance, cache hit ratios, origin requests |
+
+**Key Capabilities:**
+- Before/after comparison dashboards for CDN rollout
+- Deep insights on CDN and Magma-API metrics
+- Performance monitoring and trend analysis
+- Alerting thresholds and anomaly detection
 
 ---
 
