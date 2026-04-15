@@ -13,7 +13,6 @@ This log tracks weekly summaries of significant work across all sources (Cursor,
 - **Notification Rules System Design (Mar-Apr)**: Developed PM-editable template text plan with i18n tradeoff analysis (Mar 14). Iterated notification rules plan for domain admin editing aligned with MJML (Mar 16). Consolidated plans and enriched ALERT_CONFIG inventory (Mar 28). Extended to multi-channel scope with phased REST APIs (Mar 29).
 - **CDN Infrastructure (Jan-Mar)**: Set up CDN Lambda local dev environment with Python standards and CI pipeline (Feb 17-19). Investigated cache invalidation feasibility (Mar 8). Analyzed CDN caching paths and Lambda memory for cache sizing (Mar 19).
 - **Content CDN Alert Redesign (Mar 30)**: Implemented per-status-code CloudFront error rates with distribution-level faceting, Lambda duration alerts with region faceting, and Opsgenie integration in Terraform.
-- **Snowflake AWS PrivateLink (Jan)**: Set up Snowflake-to-AWS PrivateLink connections across multiple environments (5 merged terraform PRs, Jan 9 - Feb 3).
 - **Region Settings Bug Fix (Mar 10)**: Fixed high-severity bug where PUT handler for content regions wiped all regions when `regions` key omitted.
 - **Feature-Flag Observability (Apr 5)**: Added OTel counter `semantic_email_flag_check_count` and `EventLogger.error` for FF routing visibility after investigating why legacy emails slipped through.
 - **Developer Tooling**: Built email preview endpoint, automated comparison script, `SEMANTIC_VS_LEGACY.md` and `ALERT_CONFIG_TO_SEMANTIC_MAPPING.md` reference docs (Mar 29). Planned Admin "Notifications" menu (Mar 17). Built AI-assisted work logging with weekly MCP review skill.
@@ -40,18 +39,15 @@ This log tracks weekly summaries of significant work across all sources (Cursor,
 - **Semantic Email Migration (3 stacked PRs)**: PR1 #69502 (legacy templates, merged) -> PR2 #69507 (27 builders + preview, 65 files, in review ~2 weeks) -> PR3 #69595 (integration layer: routing/metrics/FF, draft). Original PR #67262 was 71 files spanning 3 months.
 - **CDN Lambda Mem Optimization**: PR #3 (content-cdn-lambda-handler, 99.6% cache reduction, merged Mar 10) + PR #4 (retry logging, merged Mar 13) + terraform version bumps
 - **CDN Lambda Local Dev Setup (HS-157970)**: 11 commits (Feb 17-19), precommit hooks, CI pipeline, Python styling, Zscaler proxy fix
-- **Snowflake PrivateLink (SECD-6016)**: 5 terraform PRs merged (Jan 9 - Feb 3), multi-SU rollout
 - **Region & Language Settings**: 4 nutella PRs merged Mar 4-6, designed API contracts with Scott Fletcher
 - **CDN Alerts Redesign**: 4 tf-newrelic-alert PRs (granular per-code alerts, distribution faceting, Opsgenie, false positive reduction, Jan-Apr)
 - **Magma MailWorker (PR #8469)**: Pre-rendered HTML support for semantic emails, Apr 2
 - **Bug Fixes**: HCL-10295 (alerts pagination, open), HISPI-12550 (timezone display, open), HS-159835 (CDN cache invalidation on reprocess, merged)
-- **Release Management**: 13 nutella merge commits for releases/hotfixes (Jan-Feb)
 
 **Significant Jira Tickets:**
 - HS-179437: Notifications CS1 Foundations (P1, In Dev) -- epic-level work
 - HS-180220/HS-180218/HS-180233: Semantic email migration trilogy (P3, Code Review)
 - HS-157970: CDN video seeking reset (P1, Closed -- fixed, Feb)
-- SECD-6016: Snowflake AWS PrivateLink (multiple PRs, Jan-Feb)
 - HS-159180/HS-158408/HS-158409: Region & Language backend APIs (Deployed)
 - HS-158767/HS-158768: CDN lambda + alert tickets (Closed)
 

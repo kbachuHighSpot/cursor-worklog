@@ -12,37 +12,12 @@ Weekly summaries and YTD running summary are in [weekly-summary-worklog.md](week
 
 ---
 
-## 2026-01-09 - Snowflake AWS PrivateLink Setup (SECD-6016)
-
-**Repository:** terraform
-**Branch:** feature/SECD-6016
-
-**Summary:**
-Set up Snowflake-to-AWS PrivateLink connections across multiple environments. Work spanned Jan 9 - Feb 3 with iterative feedback, security group rules, and multi-SU rollout.
-
-**Changes Made:**
-- Implemented Snowflake private link for production su0 (Jan 15), then extended to latest su1/su2 and production su1-su4
-- Created reusable Terraform modules for the connection pattern
-- Added explicit egress rules, addressed format/lint feedback
-- Merged across 5 PRs (#4948, #4960, #4968, #4987)
-
----
-
 ## 2026-01-20 - CDN Alert Threshold Adjustment (HS-147590)
 
 **Repository:** tf-newrelic-alert
 
 **Summary:**
 Increased 4xx warning threshold from 15% to 20% to reduce false positives in CDN alerting.
-
----
-
-## 2026-01-08 to 2026-02-26 - Release Management (nutella)
-
-**Repository:** nutella
-
-**Summary:**
-Managed multiple release and hotfix merges during Jan-Feb period, including release branches (25-8-5, 25-8-8, 26-1-1) and hotfixes (HS-153411, HS-155498, HS-156886, HISPI-12210, teams_issue_hotfix, HS-150747). 13 merge commits total.
 
 ---
 
