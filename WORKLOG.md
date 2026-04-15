@@ -435,3 +435,71 @@ Fixed compare script regression (94 failures) caused by Hashie::Dash with Indiff
 
 ---
 
+## 2026-04-15 - Weekly Review (2026-04-08 to 2026-04-15)
+
+**Summary:**
+Focused on semantic email migration -- split the large PR #67262 into 3 stacked PRs, addressed Bugbot/review feedback, introduced Hashie::Dash data classes across all builders, fixed an IndifferentAccess mutation bug, and wrapped hardcoded strings with i18n. Also opened two bug fix PRs for alerts pagination and timezone display.
+
+### Pull Requests
+
+#### Authored
+
+| PR | Repository | Title | Status |
+|----|------------|-------|--------|
+| [#69640](https://github.com/highspot/nutella/pull/69640) | nutella | [HCL-10295] Fix alerts pagination - use correct collapsed parameter | Open |
+| [#69639](https://github.com/highspot/nutella/pull/69639) | nutella | [HISPI-12550] Fix email timezone display for daylight saving time | Open |
+| [#69595](https://github.com/highspot/nutella/pull/69595) | nutella | [HS-157765] Semantic email integration layer (routing, metrics, FF gating) | Open (Draft) |
+| [#69507](https://github.com/highspot/nutella/pull/69507) | nutella | [HS-157765] Add mjml template and semantic email builders | Open |
+| [#69502](https://github.com/highspot/nutella/pull/69502) | nutella | [HS-157765] Add legacy Velocity templates for semantic email comparison testing | Merged |
+
+#### Reviewed
+
+| PR | Repository | Title |
+|----|------------|-------|
+| [#69507](https://github.com/highspot/nutella/pull/69507) | nutella | [HS-157765] Add mjml template and semantic email builders (self-review) |
+
+### Jira Tickets Updated
+
+| Ticket | Summary | Status | Priority |
+|--------|---------|--------|----------|
+| [HS-179437](https://highspot.atlassian.net/browse/HS-179437) | Notifications CS1 - Foundations (UX + Rules Engine) | In Dev | P1 |
+| [HS-180220](https://highspot.atlassian.net/browse/HS-180220) | Migrate velocity templates to MJML (from magma to nutella) | Code Review | P3 |
+| [HS-180218](https://highspot.atlassian.net/browse/HS-180218) | Support Immediate emails with MJML template and UX framework | Code Review | P3 |
+| [HS-180233](https://highspot.atlassian.net/browse/HS-180233) | Dev testing tool - Email previews for all notifications | Code Review | P3 |
+| [HCL-10295](https://highspot.atlassian.net/browse/HCL-10295) | [Android/iOS] Current notifications getting repeated | Code Review | P3 |
+| [HISPI-12550](https://highspot.atlassian.net/browse/HISPI-12550) | Email alerts not aligning with users' configured time zones | Code Review | P2 |
+
+### Confluence Pages
+
+| Page | Space | Last Modified |
+|------|-------|---------------|
+| [Mission: Project Autonomous (Spring 2026)](https://highspot.atlassian.net/wiki/spaces/ENGDOCS/pages/4530601998) | ENGDOCS | Apr 15 |
+| [Engineering Demos & Updates](https://highspot.atlassian.net/wiki/spaces/ENGDOCS/pages/569966708) | ENGDOCS | Apr 14 |
+
+### Google Drive / Docs Activity
+
+| File | Type | Last Modified |
+|------|------|---------------|
+| Email notifications migration data.xlsx | Spreadsheet | Apr 14 |
+| NUTELLA_MCP_PROPOSAL (Google Doc) | Document | Apr 13 |
+| NUTELLA_MCP_PROPOSAL.md | Markdown | Apr 13 |
+| Notifications system - Plan | Document | Apr 10 |
+
+### Notable Slack Activity
+
+- **#crew-app-platform**: Shared PR1 (#69502) and PR2 (#69507) split plan with Derek and Rohit; requested review on PR2
+- **#crew-app-platform**: Discussed PR2 scope -- couldn't break it up further without introducing breakage
+- **#crew-content-ingestion-consumption**: Flagged S3/KMS key mismatch issue, CC'd Anudeep for MI crew investigation
+
+**Notes:**
+- PR1 (#69502) merged this week -- legacy Velocity templates for comparison testing
+- PR2 (#69507) is in active code review with Derek
+- PR3 (#69595) created as draft, stacked on PR2
+- Two new bug fix PRs opened: alerts pagination (HCL-10295) and timezone display (HISPI-12550)
+- Contributed to Project Autonomous (Spring 2026) sign-up page
+- Shared NUTELLA_MCP_PROPOSAL document with Nav for review
+- GitHub MCP auth was broken during this review; used `gh` CLI as fallback
+- Google Drive (gdrive) MCP returned an error; used Workato Google Drive MCP instead
+
+---
+
