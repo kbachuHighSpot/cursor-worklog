@@ -6,6 +6,311 @@ Weekly summaries and YTD running summary are in [WEEKLY.md](WEEKLY.md).
 
 ---
 
+## BACKFILLED ENTRIES (Jan-Apr 2026)
+
+*The following entries were reconstructed from git commit history (Jan-Feb) and Cursor agent transcripts (Mar-Apr). Added on 2026-04-06.*
+
+---
+
+## 2026-01-09 - Snowflake AWS PrivateLink Setup (SECD-6016)
+
+**Repository:** terraform
+**Branch:** feature/SECD-6016
+
+**Summary:**
+Set up Snowflake-to-AWS PrivateLink connections across multiple environments. Work spanned Jan 9 - Feb 3 with iterative feedback, security group rules, and multi-SU rollout.
+
+**Changes Made:**
+- Implemented Snowflake private link for production su0 (Jan 15), then extended to latest su1/su2 and production su1-su4
+- Created reusable Terraform modules for the connection pattern
+- Added explicit egress rules, addressed format/lint feedback
+- Merged across 5 PRs (#4948, #4960, #4968, #4987)
+
+---
+
+## 2026-01-20 - CDN Alert Threshold Adjustment (HS-147590)
+
+**Repository:** tf-newrelic-alert
+
+**Summary:**
+Increased 4xx warning threshold from 15% to 20% to reduce false positives in CDN alerting.
+
+---
+
+## 2026-01-08 to 2026-02-26 - Release Management (nutella)
+
+**Repository:** nutella
+
+**Summary:**
+Managed multiple release and hotfix merges during Jan-Feb period, including release branches (25-8-5, 25-8-8, 26-1-1) and hotfixes (HS-153411, HS-155498, HS-156886, HISPI-12210, teams_issue_hotfix, HS-150747). 13 merge commits total.
+
+---
+
+## 2026-02-17 - CDN Lambda Local Dev Setup (HS-157970)
+
+**Repository:** content-cdn-lambda-handler
+**Branch:** HS-157970/cdn-video-seek-reset-zscaler
+
+**Summary:**
+Set up local development environment for the CDN Lambda handler, added Python styling standards, fixed corporate proxy issues with cache-control headers, and established CI pipeline.
+
+**Changes Made:**
+- Local dev setup with proper Python environment configuration
+- Fixed Zscaler/corporate proxy interference with cache-control headers
+- Added pre-commit hooks and setup script
+- Created unit test pipeline file for Buildkite
+- Fixed lint failures and formatting issues
+- 11 commits over Feb 17-19
+
+---
+
+## 2026-02-19 - CDN Video Seek Fix: Terraform Version Bump (HS-157970)
+
+**Repository:** terraform
+**Branch:** HS-157970/cdn-video-seek-reset-zscaler
+
+**Summary:**
+Bumped content-cdn-lambda-handler version in Terraform to deploy the video-seeking fix to latest environment.
+
+---
+
+## 2026-03-05 - Unreachable Email Investigation
+
+**Repository:** nutella (regions workspace)
+
+**Summary:**
+Investigated why users marked "unreachable" could still receive some notifications but not MFA verification codes. Traced `send_email` / alert paths and found that unreachable filtering is bypassed in several cases (e.g., when `from` is a `User`).
+
+---
+
+## 2026-03-08 - CDN Cache Invalidation Feasibility Study
+
+**Repository:** nutella (regions workspace)
+
+**Summary:**
+Investigated whether Nutella has permission to invalidate the CloudFront CDN cache. Concluded there was no existing invalidation path and outlined what would be needed (CloudFront client, IAM role, `create_invalidation` API). This later became PR #68979 (HS-159835).
+
+---
+
+## 2026-03-10 - Fix Region Settings Wipe Bug
+
+**Repository:** nutella (regions workspace)
+
+**Summary:**
+Fixed a high-severity review finding where the PUT handler for `update_company_content_regions` always assigned `content_regions["regions"]` even when `regions` was omitted in the request, causing all regions to be cleared. Implemented "omit means unchanged; explicit `[]` clears" semantics.
+
+**Changes Made:**
+- Fixed absent-`regions` vs explicit empty list semantics in settings.rb
+- Added duplicate `order` validation after full resolution of region list
+- Added/updated specs including validation coverage
+- Addressed reviewer feedback from Scott Fletcher
+
+---
+
+## 2026-03-10 - Together-Mode Email Privacy Issue Analysis
+
+**Repository:** nutella/magma
+
+**Summary:**
+Analyzed a Cursor bot finding in `MailWorker.java`: in together mode, `buildRecipientContext` used the first recipient for shared template context, potentially exposing the first address to all recipients via `$recipient` / join URL variables.
+
+---
+
+## 2026-03-12 - EmailContentBuilder Architecture: Module Split + Auto-Derived _v2
+
+**Repository:** nutella/magma
+
+**Summary:**
+Addressed two scaling issues: `EmailContentBuilder` growing unboundedly as notifications migrate, and parallel `_v2` entries diverging from originals. Designed and implemented a category-based module split behind a facade, plus auto-derivation of `_v2` config from base kinds to reduce dual maintenance.
+
+**Changes Made:**
+- Designed module split / facade for the builder surface
+- Implemented auto-derived `_v2` config pattern
+- Touched `EmailContentBuilder`, `alert_commands`, and ALERT_CONFIG structures
+
+---
+
+## 2026-03-14 - PM-Editable Template Text Plan
+
+**Repository:** nutella/magma
+
+**Summary:**
+Developed plan for PM-editable notification template text. Walked through the plan covering defaults registry, Mongo-backed overrides, resolver, and admin API. Analyzed i18n implications -- comparing `Hspt::Intl.t()`-based i18n with Mongo-backed overrides and clarified tradeoffs (overrides vs. translations, per-domain language).
+
+**Notes:**
+- Plan accepted: `pm_template_text_editing_*.plan.md`
+
+---
+
+## 2026-03-15 - OTel Email Metrics Plan + CI/CODEOWNERS Fixes
+
+**Repository:** nutella/magma
+
+**Summary:**
+Reviewed the OTel metrics plan for semantic vs legacy email pipelines. Clarified that the immediate alert path has no semantic-to-legacy fallback (unlike digest). Fixed CI/CODEOWNERS friction and RuboCop cleanup across semantic email and alert files.
+
+**Changes Made:**
+- Clarified fallback behavior on immediate vs digest paths
+- Addressed `CODEOWNERS` check failures for new spec files
+- Fixed RuboCop offenses in email/alert code
+
+---
+
+## 2026-03-16 - Notification Rules Plan: Domain Admin Editing
+
+**Repository:** nutella/magma
+
+**Summary:**
+Iterated on the "decision-based notification rules" plan to add PM/domain-admin editable notification text per alert kind, aligned with semantic email builders and standard MJML structure. Explored how `ALERT_CONFIG` splits routing vs content.
+
+---
+
+## 2026-03-17 - Admin UI: Notifications Menu + CI Fixes
+
+**Repository:** nutella/magma
+
+**Summary:**
+Multiple sessions spanning admin UI planning and CI fixes. Specified Admin "Notifications" section with "Email previews" (and future "Manage rules"), investigated where admin menus are defined (Nutella sidebar vs Magma Clojure admin at 8686). Also resolved CODEOWNERS coverage for new email specs and fixed CI issues.
+
+**Changes Made:**
+- Planned navigation entry pointing at `/email_preview` preview flow
+- Added `@highspot/app-platform` entries in CODEOWNERS for new spec paths
+- Fixed RuboCop offenses (`private` placement, useless assignments, `ALERT_CONFIG.freeze`)
+- Fixed `Hspt::Intl` parse error in `expiry_digest_builder.rb` (dynamic i18n key pattern)
+- Planned email preview "Send email" button for real test delivery
+
+---
+
+## 2026-03-19 - CDN Caching Paths and Lambda Memory Analysis
+
+**Repository:** content-cdn-lambda-handler
+
+**Summary:**
+Deep-dive into CDN caching paths: traced Cache-Control/private behavior, CDN Lambda vs browser-to-Zscaler-to-magma-api flow, investigated magma-api `/thumbnails/*` header behavior. Analyzed CloudWatch/NR log queries and Lambda RSS/cold-start memory measurements for cache sizing decisions.
+
+---
+
+## 2026-03-25 - MJML Migration: Spec Coverage + Preview Kind Inventory
+
+**Repository:** nutella/magma
+
+**Summary:**
+Three sessions covering migration reconnaissance. Searched specs for tests touching `TransactionalBuilder#build_welcome`, `semantic_email.mjml.erb`, and `SemanticEmailPreview`. Surveyed Mongo/persistence patterns for preview config. Parsed `semantic_email_preview.rb` to extract all `kind` values from `IMMEDIATE_CATEGORIES`, `DIGEST_CATEGORIES`, and `EMAIL_TYPE_PREVIEWS` with deduplication and counts.
+
+---
+
+## 2026-03-26 - Self-Registration Migration + MRML/Bundler/CODEOWNERS
+
+**Repository:** nutella/magma
+
+**Summary:**
+Major implementation day. Executed self-registration migration for all email builders (pattern from `RequestAccessBuilder`/`FeedbackBuilder`): added `SemanticAlertRenderer.register` calls and removed centralized registration. Also resolved MRML gem Bundler platform issues, CODEOWNERS updates, and semgrep hygiene.
+
+**Changes Made:**
+- Migrated all builders to self-registration pattern with `SemanticAlertRenderer.register`
+- Added `partner_from` handling and aligned registration blocks
+- Debugged `Bundler::GemNotFound` / platform resolution (darwin vs linux)
+- Updated CODEOWNERS for semantic email spec paths
+- Added safe-output documentation and `nosemgrep` for MRML HTML composition
+- Extracted full alert-kind list and documented end-to-end checklist for adding new semantic kinds
+
+---
+
+## 2026-03-27 - DynamicConfig Kill-Switch + Spec Load-Order Fixes
+
+**Repository:** nutella/magma
+
+**Summary:**
+Extended the `dynamicconfig_kind_kill_switch` plan for all code paths and fixed unit specs where `semantic_kind_disabled?` called `DynamicConfigCache.get` without a backing store. Added `require_project "common/email/semantic_alert_renderer"` to seven builder specs for correct load order with self-registration.
+
+**Changes Made:**
+- Updated kill-switch plan for consistent coverage
+- Adjusted `semantic_kind_disabled?` to rescue errors in unit tests (mirroring `semantic_email_flag_enabled?`)
+- Patched 7 spec files with correct require ordering
+
+---
+
+## 2026-03-28 - Notification Rules Plan Consolidation + ALERT_CONFIG Inventory
+
+**Repository:** nutella/magma
+
+**Summary:**
+Merged two duplicate `notification_rules` plan files into `notification_rules_system_7b216d85.plan.md`. Added ALERT_CONFIG `:options` inventory (including `send_immediately` nuances) to support migration/seeding design. Compared `build_result` patterns across semantic email type builders.
+
+---
+
+## 2026-03-29 - Major: Preview Test Coverage + Comparison Tooling + i18n Fixes
+
+**Repository:** nutella/magma
+
+**Summary:**
+Largest day of the backfill period. Multiple significant implementations across 7 sessions.
+
+**Changes Made:**
+- Updated notification rules plan for multi-channel scope (in-app, push, Slack, MS Teams, email) and phased REST APIs
+- Fixed Buildkite failures from duplicate i18n key `oT7qWx9d` in `ownership_transfer_builder.rb`; split/renamed keys
+- Updated `LearningBuilder` specs to match actual subject/body_copy output
+- Created `semantic_email_preview_all_kinds_spec.rb` to test all immediate/digest preview routes
+- Switched preview spec to `min_spec_helper` to avoid `Concurrent.global_io_executor` mock conflicts with MRML
+- Created `SEMANTIC_VS_LEGACY.md` and `ALERT_CONFIG_TO_SEMANTIC_MAPPING.md` reference docs
+- Built Ruby helpers to parse ALERT_CONFIG/builders for XLSX generation
+- Documented repo locations for shared Cursor rules and skills for team use
+
+---
+
+## 2026-03-30 - Content CDN Alert Redesign (HS-158768/HS-147590)
+
+**Repository:** tf-newrelic-alert
+**Branch:** HS-147590/cdn-fine-tune-alerts
+
+**Summary:**
+Major Terraform alerting overhaul for Content CDN. Replaced aggregate 4xx/5xx metrics with per-status-code CloudFront error rates faceted by DistributionId. Added Lambda duration alerts with region faceting, timeout detection, and anti-double-fire logic.
+
+**Changes Made:**
+- Per-code 5xx thresholds (502/504 vs 503), 4xx threshold maps
+- `FACET aws.cloudfront.DistributionId` and `aws.region` for distribution-level alerting
+- Lambda `Duration.byFunction` alerts with `FACET aws.region`, ≥30s timeout warning
+- Opsgenie resources with `opsgenie_enabled` toggle
+- Cleaned up unused NRQL locals and dead code
+- Iterated on low-traffic false positive mitigation (`threshold_occurrences`, `min_requests`)
+
+---
+
+## 2026-04-01 - Fix MailWorker Test Ordering (magma PR #8469)
+
+**Repository:** magma
+
+**Summary:**
+Fixed JVM test ordering issue between `MailWorkerBulkCallbackTest` and `MailWorkerPreRenderedTest` related to semantic email PR #8469. Made `MailWorkerBulkCallbackTest` extend `WorkflowTestBase` so `Environment.forceTestEnvironment()` runs before mail worker construction.
+
+---
+
+## 2026-04-02 - Semantic Email Cursor Rules/Skills Reorganization
+
+**Repository:** nutella (notifications workspace)
+
+**Summary:**
+Reorganized Cursor rules and skills for the legacy-to-semantic email migration. Consolidated many rules into four thematic `.mdc` files, set `alwaysApply: false` with globs, expanded `migrate-notification-kind` skill, documented when unit tests are required (semantic vs legacy/preview), and added automatic "capture learnings" behavior.
+
+---
+
+## 2026-04-05 - MJML Feature-Flag Investigation + Observability
+
+**Repository:** nutella (notifications workspace)
+
+**Summary:**
+Investigated why `named_access_grant_expiring` could send legacy email despite `mjml_email_templates` flag targeting. Traced LaunchDarkly rules and silent `rescue` behavior. Added OTel counter `semantic_email_flag_check_count` (kind/result/reason) and `EventLogger.error` on flag-check exceptions.
+
+**Changes Made:**
+- Implemented metrics + logging in `email_metrics.rb` and `email_commands.rb` for FF routing visibility
+- Refactored `semantic_email_flag_enabled?` and `semantic_email_enabled_for_recipients?` for clearer failure paths
+
+---
+
+## END OF BACKFILLED ENTRIES
+
+---
+
 ## 2026-04-05 - Work Log Setup
 
 **Summary:**
