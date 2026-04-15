@@ -2,7 +2,7 @@
 
 This log tracks AI-assisted work sessions and changes automatically.
 
-Weekly summaries and YTD running summary are in [WEEKLY.md](WEEKLY.md).
+Weekly summaries and YTD running summary are in [weekly-summary-worklog.md](weekly-summary-worklog.md).
 
 ---
 
