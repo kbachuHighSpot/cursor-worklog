@@ -506,3 +506,26 @@ Fixed compare script regression (94 failures) caused by Hashie::Dash with Indiff
 
 ---
 
+## 2026-04-16 - Fix alerts pagination regression and original bug (HCL-10295)
+
+**Repository:** nutella
+**Branch:** HCL-10295/fix-alerts-pagination-stable
+**PR:** https://github.com/highspot/nutella/pull/69898
+**Files Changed:**
+- web/api/controllers/users.rb
+- web/spec/magma-integration/api/controllers/users_controller_spec.rb
+
+**Summary:**
+Fixed a regression from PR #69640 that broke alerts pagination (returning only 1 result) and also fixed the original bug (duplicate notifications when paginating on mobile).
+
+**Changes Made:**
+- Removed `collapsed: true` from alerts endpoint. Alert documents don't index a `group_id` field in Solr, so enabling collapse grouped all alerts into a single null group, returning only 1 result.
+- Added `created_before` timestamp anchor to stabilize offset-based pagination. On first page request, server snapshots current time and adds Solr filter `timestamp_created_at:[* TO <snapshot>]`. The value propagates into the `next` link URL so subsequent pages use the same anchor, preventing offset drift when new alerts arrive between requests.
+- Updated integration tests to verify both the `created_before` filter and the absence of `collapsed`.
+
+**Notes:**
+- The original `collapse: true` (before PR #69640) was always a no-op because the Query class reads `options[:collapsed]`, not `options[:collapse]`. Fixing the key name accidentally activated Solr grouping on a field that doesn't exist for alerts.
+- The `created_before` approach is backward-compatible: clients that don't pass it get a fresh snapshot each request.
+
+---
+
