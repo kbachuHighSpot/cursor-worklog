@@ -529,3 +529,60 @@ Fixed a regression from PR #69640 that broke alerts pagination (returning only 1
 
 ---
 
+## 2026-03-25 - compare_email_previews.py: Legacy vs Semantic Comparison Script
+
+**Repository:** nutella
+**Files Changed:**
+- web/scripts/notifications-migration/compare_email_previews.py (2,409 lines)
+- web/scripts/notifications-migration/compare.sh
+
+**Summary:**
+Built an automated comparison tool that fetches both legacy (Velocity) and semantic (MJML) email previews, extracts visible text and structural components (section title, body copy, CTA, preheader, cards), computes similarity, and runs migration rule checks. Generates a report highlighting meaningful differences. Uses only Python standard library (no external dependencies).
+
+**Changes Made:**
+- HTML parsing to extract structured email components from both rendering pipelines
+- Migration rule enforcement: provider omission, custom SMTP handling, entity duplication detection, structural completeness, variation kind naming validation
+- Content coverage checks: section title, body copy, CTA, preheader presence; entity matching (links vs cards); legacy content representation in semantic output
+- Entity title stripping tolerance: recognizes "the following [entity type]:" pattern as a valid match when entity cards are present
+- Mock data consistency check: verifies both previews use the same entity names from PreviewMockData
+- CLI with cookie-based auth, verbose mode, failed-only filtering, category/kind targeting
+- Wrapper script `compare.sh` for quick full-suite runs with log output
+
+---
+
+## 2026-03-29 - test_email_previews.py: E2E Preview Render + Send + Verify Script
+
+**Repository:** nutella
+**Files Changed:**
+- web/scripts/notifications-migration/test_email_previews.py (535 lines)
+
+**Summary:**
+Built an E2E test script that renders, sends, and verifies delivery of all semantic email previews via mailpit. For each preview link on the email preview index page: GET the preview page (verify render), POST to send_test (trigger delivery), and poll mailpit API (verify arrival).
+
+**Changes Made:**
+- Supports both semantic and legacy preview modes
+- Cookie-based auth (file or inline)
+- Render-only mode (no send, no mailpit check) for quick smoke tests
+- Full send+verify mode with configurable mailpit URL
+- Category and kind filtering for targeted testing
+- Parallel-friendly with clear pass/fail reporting
+
+---
+
+## 2026-03-25 - export_preview_data.py: Email Preview Data Export to Excel
+
+**Repository:** nutella
+**Files Changed:**
+- web/scripts/notifications-migration/export_preview_data.py (354 lines)
+
+**Summary:**
+Built an Excel export tool for semantic email preview data. Generates a spreadsheet with three tabs: Email Index (category, kind, type, digest item kinds), JSON Data (full email data payload per kind), and Kind Descriptions. Used for migration tracking and gap analysis across ~450 email types.
+
+**Changes Made:**
+- Parses preview index page to extract all categories and kinds
+- Fetches JSON data for each preview kind
+- Generates formatted Excel with openpyxl (headers, column widths, filters)
+- Cookie-based auth matching the other migration scripts
+
+---
+
