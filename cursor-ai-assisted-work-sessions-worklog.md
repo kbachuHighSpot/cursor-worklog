@@ -586,3 +586,48 @@ Built an Excel export tool for semantic email preview data. Generates a spreadsh
 
 ---
 
+## 2026-04-06 - Worklog Rules & Skills Enhancement
+
+**Repository:** cursor-worklog, .cursor/rules, .cursor/skills
+**Files Changed:**
+- .cursor/rules/work-log.mdc
+- .cursor/skills/update-worklog/SKILL.md
+
+**Summary:**
+Enhanced worklog rules and skills with mid-session logging, end-of-conversation checks, and three new significance categories.
+
+**Changes Made:**
+- Added mid-session logging instruction: log after each major milestone in long conversations instead of batching at the end
+- Added end-of-conversation check: before responding to what looks like a final message, verify no unlogged significant changes exist
+- Added explicit "significant" trigger examples to replace ambiguous criteria
+- Added three new loggable categories: investigation/root-cause analysis (even without code changes), infrastructure/Terraform changes, and test suites created or expanded
+
+**Notes:**
+- These changes address the gap where scripts and investigations were not being auto-logged because the rules were too passive and vague about what qualifies as "significant"
+
+---
+
+## 2026-03-17 - Semantic Email Migration Execution Plan (Created)
+
+**Summary:**
+Created the execution plan for semantic email migration and sent it to Nathan and Nav for review.
+
+**Document:** [Execution Plan](https://docs.google.com/document/d/1pjUIO1WUq2x64tFf60U7FnO-r5Zhb7O5MPrOUKOQDqE/edit?usp=sharing)
+
+**Notes:**
+- Shared with Nathan and Nav for feedback
+
+---
+
+## 2026-04-17 - Semantic Email Migration Execution Plan (Updated)
+
+**Summary:**
+Updated the execution plan for semantic email migration and sent the revised version to Nathan and Nav for review.
+
+**Document:** [Execution Plan](https://docs.google.com/document/d/1pjUIO1WUq2x64tFf60U7FnO-r5Zhb7O5MPrOUKOQDqE/edit?usp=sharing)
+
+**Notes:**
+- Revised and re-shared with Nathan and Nav for feedback
+
+---
+
