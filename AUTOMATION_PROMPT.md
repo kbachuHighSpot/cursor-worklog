@@ -30,13 +30,31 @@ Read `./cursor-ai-assisted-work-sessions-worklog.md` and extract all entries dat
 
 Use the GitHub MCP `get_me` tool. Save the `login`.
 
+If the GitHub MCP fails (e.g. 401 Bad credentials), fall back to `gh` CLI:
+
+```bash
+gh api user --jq '.login'
+```
+
 ### 2c. GitHub -- PRs authored
 
 Use GitHub MCP `search_pull_requests` with query: `author:{login} created:>={week_start} org:highspot`, sort by updated desc, perPage 30.
 
+If the GitHub MCP fails, fall back to `gh` CLI:
+
+```bash
+gh search prs --author={login} --created='>={week_start}' --json title,url,state,repository,createdAt,updatedAt --limit 30
+```
+
 ### 2d. GitHub -- PRs reviewed
 
 Use GitHub MCP `search_pull_requests` with query: `reviewed-by:{login} -author:{login} updated:>={week_start} org:highspot`, sort by updated desc, perPage 30.
+
+If the GitHub MCP fails, fall back to `gh` CLI:
+
+```bash
+gh search prs --reviewed-by={login} --updated='>={week_start}' --json title,url,state,repository,createdAt,updatedAt --limit 30
+```
 
 ### 2e. Jira -- Tickets updated this week
 
