@@ -666,3 +666,28 @@ Major schema refinement session for the NotificationRule schema, eliminating red
 
 ---
 
+## 2026-04-18 - Complete Legacy-to-Rules Migration Mapping in Google Sheet
+
+**Repository:** N/A (Google Sheets + source code analysis)
+**Branch:** N/A
+
+**Summary:**
+Fully populated the "Notification Rules - Legacy to Rules Migration Mapping" Google Sheet with all 377 rules extracted from source code: 310 ALERT_CONFIG kinds + 1 digest rule + 66 EMAIL_SETTINGS types. This replaces the previous representative examples with the complete production mapping.
+
+**Changes Made:**
+- Extracted all ~310 kinds from ALERT_CONFIG in alert_commands.rb with their options (send_immediately, group_email, send_from, skip_toast, push_notification, no_email, urgent)
+- Extracted all 66 email types from EmailCommands::SETTINGS in email_commands.rb
+- Cross-referenced SLACK_ALERT_KINDS (8 kinds) and MS_TEAMS_ALERT_KINDS (13 kinds)
+- Classified every kind into rule types: Immediate (144), Digest Only (4), In-App Only (21), In-App default (139), Push Only (2), Direct Email (60), System email infra (6), plus 1 Digest aggregator rule
+- Populated Rule Mapping tab (A1:S378) with 19 columns: Rule Name, Rule Type, Legacy Source, Legacy Kind, Category, Priority, Channels, send_from, send_immediately, group_email, skip_toast, push_notification, urgent, no_email, has_subject, has_action, Slack, MS Teams, Notes
+- Updated Summary Counts tab with accurate breakdowns including channel/options counts, digest-eligible kinds list (12), Slack kinds (8), MS Teams kinds (13), push notification kinds (2)
+- Spreadsheet URL: https://docs.google.com/spreadsheets/d/1wPyr_ronzlBVub42FNvj4y2AgFOScJD-9OyPCFAbuXM/edit
+
+**Notes:**
+- Digest-eligible kinds (group_email: true): request_access_spot, request_access_spot_with_item, request_access_spot_without_email, support_request, bulk_items_feedback, bulk_items_feedback_1_item, feedback_item, feedback_spot, item_expiring, item_expired, pitch_expired, digital_room_expired
+- Push-only kinds (no_email + push_notification): meeting_ended_deal_notification, pre_meeting_notification
+- 3 deprecated kinds identified: content_distribution_complete, content_distribution_failed, review_followed
+- Sheet is now ready for PM review and can be used as direct input for the seeding migration script
+
+---
+
