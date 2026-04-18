@@ -631,3 +631,38 @@ Updated the execution plan for semantic email migration and sent the revised ver
 
 ---
 
+## 2026-04-18 - Notification Rules Schema Refinement and PM Mapping Spreadsheet
+
+**Repository:** N/A (Cursor plans + Google Sheets)
+**Files Changed:**
+- .cursor/plans/notification_rule_schema_and_seeding.plan.md
+- .cursor/plans/notification_rules_master_plan.plan.md
+
+**Summary:**
+Major schema refinement session for the NotificationRule schema, eliminating redundant fields, reorganizing delivery_strategy, adding override collection schema, updating seeding to use database migration pattern, and creating a Google Sheets mapping spreadsheet for PM review.
+
+**Changes Made:**
+- Removed `group_email` from per-kind rules; digest eligibility centralized in single digest rule's `eligible_alert_kinds`
+- Added inline field descriptions to the entire schema (jsonc with comments)
+- Added `NotificationRuleOverride` schema section -- separate MongoDB collection for per-domain/user overrides with resolution order, overridable fields reference, indexes, and phase alignment
+- Removed `conditions` field (overrides live in separate collection, not on base rule)
+- Removed `content` block (template lookup via Content Registry by rule name; text overrides via overrides collection)
+- Removed `push_notification` from options (covered by `channels` including `"push"`)
+- Moved `send_from` from cross-channel options to email-specific (it's email From header only)
+- Moved `skip_toast` into `delivery_strategy` as in-app channel option
+- Eliminated `options` top-level block entirely
+- Removed `retry_policy` (job system handles retries)
+- Restructured `delivery_strategy` into channel-specific sub-objects: `email: {...}`, `in_app: {...}`
+- Organized delivery_strategy into 4 sections: Routing, Timing, Guards (under `guards` sub-object), Channel Options
+- Expanded Phase 8 guards (throttling, deduplication, delivery_window) with default structures
+- Updated seeding instructions to use team's DatabaseMigration pattern (insert_many, idempotent spec, apply_data_migration.sh)
+- Created Google Sheets spreadsheet "Notification Rules - Legacy to Rules Migration Mapping" with 3 tabs: Rule Mapping, Summary Counts, Field Mapping Reference
+  - URL: https://docs.google.com/spreadsheets/d/1wPyr_ronzlBVub42FNvj4y2AgFOScJD-9OyPCFAbuXM/edit
+
+**Notes:**
+- Schema is now very lean: identity, trigger, delivery_strategy (with routing, timing, guards, channel options), and metadata
+- Override collection supports domain/user scoping with sparse documents and shallow merge
+- Spreadsheet needs to be populated with full ALERT_CONFIG data (~306 kinds) by running the rule builder scripts against the actual codebase
+
+---
+
