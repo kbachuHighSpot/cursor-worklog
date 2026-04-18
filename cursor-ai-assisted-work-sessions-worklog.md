@@ -691,3 +691,35 @@ Fully populated the "Notification Rules - Legacy to Rules Migration Mapping" Goo
 
 ---
 
+## 2026-04-18 - Master Plan Phases 1-12 Detailed
+
+**Repository:** N/A (Cursor plans)
+**Files Changed:**
+- /Users/kiran.bachu/.cursor/plans/notification_rules_master_plan.plan.md
+
+**Summary:**
+Updated the notification rules master plan with specific implementation details for all phases (1-12).
+
+**Changes Made:**
+- Phase 1: Added seeding breakdown table (377 rules: 144 immediate, 4 digest-only, 1 digest aggregator, 21 in-app only, 139 in-app default, 2 push only, 60 direct email, 6 system), cross-channel seeding from Slack/MS Teams/Push constants, MongoDB indexes for both collections, file list, NotificationRuleResolver pseudocode
+- Phase 2: Added component table (NotificationEngine, NotificationChannelRouter, NotificationContentRegistry), routing flow pseudocode, dual-read mode details, digest routing logic, per-kind rollout via scoped feature flag, backward compatibility notes
+- Phase 3: Added REST endpoint table (CRUD for rules and overrides), authorization matrix (global admin, domain admin, service account, end user), audit requirements
+- Phase 4: Added send endpoint with request schema, safeguards (rate limiting, idempotency keys, async processing)
+- Phase 5: Added admin UI views table (rule list, detail with tabbed editor, override list/editor, email preview)
+- Phase 6: Added recipient_groups schema addition with mode (none/intersect/expand) and router logic pseudocode
+- Phase 7: Added override fields example, merge flow, interpolation syntax
+- Phase 8: Added guard evaluation order pseudocode, Redis state backends for throttle/dedup, observability metrics, file list for guard modules
+- Phase 9: Added non-email content override schema, channel-by-channel approach
+- Phase 10: Added detailed removal table (what gets removed from ALERT_CONFIG, what stays), CI lint rule to prevent routing in legacy config
+- Phase 11: Added hot path SLO targets table, load testing scenarios, infrastructure validation checklist
+- Phase 12: Added test matrix table covering 6 representative kinds, test flow pseudocode, Mailinator infrastructure setup
+- Updated Phase Ordering table with Key Deliverable and Collections/APIs columns
+- Updated Context section with accurate counts (377 types)
+
+**Notes:**
+- Each phase now has: Goals, specific technical details (schemas/endpoints/pseudocode/tables), files to create/modify, and release criteria
+- The master plan references the schema/seeding plan and Google Sheet for detailed mapping data
+- Phases are designed for independent rollout with feature flags gating behavior changes
+
+---
+
