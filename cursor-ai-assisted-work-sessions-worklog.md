@@ -723,31 +723,31 @@ Updated the notification rules master plan with specific implementation details 
 
 ---
 
-## 2026-04-20 - Fix alerts pagination sort field mismatch (HS-155824)
+## 2026-04-18 - Notification Rules Seeding Migration Implementation
 
 **Repository:** nutella
-**Branch:** HCL-10295/fix-alerts-pagination-stable
-**PR:** https://github.com/highspot/nutella/pull/70005
+**Branch:** HS-180217/notification-rules-collection
 **Files Changed:**
-- web/api/controllers/users.rb
-- web/app/controllers/alerts.rb
-- web/spec/magma-integration/api/controllers/users_controller_spec.rb
+- web/db/migrate/180217_seed_notification_rules.rb (new)
+- web/db/spec/integration/migrate/180217_seed_notification_rules_spec.rb (new)
+- web/tools/scripts/deployment/apply_data_migration.sh (modified)
 
 **Summary:**
-Identified and fixed the root cause of persistent alerts pagination bug where scrolling through weeks of notifications would show recent alerts reappearing. PR #69898 created_before anchor fix was necessary but insufficient - the underlying sort field did not exist on alert Solr documents.
+Implemented the notification rules seeding migration per the schema and seeding plan. The migration reads from ALERT_CONFIG (316 kinds), builds 1 digest aggregation rule, and reads from EmailCommands::SETTINGS (65 types, skipping :digest to avoid name collision), producing ~382 total rules.
 
 **Changes Made:**
-- Root cause analysis: TimeAddedSort sorts by timestamp_available_at but Alert only indexes timestamp_created_at, timestamp_deleted_at, timestamp_updated_at. Solr falls back to id desc tiebreaker, producing non-chronological ordering.
-- Changed API alerts endpoint (users.rb) sort from List::TIME_ADDED to List::DESC_CREATED_AT
-- Changed web notifications endpoint (alerts.rb) sort from List::TIME_ADDED to List::DESC_CREATED_AT
-- Added unit test verifying sort param is List::DESC_CREATED_AT
-- Added end-to-end integration test creating alerts with controlled timestamps and verifying reverse chronological order
-- Added comment on Jira ticket HS-155824 with root cause analysis
+- Created `DatabaseMigration` class with rule builder methods: `build_alert_config_rule`, `build_digest_rule`, `build_direct_email_rule`, `build_all_rules`
+- Defined `CALL_SITE_EMAIL_OPTS` constant mapping 26 alert kinds to their call-site email options (send_one, bcc_support, no_to, bcc_mode)
+- Defined `PRIORITY_MAP` for legacy level/urgent -> tech spec priority enum
+- Defined `ELIGIBLE_DIGEST_KINDS` (12 kinds with group_email: true)
+- Cross-references `SLACK_ALERT_KINDS` (8 kinds) and `MS_TEAMS_ALERT_KINDS` (13 kinds) for channel population
+- Idempotent: filters out existing names before insert_many
+- Integration spec covers: total count, idempotency (double run), per-kind ALERT_CONFIG rules, digest rule, EMAIL_SETTINGS rules, no_email channel correctness, priority mapping, Slack/Teams channel inclusion, call-site email options, pre-existing rule handling, guards disabled by default
+- Appended migration line to apply_data_migration.sh
 
 **Notes:**
-- No Solr reindex needed - timestamp_created_at already exists on all alert docs
-- Bug spanned three layers (controller sort config, sort handler, Solr doc schema) which is why existing tests did not catch it
-- New integration test tests actual behavior (result ordering) rather than just params passing
+- Also pushed `notification_rule_overrides` collection to the PR in a separate commit earlier in this session
+- PR: https://github.com/highspot/nutella/pull/69976
 
 ---
 
