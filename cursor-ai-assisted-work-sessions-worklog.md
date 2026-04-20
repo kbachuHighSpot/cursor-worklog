@@ -723,3 +723,31 @@ Updated the notification rules master plan with specific implementation details 
 
 ---
 
+## 2026-04-20 - Fix alerts pagination sort field mismatch (HS-155824)
+
+**Repository:** nutella
+**Branch:** HCL-10295/fix-alerts-pagination-stable
+**PR:** https://github.com/highspot/nutella/pull/70005
+**Files Changed:**
+- web/api/controllers/users.rb
+- web/app/controllers/alerts.rb
+- web/spec/magma-integration/api/controllers/users_controller_spec.rb
+
+**Summary:**
+Identified and fixed the root cause of persistent alerts pagination bug where scrolling through weeks of notifications would show recent alerts reappearing. PR #69898 created_before anchor fix was necessary but insufficient - the underlying sort field did not exist on alert Solr documents.
+
+**Changes Made:**
+- Root cause analysis: TimeAddedSort sorts by timestamp_available_at but Alert only indexes timestamp_created_at, timestamp_deleted_at, timestamp_updated_at. Solr falls back to id desc tiebreaker, producing non-chronological ordering.
+- Changed API alerts endpoint (users.rb) sort from List::TIME_ADDED to List::DESC_CREATED_AT
+- Changed web notifications endpoint (alerts.rb) sort from List::TIME_ADDED to List::DESC_CREATED_AT
+- Added unit test verifying sort param is List::DESC_CREATED_AT
+- Added end-to-end integration test creating alerts with controlled timestamps and verifying reverse chronological order
+- Added comment on Jira ticket HS-155824 with root cause analysis
+
+**Notes:**
+- No Solr reindex needed - timestamp_created_at already exists on all alert docs
+- Bug spanned three layers (controller sort config, sort handler, Solr doc schema) which is why existing tests did not catch it
+- New integration test tests actual behavior (result ordering) rather than just params passing
+
+---
+
