@@ -751,3 +751,36 @@ Implemented the notification rules seeding migration per the schema and seeding 
 
 ---
 
+## 2026-04-18 - Add entity, queries, and commands classes for notification_rules and notification_rule_overrides
+
+**Repository:** highspot/nutella
+**Branch:** HS-180217/seed-notification-rules
+**Files Changed:**
+- web/common/models/entities/notification_rule.rb (NEW)
+- web/common/models/entities/notification_rule_override.rb (NEW)
+- web/common/models/queries/notification_rule_queries.rb (NEW)
+- web/common/models/queries/notification_rule_override_queries.rb (NEW)
+- web/common/models/commands/notification_rules/notification_rule_commands.rb (NEW)
+- web/common/models/commands/notification_rule_overrides/notification_rule_override_commands.rb (NEW)
+- CODEOWNERS
+
+**Summary:**
+Scaffolded the data-access layer (entity, queries, commands) for both notification_rules and notification_rule_overrides collections, completing the create-mongo-collection skill requirements identified during the PR #69976 audit.
+
+**Changes Made:**
+- Created NotificationRule entity with attr_accessors for all schema fields, from_mongo, and convenience methods (active?, channels, priority)
+- Created NotificationRuleOverride entity with scope accessor helpers (domain_id, user_id)
+- Created NotificationRuleQueries with find_by_name, find_by_names, find_active_by_name, all_active, find_by_type, find_by_category, count
+- Created NotificationRuleOverrideQueries with find_for_resolution (scope hierarchy query), find_by_rule_name, find_for_domain, find_one
+- Created NotificationRuleCommands with create, update_by_name, deactivate, activate, delete_by_name
+- Created NotificationRuleOverrideCommands with upsert (scope-aware with $setOnInsert), delete, delete_all_for_rule, delete_all_for_domain
+- Updated CODEOWNERS with @highspot/app-platform ownership for all new files
+
+**Notes:**
+- Follows existing codebase patterns (SlackWorkspaceBotToken entity, AiGatewayDomainConfigQueries) for consistency
+- NotificationRuleOverrideQueries.find_for_resolution implements the 3-tier scope hierarchy ($or query for user+domain, domain-only, user-only)
+- NotificationRuleOverrideCommands.upsert uses $setOnInsert for immutable fields and $set for mutable ones
+- These classes complete the create-mongo-collection skill requirements that were missing from PR #69976
+
+---
+
