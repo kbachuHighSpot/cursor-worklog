@@ -784,3 +784,43 @@ Scaffolded the data-access layer (entity, queries, commands) for both notificati
 
 ---
 
+## 2026-04-25 - Created Detailed Phase Plans (3-12) for Notification Rules
+
+**Repository:** N/A (Cursor plans)
+**Files Changed:**
+- .cursor/plans/phase_3_rest_api_manage_rules.plan.md
+- .cursor/plans/phase_4_rest_api_send.plan.md
+- .cursor/plans/phase_5_admin_ui.plan.md
+- .cursor/plans/phase_6_groups.plan.md
+- .cursor/plans/phase_7_email_content_overrides.plan.md
+- .cursor/plans/phase_8_delivery_guards_batching.plan.md
+- .cursor/plans/phase_9_non_email_content_overrides.plan.md
+- .cursor/plans/phase_10_slim_config_universal_records.plan.md
+- .cursor/plans/phase_11_performance.plan.md
+- .cursor/plans/phase_12_test_automation.plan.md
+- .cursor/plans/notification_rules_master_plan.plan.md
+
+**Summary:**
+Created 10 detailed phase plans (Phases 3-12) at the same depth as the existing Phase 2 plan. Each plan includes architecture diagrams, code snippets, file lists, spec files, cross-phase dependencies, and risks/mitigations. Updated the master plan to reference all detailed plans and added a cross-phase dependency matrix with a Mermaid diagram and a resolved gaps table.
+
+**Changes Made:**
+- Phase 3: REST API for rule CRUD -- Padrino controller, presenters, validation, auth, filtering, pagination
+- Phase 4: REST API for triggering notifications -- S2S auth, idempotency, rate limiting, async processing via Pipeline
+- Phase 5: Admin UI -- Magma entities page enhancements (richer :find fields, cross-collection :links/:relations)
+- Phase 6: Groups -- group_id scoping on overrides, group membership resolution with caching, updated specificity ordering
+- Phase 7: Email content overrides -- NotificationContentOverridable module, template interpolation, builder integration
+- Phase 8: Delivery guards + batching -- throttle/dedup/quiet hours via Redis, configurable digest aggregation_window per kind
+- Phase 9: Non-email content overrides -- push/Slack/MS Teams presenter integration with channel-scoped overrides
+- Phase 10: Slim config + universal records -- thin ALERT_CONFIG, direct email migration to NotificationEngine, Alert type extension
+- Phase 11: Performance -- Redis-backed caching upgrade, index optimization, New Relic custom events/metrics/alerts, load test scripts
+- Phase 12: Test automation -- Playwright test scenarios (share, digest, overrides, throttle), NotificationApiHelper, Buildkite CI integration
+- Master plan updated with detailed plan references, Mermaid dependency graph, and cross-phase gaps table
+
+**Notes:**
+- All 10 plans follow the same structure: Architecture, Schema/Files, Spec Files, Cross-Phase Dependencies, Risks and Mitigations
+- Cross-phase gaps identified and resolved (content_overrides passthrough, channels_delivered tracking, caching foundations, module location)
+- Phase 5 correctly scoped as Magma entities page enhancement (not a new React UI)
+- Phase 12 uses existing test_automation_playwright repo patterns (MailinatorClient, inbox registry, expect.poll)
+
+---
+
