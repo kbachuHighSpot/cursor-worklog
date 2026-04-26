@@ -323,6 +323,60 @@ NotificationEngine.notify(:share_item, data, opts)
 - Existing `send_alerts` batch job picks up unsent alerts and sends the digest email
 - Digest behavior unchanged; only the routing decision moves to rule-driven
 
+**Advanced email options driven by the rule (rules-first, not deferred to Phase 10):**
+
+The rule's `delivery_strategy["email"]` block is the declarative source of truth for the seven per-kind advanced email behaviors that were previously sourced from `ALERT_CONFIG[kind][:options]`:
+
+| Field | Effect |
+|---|---|
+| `send_from` | Render the alert's `data["from"]` user as the email sender |
+| `send_one` | Send a single email to all recipients (sets `email_opts[:multi]`) |
+| `bcc_support` | Bcc Highspot support address |
+| `no_to` | Omit the To: header (recipients via bcc) |
+| `bcc_mode` | `"all"` / `"external"` / `nil` |
+| `from_support` | Send "from" the support address |
+| `account` | Account-scoped sender behavior |
+
+**Runtime wiring:**
+
+```
+AlertCommands.create
+  -> NotificationEngine.notify (resolves rule)
+  -> NotificationChannelRouter.route(alert, rule, opts)
+  -> deliver_email(alert, rule, ...)
+  -> SemanticEmailCommands.send_alert(to, cc, alert, opts, rule: rule)
+       -> merge_email_options(rule, alert, opts) ->
+       -> resolve_alert_from_user(alert, options) (uses options[:send_from])
+       -> build_alert_email_options(cc, tag, options) (multi/bcc/no_to)
+```
+
+`EmailCommands.send_alert` / `send_alerts` (entry points for callers that bypass `AlertCommands.create`) also resolve the rule via `EmailCommands.resolve_email_rule(rule_name, domain_id, user_id)` and pass it as `rule:` to the semantic dispatcher. `resolve_email_rule` returns the rule when active and includes "email"; the legacy boolean `rule_allows_email?` is preserved as a thin wrapper for `check_notification_rule` and existing test stubs.
+
+**Merge precedence (lowest -> highest):**
+
+```
+alert.options (legacy ALERT_CONFIG carry-over)
+  <- overridden by rule.email_options (declarative defaults)
+  <- overridden by call-site options (imperative runtime overrides)
+```
+
+This means the rule wins over `alert.options` (so seeded rule values become effective immediately, reducing dependence on `ALERT_CONFIG`), while call-site overrides such as `is_partner ? { send_from: false } : {}` continue to work.
+
+**Without a rule (rule resolution returns nil):**
+- `alert.options` (legacy semantics) is used as the fallback so unmodeled `ALERT_CONFIG` fields like `:send_immediately` and `:group_email` continue to work until Phase 10.
+
+**Phase boundary:**
+- Phase 2 (this phase) wires the rule's email block into the runtime so it governs immediate-alert behavior. ALERT_CONFIG is no longer the runtime source of truth for the seven fields above when a rule resolves.
+- Phase 10 will remove the now-redundant `ALERT_CONFIG[kind][:options]` fields and the legacy fallback merge.
+
+**Helpers added in Phase 2:**
+- `NotificationRule#email_options` -- exposes the email block as a symbol-keyed hash (always returns all seven keys with safe defaults).
+- `EmailCommands.resolve_email_rule(rule_name, domain_id, user_id)` -- returns the resolved rule (or nil).
+- `SemanticEmailCommands.merge_email_options(rule, alert, call_site_options)` -- private helper implementing the precedence above with key normalization (Mongo strings -> symbols).
+
+**Digest path:**
+- `SemanticEmailCommands.send_alerts` accepts a `rule:` kwarg for parity with `send_alert`. The digest path does not yet read advanced email options; the seeded digest rule's email block is all defaults today, so this is a no-op for behavior. The kwarg is reserved for future use without re-plumbing the call chain.
+
 **Files to create:**
 - `web/common/notification_engine.rb` -- `notify(kind, data, opts)` entry point
 - `web/common/notification_channel_router.rb` -- channel dispatch logic
@@ -335,6 +389,10 @@ NotificationEngine.notify(:share_item, data, opts)
 - `web/common/push_notification_channel_listener.rb` -- logic migrates to router (listener removed or delegated)
 - `web/common/slack/slack_commands.rb` -- `SLACK_ALERT_KINDS` set used only as legacy fallback
 - `web/common/ms_teams/ms_teams_commands.rb` -- `MS_TEAMS_ALERT_KINDS` set used only as legacy fallback
+- `web/common/models/entities/notification_rule.rb` -- adds `#email_options` exposing `delivery_strategy["email"]`
+- `web/common/email/email_commands.rb` -- adds `resolve_email_rule`; `send_alert`/`send_alerts` pass `rule:` to semantic dispatcher
+- `web/common/email/semantic_email_commands.rb` -- `send_alert` (and reserved `send_alerts`) accept `rule:` kwarg; merges options with rule-first precedence
+- `web/common/notifications/rules/notification_channel_router.rb` -- `deliver_email` forwards the resolved rule to `SemanticEmailCommands.send_alert`
 
 **Per-kind rollout:**
 - Feature flag can be scoped to specific kinds (e.g., `notification_rules_enabled_kinds: ["share_item", "feedback_item"]`)
