@@ -850,3 +850,38 @@ Audited legacy alert-sending code to identify the actual opt-out mechanisms and 
 
 ---
 
+
+## 2026-04-26 - Phase 2: rules-first advanced email options (delivery_strategy.email)
+
+**Repository:** latest (nutella/web)
+**Branch:** (uncommitted changes in working tree)
+**Files Changed:**
+- nutella/web/common/models/entities/notification_rule.rb
+- nutella/web/common/email/email_commands.rb
+- nutella/web/common/email/semantic_email_commands.rb
+- nutella/web/common/notifications/rules/notification_channel_router.rb
+- nutella/web/spec/unit/common/models/entities/notification_rule_spec.rb
+- nutella/web/spec/unit/common/email/semantic_email_commands_spec.rb
+- nutella/web/spec/unit/common/email/email_commands_spec.rb
+- nutella/web/spec/unit/common/notifications/rules/notification_channel_router_spec.rb
+- /Users/kiran.bachu/Codebase/cursor-worklog/unified_notifications/notification_rules_master_plan.plan.md
+
+**Summary:**
+Wired the resolved NotificationRule delivery_strategy["email"] block into the runtime so seeded rule options (send_from, send_one, bcc_support, no_to, bcc_mode, from_support, account) drive email behavior at send time. Previously seeded by db/migrate/180217_seed_notification_rules.rb but never read by SemanticEmailCommands / EmailCommands -- the runtime relied on alert.options (legacy ALERT_CONFIG carry-over) and call-site kwargs only. Reduces ALERT_CONFIG dependence per the Phase 2 goal; Phase 10 will slim down the now-redundant ALERT_CONFIG fields.
+
+**Changes Made:**
+- Added NotificationRule#email_options returning a symbol-keyed hash with safe defaults.
+- Refactored EmailCommands.rule_allows_email? -> EmailCommands.resolve_email_rule(rule_name, domain_id, user_id) returning the rule (or nil); kept rule_allows_email? as a thin wrapper for check_notification_rule callers and existing test stubs.
+- EmailCommands.send_alert and send_alerts resolve the rule once and pass rule: to SemanticEmailCommands.send_alert / send_alerts.
+- NotificationChannelRouter.deliver_email forwards the resolved rule via rule: kwarg.
+- SemanticEmailCommands.send_alert accepts rule: and merges options with rules-first precedence: alert.options <- rule.email_options <- call-site options. Keys normalized to symbols.
+- SemanticEmailCommands.send_alerts accepts a reserved rule: kwarg for parity (digest path does not yet read advanced options).
+- Updated entity, dispatch, router, and email_commands specs; added precedence tests showing rule overrides alert.options and call-site overrides win over rule.
+- Master plan updated with a new Advanced email options driven by the rule subsection documenting the runtime wiring, precedence, helpers, and Phase 2/Phase 10 boundary.
+
+**Notes:**
+- Precedence agreed with the user: alert.options <- rule.email_options <- call-site options. Rule overrides legacy alert.options so seeded values become effective; call-site overrides (e.g., is_partner ? { send_from: false } : {}) still win.
+- When no rule resolves, the legacy alert.options fallback is preserved so unmodeled fields (:send_immediately, :group_email, ...) keep working until Phase 10.
+- SemanticEmailCommands.send_alerts accepts the rule but does not yet consume it; the kwarg is reserved so the digest path can be wired without re-plumbing later.
+
+---
