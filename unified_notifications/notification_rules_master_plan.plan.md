@@ -500,6 +500,8 @@ This means the rule wins over `alert.options` (so seeded rule values become effe
 
 #### Step 1 -- Magma admin entities (read-only inspector)
 
+> Field-level details, verified `:find` / `:links` / `:relations` syntax, and Magma-side risks for Step 1 are tracked in the sub-plan: [phase_5_admin_ui.plan.md](../../../.cursor/plans/phase_5_admin_ui.plan.md). Update both files together when columns or relations change.
+
 **Goals:** Surface `notification_rules` and `notification_rule_overrides` under the magma admin **Entities** view so the seeded documents are immediately browsable. No new UI, no new API -- just registration in the generic entities framework.
 
 **Magma changes:**
@@ -509,23 +511,29 @@ This means the rule wins over `alert.options` (so seeded rule values become effe
 | `magma/api/src/main/clojure/api/controllers/entities.clj` | Add `notification_rules` and `notification_rule_overrides` to the entity map. Defines the projected fields, date-typed fields, and FK links. |
 | `magma/core/magma-commons/src/main/clojure/common/state/mongo.clj` | Add both collection names to `mongo-e-collections` so the magma mongo client routes their queries to the correct database. |
 
-**Entity registrations:**
+**Entity registrations (as shipped in [magma#8831](https://github.com/highspot/magma/pull/8831), HS-180223):**
 
 ```clojure
 "notification_rules"
-{:find ["_id" "name" "version" "status" "type" "category" "created_at" "updated_at"]
+{:find ["_id" "name" "version" "status" "type" "category"
+        "delivery_strategy.channels" "delivery_strategy.priority"
+        "created_at" "updated_at"]
  :dates #{"created_at" "updated_at"}
  :links {}
- :relations {}}
+ :relations {"notification_rule_overrides" {"name" "rule_name"}}}
 
 "notification_rule_overrides"
-{:find ["_id" "rule_name" "scope.domain_id" "scope.user_id" "created_at" "updated_at"]
+{:find ["_id" "rule_name" "scope.domain_id" "scope.user_id"
+        "delivery_strategy.channels" "delivery_strategy.priority"
+        "created_at" "updated_at"]
  :dates #{"created_at" "updated_at"}
  :links {"scope.domain_id" "domains" "scope.user_id" "users"}
  :relations {}}
 ```
 
-The `:links` on `notification_rule_overrides` make `scope.domain_id` and `scope.user_id` clickable in the admin UI, jumping to the corresponding `domains` and `users` entity pages. `notification_rules` are global (no domain/user scope), so no FK links.
+- `:relations` on `notification_rules` builds a list-link from a rule's detail page to its overrides via `/entities/notification_rule_overrides?rule_name=<rule.name>` (verified against `entity-relation` in `entities.clj`).
+- `:links` on `notification_rule_overrides` keep `scope.domain_id` and `scope.user_id` clickable, jumping to the corresponding `domains` and `users` entity pages. `notification_rules` are global (no domain/user scope), so no FK links.
+- A reverse `:links {"rule_name" "notification_rules"}` is intentionally **omitted** -- Magma's `entity-simple-link` looks up the target by `_id`, so a `name`-keyed link would 404. Tracked as a follow-up in the sub-plan; manual workaround for now is the rules form-query view (`name=<rule_name>`).
 
 **Capabilities (out of the box once registered):**
 - List with column projection from `:find`
