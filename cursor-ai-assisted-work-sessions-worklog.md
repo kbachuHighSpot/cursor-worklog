@@ -918,3 +918,24 @@ Restores push notification parity for ~30 high-traffic alert kinds whose Notific
 - Phase 2 work (NotificationEngine, rules-first email delivery, advanced email options) remains on HS-180222/notification-engine-phase-2 branch and is unaffected by this PR.
 
 ---
+
+## 2026-04-18 - Master plan: Phase 5 split into magma admin entities + custom React UI
+
+**Repository:** kbachuHighSpot/cursor-worklog
+**Files Changed:**
+- unified_notifications/notification_rules_master_plan.plan.md
+
+**Summary:**
+Updated Phase 5 of the notification rules master plan to capture the magma admin entities work as Step 1 and the custom React admin UI as Step 2. The magma changes (notification_rules + notification_rule_overrides registered in magma/api entities.clj and magma/core mongo-e-collections) make the seeded rules and overrides browsable in the admin Entities view immediately, before/independently of the React UI that depends on Phase 3 REST API.
+
+**Changes Made:**
+- Restructured Phase 5 into Step 1 (magma admin entities, read-only inspector) and Step 2 (custom React admin UI).
+- Documented the two magma file changes (entities.clj registrations + mongo-e-collections additions) including the projected fields, date columns, and FK links (scope.domain_id -> domains, scope.user_id -> users).
+- Listed out-of-the-box capabilities (filter, raw JSON view, link-throughs) and explicit out-of-scope items (editing, MJML preview, role scoping) for Step 1.
+- Added Phase 5 sequencing note: Step 1 needs only Phase 1 (seeded collections); Step 2 needs Phase 3 (REST API). Step 1 stays as a low-level fallback after Step 2 ships.
+- Updated the Phase Ordering table to reflect the dual deliverable.
+
+**Notes:**
+- The two magma files (api/src/main/clojure/api/controllers/entities.clj, core/magma-commons/src/main/clojure/common/state/mongo.clj) are uncommitted on the magma main branch locally. A separate magma PR will be needed to ship Step 1.
+
+---

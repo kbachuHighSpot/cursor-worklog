@@ -493,6 +493,60 @@ This means the rule wins over `alert.options` (so seeded rule values become effe
 
 ### Phase 5 -- Admin UI
 
+**Goals:** Make notification rules and overrides inspectable and editable from the admin tooling. Two coordinated deliverables:
+
+- **Step 1 (magma admin entities):** Register the new collections in the existing magma admin entities framework so ops, PM, and engineering can list, filter, and inspect rules and overrides immediately, without waiting for the custom UI. Read-only browse of the source-of-truth Mongo documents.
+- **Step 2 (custom React admin UI):** Channel-aware editor backed by the Phase 3 REST API for full CRUD, override management, and MJML email preview.
+
+#### Step 1 -- Magma admin entities (read-only inspector)
+
+**Goals:** Surface `notification_rules` and `notification_rule_overrides` under the magma admin **Entities** view so the seeded documents are immediately browsable. No new UI, no new API -- just registration in the generic entities framework.
+
+**Magma changes:**
+
+| File | Change |
+|---|---|
+| `magma/api/src/main/clojure/api/controllers/entities.clj` | Add `notification_rules` and `notification_rule_overrides` to the entity map. Defines the projected fields, date-typed fields, and FK links. |
+| `magma/core/magma-commons/src/main/clojure/common/state/mongo.clj` | Add both collection names to `mongo-e-collections` so the magma mongo client routes their queries to the correct database. |
+
+**Entity registrations:**
+
+```clojure
+"notification_rules"
+{:find ["_id" "name" "version" "status" "type" "category" "created_at" "updated_at"]
+ :dates #{"created_at" "updated_at"}
+ :links {}
+ :relations {}}
+
+"notification_rule_overrides"
+{:find ["_id" "rule_name" "scope.domain_id" "scope.user_id" "created_at" "updated_at"]
+ :dates #{"created_at" "updated_at"}
+ :links {"scope.domain_id" "domains" "scope.user_id" "users"}
+ :relations {}}
+```
+
+The `:links` on `notification_rule_overrides` make `scope.domain_id` and `scope.user_id` clickable in the admin UI, jumping to the corresponding `domains` and `users` entity pages. `notification_rules` are global (no domain/user scope), so no FK links.
+
+**Capabilities (out of the box once registered):**
+- List with column projection from `:find`
+- Filter by any indexed field (e.g., `name`, `category`, `status`, `type`)
+- View a single document's raw JSON
+- Date columns rendered as human-readable timestamps
+- Override rows link out to their owning domain/user
+
+**Out of scope for Step 1:**
+- Editing fields (read-only inspection)
+- Channel-aware tabs / MJML preview (Step 2)
+- Permission scoping by domain admin role (Step 2 / API-driven)
+
+**Release criteria:**
+- Magma deploy includes the new entity registrations
+- Admin can navigate to Entities -> `notification_rules` and see all seeded rules
+- Admin can navigate to Entities -> `notification_rule_overrides` and see overrides with working domain/user link-throughs
+- No regression in other entity pages (entity map change is additive)
+
+#### Step 2 -- Custom React admin UI
+
 **Goals:** Admin interface backed by the Phase 3 REST API to list, filter, and edit notification rules. Channel-specific editing organized by destination tabs. Email tab supports rich MJML preview.
 
 **Views:**
@@ -521,6 +575,11 @@ This means the rule wins over `alert.options` (so seeded rule values become effe
 - UX sign-off from PM and design
 - Behind feature flag until release criteria met
 - Domain admin scoping verified
+
+#### Phase 5 sequencing
+
+- Step 1 ships independently of Step 2 -- it has no dependency on Phase 3 (REST API) and can land as soon as Phase 1 has seeded the collections.
+- Step 2 depends on Phase 3 (REST API) being live; Step 1 stays available afterward as a low-level fallback for engineers and SRE.
 
 ### Phase 6 -- Groups (recipient scoping)
 
@@ -822,7 +881,7 @@ NotificationChannelRouter.route(notification, rule)
 | 2 | NotificationEngine | Single entry point + channel router + dual-read | `NotificationEngine.notify`, `NotificationChannelRouter` |
 | 3 | REST API -- manage rules | CRUD + overrides + auth + audit | `GET/PUT/POST/DELETE /api/v1/notification_rules` |
 | 4 | REST API -- send | Trigger sends for integrations | `POST /api/v1/notifications/send` |
-| 5 | Admin UI | Rule editor + override manager + email preview | React components via Phase 3 API |
+| 5 | Admin UI | Step 1: magma entities registration (read-only inspector). Step 2: rule editor + override manager + email preview. | `entities.clj` + `mongo.clj` (magma); React components via Phase 3 API |
 | 6 | Groups | Group-based recipient scoping | `recipient_groups` field on rules |
 | 7 | Email overrides | Admin text overrides on semantic email | `content_overrides` on override docs |
 | 8 | Delivery guards | Throttle + dedup + delivery window | Redis state, `NotificationGuardEvaluator` |
