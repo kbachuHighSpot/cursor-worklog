@@ -824,3 +824,29 @@ Created 10 detailed phase plans (Phases 3-12) at the same depth as the existing 
 
 ---
 
+## 2026-04-26 - Phase 2 NotificationRuleResolver: Correct Legacy Opt-Out Mapping
+
+**Repository:** latest (nutella/web)
+**Branch:** (working copy)
+**Files Changed:**
+- nutella/web/common/notifications/rules/notification_rule_resolver.rb
+- nutella/web/spec/unit/common/notifications/rules/notification_rule_resolver_spec.rb
+- .cursor/plans/phase_2_notificationengine_a8edc09e.plan.md
+
+**Summary:**
+Audited legacy alert-sending code to identify the actual opt-out mechanisms and corrected the rules-engine integration. Removed the `NOTIFICATIONS_CONFIG_TYPE_BY_RULE` mapping and `domain_admin_allows?` helper from `NotificationRuleResolver` (legacy `NotificationsConfig` is a UI/Chameleon/banner gate, not an alert-sending gate). Trimmed `USER_SETTING_BY_RULE` to only the seven verified rule->setting pairs that legacy `Notifications.notify(setting, ...)` actually applies, fixed the `:respot_item` -> `:respot` typo, and dropped unverified entries (`added_to_group`, the two `assessment_*` entries that gate multiple kinds via inline checks, and the `NotificationsConfig` categories).
+
+**Changes Made:**
+- Removed `NOTIFICATIONS_CONFIG_TYPE_BY_RULE` constant, `domain_admin_allows?` helper, and the corresponding resolve-step from `NotificationRuleResolver`. Domain-level admin opt-out is already covered because `domain.default_user_settings.notifications` is merged into `user.get_notification_setting`.
+- Trimmed `USER_SETTING_BY_RULE` to: `review`/`respot_spot`/`respot`/`copy`/`following_spot`/`following_you`/`added_version`. Each entry verified against an actual `Notifications.notify("<setting>", ...) { create_<kind> }` callsite in `notifications.rb`.
+- Updated `notification_rule_resolver_spec.rb`: removed obsolete `domain_admin_allows?` describe block and the two `NotificationsConfig`-flavored `.resolve` contexts; kept the user opt-in/opt-out and unmapped-rule contexts.
+- Rewrote the "Honoring Existing Notification Settings in the Rules Path" section in `phase_2_notificationengine_a8edc09e.plan.md` to (a) enumerate the real legacy opt-out layers (global kill switches, domain default merged into user setting, user per-kind, user per-channel, digest cadence), (b) call out why `NotificationsConfig` is intentionally not consulted by the engine, (c) explicitly list deferred mappings (assessment kinds, vestigial `added_to_group`) and reasons.
+
+**Notes:**
+- Legacy verification: `Notifications.notify` (notifications.rb:1226-1242) consults `user.get_notification_setting(setting)` only. `user.get_notification_settings` already merges `User::NOTIFICATION_DEFAULTS` + `domain.default_user_settings.notifications` + `user.settings.notifications`, so a single resolver gate covers both the company-wide default and the per-user override -- no separate domain check needed.
+- `NotificationsConfig::Type::*` callers all gate UI rendering (`show_*_insight_configs?`), Chameleon SDK provisioning (`is_chameleon_enabled?`), settings-page banners (`cloud_services_reminders`), or migration jobs. None gate `AlertCommands.create_*`.
+- Deferred items captured in the plan: honoring `Notifications.with_disabled` thread-local at engine entry, mapping the assessment-kind inline guards, and external pitch unsubscribe (out of scope).
+- Lint clean on both Ruby files.
+
+---
+
