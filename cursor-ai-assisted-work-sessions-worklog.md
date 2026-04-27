@@ -975,3 +975,67 @@ Built Phase 5 / Step 1 of the Notification Rules Master Plan: registered `notifi
 - An earlier worklog commit in this session (`582a0f9`) inadvertently dropped four prior entries (Phase 2 resolver opt-out fix, Phase 2 advanced email options, Backfill push channel PR, Master plan Phase 5 split). Those entries were restored alongside this one in a follow-up commit.
 
 ---
+## 2026-04-18 - HS-180223 Phase 3 + Phase 5 Step 2 (Notification Rules REST API + Magma admin UI)
+
+**Repositories:** highspot/nutella, highspot/magma
+**Branches:**
+- nutella: `HS-180223/notification-rules-rest-api` (stacked on `HS-180222/notification-engine-phase-2`)
+- magma: `HS-180223/magma-notification-rule-entities` (extends prior commit on this branch)
+
+**PRs:**
+- nutella PR #70329: https://github.com/highspot/nutella/pull/70329
+- magma PR #8831 (extended): https://github.com/highspot/magma/pull/8831
+
+**Files Changed (nutella, 17 files / +1328 LOC):**
+- web/api/controllers/notification_rules.rb (new, 9 endpoints)
+- web/api/presenters/notification_rule_presenter.rb (new)
+- web/api/presenters/notification_rules_presenter.rb (new)
+- web/api/presenters/notification_rule_override_presenter.rb (new)
+- web/api/presenters/notification_rule_overrides_presenter.rb (new)
+- web/common/logging/events/audit_events_notification_rule_actions.rb (new)
+- web/common/models/entities/operator.rb (added RIGHT_NOTIFICATION_RULES, granted to root/eng_lead/backend/PM)
+- web/common/models/queries/notification_rule_queries.rb (find_filtered/count_filtered + selectors)
+- web/common/models/queries/notification_rule_override_queries.rb (find_by_id/find_filtered/count_filtered)
+- web/common/models/commands/notification_rule_overrides/notification_rule_override_commands.rb (create/update_by_id/delete_by_id)
+- web/spec/integration/api/controllers/notification_rules_controller_spec.rb (new, full integration coverage)
+- web/spec/unit/api/presenters/notification_rule_presenter_spec.rb (new)
+- web/spec/unit/api/presenters/notification_rule_override_presenter_spec.rb (new)
+- web/spec/unit/common/models/queries/notification_rule_queries_spec.rb (new tests)
+- web/spec/unit/common/models/queries/notification_rule_override_queries_spec.rb (new tests)
+- web/spec/unit/common/models/commands/notification_rule_overrides/notification_rule_override_commands_spec.rb (new tests)
+- CODEOWNERS (registered new files under @highspot/app-platform)
+
+**Files Changed (magma, 4 files / +690 LOC):**
+- api/src/main/clojure/api/controllers/notification_rules.clj (new, full admin UI controller)
+- api/src/main/clojure/api/http/handler.clj (mounted /notification_rules under wrap-authorize-operator)
+- core/magma-commons/src/main/clojure/common/entities/operators.clj (added right-notification-rules + role grants)
+- .github/CODEOWNERS (registered notification_rules.clj under @highspot/app-platform)
+
+**Summary:**
+Built Phase 3 of the unified notifications work (a thin REST API over the existing `NotificationRule` and `NotificationRuleOverride` Mongo models) and the Phase 5 Step 2 magma admin UI that consumes it. Operators can now list, filter, edit, deactivate, hard-delete rules, and manage per-domain/per-user overrides through a Hiccup admin page guarded by a new operator right -- without touching Mongo directly.
+
+**Architecture decisions:**
+- API surface: Padrino `Api.controllers :notification_rules` mounting to `/api/v1/notification_rules` and nested `/api/v1/notification_rules/:name/overrides`. Nine endpoints total (5 rules + 4 overrides).
+- AuthZ: introduced `Operator::RIGHT_NOTIFICATION_RULES` (and Clojure mirror `right-notification-rules`) granted to root, engineering_lead, backend_engineer, product_manager. All other roles -> 403. Avoided gating on a feature flag; rights are sufficient.
+- Audit: new `Logging::Events::AuditEventsNotificationRuleActions` constants. Rule mutations are non-customer-facing (target = rule name, no domain). Override mutations carry the override's scope.domain_id and emit `customerFacing: true` when present.
+- Soft-vs-hard delete: `DELETE /notification_rules/:name` defaults to soft delete (status=inactive); `?hard=true` hard-deletes the rule and cascades to its overrides via `delete_all_for_rule`. Magma exposes both as separate buttons with confirm prompts.
+- JSON-bodied form fields (delivery_strategy, trigger, eligible_alert_kinds, metadata, content_overrides) exposed as <textarea> elements on magma forms; controller round-trips through cheshire and reports parse errors via flash redirects rather than 500s.
+- Magma <-> Nutella transport: `common.api/call` with USER-EMAIL/USER-SECRET (operator email looked up via friend session). `:domain` left nil because the rules endpoint is global.
+- Stacked PRs: nutella PR opened against `HS-180222/notification-engine-phase-2` rather than `main` so the diff stays focused on Phase 3 -- will rebase to main once Phase 2 lands.
+- Magma PR (#8831) was already open with Step 1 changes (entities-view registration); extended the same PR with Step 2 commit and updated the title/body to reflect the wider scope rather than opening a follow-up.
+
+**Tests:**
+- 26+ new RSpec tests across queries, commands, and presenters.
+- Full integration spec for the controller covering authn/authz (403 for non-operator), validation (400/404/409 paths), happy path for all 9 endpoints, audit-event assertions, and soft-vs-hard delete semantics.
+- Magma side: clj-kondo clean for `notification_rules.clj`; the only kondo "errors" on the modified handler.clj are pre-existing compojure-macro false positives that exist on every defroutes block in the file.
+
+**Pre-commit gauntlet:**
+- nutella: required CODEOWNERS entries for the 3 new spec files; rubocop initially flagged `Lint/ConstantDefinitionInBlock` for constants inside `Api.controllers do`, fixed by hoisting them into a `NotificationRulesApi` module above the controller block. cljstyle / prettier passed.
+- magma: prettier + cljstyle passed first time.
+
+**Notes:**
+- Atlassian MCP still not connected in this session; the HS-180223 ticket comment noting this AI action could not be posted automatically. Both PR titles/branches/bodies reference HS-180223.
+- Phase 5 Step 2 (admin UI) was originally documented as "blocked on Phase 3"; that block is now resolved and the magma side ships in the same PR family.
+- Outstanding: when Phase 2 lands, rebase the nutella PR onto main; when both PRs deploy, run the integration test plan in the magma PR description against an operator account with the new right.
+
+---
