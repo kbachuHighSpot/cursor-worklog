@@ -1162,3 +1162,34 @@ Followed up on the 2026-04-28 nutella-mcp gap analysis canvas. After mapping the
 - User explicitly declined the "switch to plan mode" suggestion and asked for full implementation; scope was contracted to spec-only after we surfaced that the heavier endpoints would each be multi-hour work and could be sequenced separately.
 
 ---
+
+## 2026-04-29 - Extended get_feature_flag_status MCP tool to surface Mongo + LaunchDarkly state
+
+**Repository:** nutella (web/) and ai-services (agent-tools-registry)
+**Branch:** hackweek-nutella-mcp (nutella); n/a (ai-services working tree)
+**Files Changed:**
+- web/common/handlers/features/get_feature_flag_status.rb (rewrite)
+- web/spec/unit/common/handlers/features/get_feature_flag_status_spec.rb (new)
+- ai-services/agent-platform/agent-tools-registry/specs/common/get_feature_flag_status.json (v1.0.0 -> v2.0.0)
+
+**Summary:**
+Extended the existing `get_feature_flag_status` MCP tool to answer the runtime question "is feature X actually on right now?" in addition to the pre-existing lifecycle question ("is it deprecated?"). Originally the handler only read features.yaml; now it also consults MongoDB (`FeatureCache`) and LaunchDarkly (`Hspt::Features::FlagService` + `Hspt::Features::Manager`) and returns a unified breakdown with existence flags per source, the Manager-evaluated enabled/disabled (respecting `evaluation_mode`), and a Mongo doc summary (counts + per-context membership checks).
+
+**Changes Made:**
+- Handler `Features::Handlers::GetFeatureFlagStatus`:
+  - Added optional `user_id` and `domain_id` params (Dry::Schema).
+  - Conditional auth: self-lookup (no params) requires only authentication; lookups for other users/domains require `Operator::RIGHT_FEATURES`. Implemented by capturing raw input in a `call(input)` override since `is_authorized?` runs before contract validation.
+  - Resolves evaluation context via `EntityFetch.user`; raises `ValidationError` for unknown user_id.
+  - For user-scope evaluation, always uses the user's actual `domain_id` (any `domain_id` override is ignored to keep response self-consistent with `Manager.enabled_for_user?`).
+  - Wraps `FlagService.exists?` and `Manager.determine_mode` in safe rescues to tolerate environments where LD isn't configured.
+  - Backwards-compatible: top-level `status` field preserved (`keep`/`deprecated`/`unknown`).
+- Tool spec bumped to 2.0.0 with `userId`/`domainId` query params, expanded `response.normalize`, updated `errors`, examples, and pitfalls. Description now reflects the cross-source debugging use case.
+- New spec `get_feature_flag_status_spec.rb` covering: auth matrix (self vs operator vs unauthorized), unknown-everywhere case, features.yaml-only case, Mongo presence + summary, LD presence + enabled_in_context, domain-scope vs user-scope, ValidationError when user_id missing, Contract schema validation.
+
+**Notes:**
+- Could not run RSpec locally (bundler missing many gems on this machine); validated Ruby syntax via `ruby -c` and JSON spec via `python3 -m json.tool`.
+- Response shape is additive on top of v1.0.0's `{status}`. Existing callers that only consume `status` continue to work; new callers can opt into `existence`, `evaluation`, `mongo`, `launchdarkly`, `metadata`.
+- Considered building this as a brand-new tool (`get_feature_flag_state`) but the user chose to extend the existing `get_feature_flag_status` to keep the surface area small. Documented version bump in the spec accordingly.
+- Did not add a local Python tool in `nutella-mcp/src/`; the existing pattern auto-exposes the spec since `expose_via_mcp:true`.
+
+---
