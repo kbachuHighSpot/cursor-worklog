@@ -1193,3 +1193,27 @@ Extended the existing `get_feature_flag_status` MCP tool to answer the runtime q
 - Did not add a local Python tool in `nutella-mcp/src/`; the existing pattern auto-exposes the spec since `expose_via_mcp:true`.
 
 ---
+
+## 2026-04-29 - Fix array query param encoding in agent-toolkit GatewayInvoker
+
+**Repository:** ai-services
+**Branch:** hackweek/nutella-mcp
+**Files Changed:**
+- agent-platform/packages/py/agent-toolkit/src/highspot_agent_toolkit/invoke.py
+- agent-platform/packages/py/agent-toolkit/tests/test_invoke_gateway.py
+
+**Summary:**
+Root-caused why `list_enabled_features({ids: [...]})` (and any other MCP tool with `query_from_input` containing array values) was always returning `400 "Invalid feature IDs supplied."` even for valid IDs, then fixed it. The Python `GatewayInvoker._build_request` in `agent-toolkit` was passing array query params to `urllib.parse.urlencode()` without `doseq=True`, so a list value got serialized as the Python list repr (e.g. `?ids=%5B%27a%27%5D` decoding to `?ids=['a']`). Nutella's `/v1/features/enabled` controller validates `ids` with `Dry::Schema.Params { optional(:ids).array(:string) }`, which rejects the single-string form — the toolkit then maps the 400 to its canned error message, hiding the real reason.
+
+**Changes Made:**
+- `invoke.py`: encode list/tuple values for `query_from_input` using Rails/Rack-compatible bracket notation (`ids[]=a&ids[]=b`) by building an explicit list of `(key, str(value))` pairs before calling `urlencode`. Scalars unchanged.
+- `test_invoke_gateway.py`: added `test_invoke_query_from_input_array_uses_rails_bracket_notation` (regression for the 400 bug) and `test_invoke_query_from_input_scalar_unchanged` (sanity check).
+- Verified with `make test` style run via `pytest`: all 171 tests pass (3/3 query_from_input tests including the two new ones).
+
+**Notes:**
+- TS counterpart `agent-platform/packages/ts/agent-toolkit/src/invoke.ts` has the same bug (`url.searchParams.set(field, String(value))` collapses arrays to comma-joined strings); not fixed in this commit at user's discretion.
+- Did not bump `pyproject.toml` version or update `CHANGELOG.md`; those are typically handled at release time and the CHANGELOG only carries the 0.1.0 baseline.
+- Did not auto-format pre-existing black/isort drift in the files (per workspace rule on minimal changes); only my new lines were added with consistent style.
+- Committed directly to `hackweek/nutella-mcp` per user choice (no PR).
+
+---
