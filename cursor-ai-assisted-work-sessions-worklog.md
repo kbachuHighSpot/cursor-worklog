@@ -1039,3 +1039,55 @@ Built Phase 3 of the unified notifications work (a thin REST API over the existi
 - Outstanding: when Phase 2 lands, rebase the nutella PR onto main; when both PRs deploy, run the integration test plan in the magma PR description against an operator account with the new right.
 
 ---
+
+## 2026-04-28 - MCP gaps for email-config persona: spot + domain notification settings endpoints
+
+**Repository:** nutella, ai-services
+**Branches:**
+- nutella: `hackweek-nutella-mcp`
+- ai-services: `hackweek/nutella-mcp`
+
+**Files Changed:**
+
+nutella:
+- `web/api/controllers/admin_spot_notifications.rb` (new)
+- `web/api/controllers/admin_domain_notifications.rb` (new)
+- `web/spec/integration/api/controllers/admin_agent_service_identity_api_spec.rb` (extended)
+- `CODEOWNERS` (added entries for both new controllers)
+
+ai-services:
+- `agent-platform/agent-tools-registry/specs/common/get_spot_notification_settings.json` (new)
+- `agent-platform/agent-tools-registry/specs/common/get_domain_notification_settings.json` (new)
+
+**Summary:**
+Closed two of the gaps identified during the email-configuration-for-notification-kinds persona walkthrough of the nutella MCP surface. Engineers debugging "what notification settings control alert kind X?" can now ask the LLM about per-spot notification flags and per-domain notification configs without first having to resolve a representative user.
+
+**Changes Made:**
+- Added `GET /api/v1/admin/spots/:spot_id/notification_settings` admin-agent endpoint that returns the `Spot::NOTIFICATION_SETTINGS` flags (notify_owners_review, notify_editors_review, cc_owners_feedback, etc.) plus the digest frequencies (notify_expiration_frequency, notify_policy_frequency) with their unset defaults applied (`weekly` for frequencies, `Spot::SETTINGS_DEFAULTS` for the two delete toggles, `false` otherwise). Includes a `recipient_summary` with owner/editor counts for quick "would anyone receive this?" debugging.
+- Added `GET /api/v1/admin/domains/:domain_id/notification_settings` admin-agent endpoint that returns one entry per `NotificationsConfig::Type` (solution_insights, training_insights, spot_insights, inapp_notifications, insights_email_notifications, reminder_notifications, cs_access_expiry). Each entry has a `present` flag so the caller can distinguish "unset" (defaults applied at runtime) from "explicitly stored config".
+- Both endpoints follow the existing admin-agent pattern: `auth: { current_account: nil, service_identity: ["admin-agent:admin-agent-service"] }` plus `halt 403, "Not authorized" if current_account.nil?`.
+- Extended the umbrella spec `admin_agent_service_identity_api_spec.rb` with seeded fixtures (`SpotCommands.create` for `fred_spot` with explicit notification settings, `NotificationsConfigCommands.create` for an INAPP_NOTIFICATIONS record) and 4 new tests covering happy path + 404 for both endpoints.
+- Wrote two new tool specs in ai-services with full `llm_usage` (when_to_use, examples, pitfalls) and `policy` blocks following the `get_user_notification_preferences` template. Owner: `team-notifications`.
+- Added CODEOWNERS entries: `admin_spot_notifications.rb` -> `@highspot/cog-crew-be` (spot-domain owner), `admin_domain_notifications.rb` -> `@highspot/app-platform` (notifications-config owner).
+
+**Notes:**
+- Skipped writing local user-nutella MCP descriptors at `.cursor/projects/.../mcps/user-nutella/tools/` because they're auto-generated from the ai-services specs by the MCP server on connect; manually-added local copies would get clobbered.
+- The other two persona gaps -- `preview_email` and `get_email_template` -- were intentionally not addressed in this session; they require wrapping the existing `web/app/controllers/email_preview.rb` (`/email_preview/:category/:kind`) behind an admin-agent endpoint, which is a larger change.
+- Ticketing was explicitly skipped per user direction (no Jira tickets opened).
+- Specs were not run locally; the user will exercise them via CI in the PR.
+
+---
+
+## 2026-04-28 - Nutella commit theme classification (MCP brainstorming)
+
+**Repository:** nutella (analysis only)
+**Branch:** n/a
+**Files Changed:** n/a (read-only git log)
+
+**Summary:** Ran `git log --since="6 months ago"` on nutella monolith, classified commit subjects into engineering themes with keyword/ticket-prefix rules (exclusive first-match), and summarized top recurring themes plus fix/hotfix and perf-related samples for MCP opportunity analysis.
+
+**Changes Made:** Analysis report delivered in chat.
+
+**Notes:** Approximate thematic counts (~2.6k/6.4k subjects tagged); large share of subjects lacked domain markers in the first line.
+
+---
