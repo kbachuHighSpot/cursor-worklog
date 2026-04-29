@@ -1131,3 +1131,34 @@ End-to-end investigation to evaluate whether nutella-mcp covers the engineering 
 - No Jira tickets created (this was a discovery/analysis task, not action-driving).
 
 ---
+
+## 2026-04-29 - Nutella-MCP gap fill: 4 new specs shipped (email + processing)
+
+**Repository:** ai-services (agent-tools-registry); nutella-mcp picks them up automatically via expose_via_mcp
+**Branch:** n/a (working tree)
+**Files Changed:**
+- ai-services/agent-platform/agent-tools-registry/specs/common/get_smtp_relays.json (new)
+- ai-services/agent-platform/agent-tools-registry/specs/common/get_item_processing_status.json (new)
+- ai-services/agent-platform/agent-tools-registry/specs/common/check_reprocess_done.json (new)
+- ai-services/agent-platform/agent-tools-registry/specs/common/check_unsubscribes.json (new)
+- /Users/kiran.bachu/.cursor/projects/Users-kiran-bachu-Codebase-nutella-mcp/canvases/nutella-mcp-gap-analysis.canvas.tsx (updated)
+
+**Summary:**
+Followed up on the 2026-04-28 nutella-mcp gap analysis canvas. After mapping the canvas's "missing tools" against the actual nutella codebase + agent-tools-registry, found that several were already covered (get_email_events.email_provider, get_spot_notification_settings, get_pitch fields). Shipped the 4 quick wins where a nutella endpoint already exists and only a registry spec was missing. nutella-mcp's MCP-exposed tool count moved 50 -> 54.
+
+**Changes Made:**
+- get_smtp_relays -> wraps existing GET /api/v1/smtp_relays (admin, FF custom_smtp_relay_for_pitch_v2 enforced upstream)
+- get_item_processing_status -> wraps GET /api/v1/spots/{spot_id}/items/{item_id}/status; covers per-stage processing visibility for "why is item X stuck?"
+- check_reprocess_done -> wraps GET /api/v1/processing/automation/item/{item_id}/isReprocessDone; documented HTTP 202 polling semantics in pitfalls
+- check_unsubscribes -> wraps POST /api/v1/contacts/unsubscribes; documented that POST is read-only batch lookup, included CRM opt-out folding caveats
+- All 4 specs use expose_via_mcp:true, observe_only policy, USER-EMAIL/SMTP-PASSWORD redaction where relevant.
+- Validated: registry validator passes 79 specs; toolkit registry loads all 4 with HIGHSPOT_AGENT_TOOLKIT_SPECS_DIR override.
+- Updated gap-analysis canvas: marked shipped tools, dropped already-covered items from the missing list, recalculated remaining gap to 3 endpoints (Magma jobs by item, email preview JSON, digital_room content blocks).
+
+**Notes:**
+- Architecture insight: nutella-mcp/server.py auto-loads any spec from agent-tools-registry/specs/ where expose_via_mcp:true. No nutella-mcp wiring change needed for spec-only tools - this is the fastest win path.
+- Remaining real gaps (require new nutella admin endpoints, not just specs): get_job_for_item / get_job_errors (Magma) and preview_email_by_kind. Both should follow the existing admin_pipeline_jobs.rb / mail_v2 pattern with service_identity auth.
+- Canvas's earlier "12 missing tools" was overstated; honest count after this round is 3 net-new endpoints needed.
+- User explicitly declined the "switch to plan mode" suggestion and asked for full implementation; scope was contracted to spec-only after we surfaced that the heavier endpoints would each be multi-hour work and could be sequenced separately.
+
+---
