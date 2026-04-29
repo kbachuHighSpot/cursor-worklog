@@ -1217,3 +1217,35 @@ Root-caused why `list_enabled_features({ids: [...]})` (and any other MCP tool wi
 - Committed directly to `hackweek/nutella-mcp` per user choice (no PR).
 
 ---
+
+## 2026-04-29 - Add include_launchdarkly opt-in to /v1/features/enabled + MCP spec
+
+**Repository:** nutella (web/) and ai-services (agent-tools-registry)
+**Branch:** hackweek-nutella-mcp (nutella); hackweek/nutella-mcp (ai-services)
+**Files Changed:**
+- web/common/handlers/features/get_features_enabled.rb
+- web/spec/integration/api/controllers/features_preview_spec.rb
+- ai-services/agent-platform/agent-tools-registry/specs/common/list_enabled_features.json (v1.0.0 -> v1.1.0)
+
+**Summary:**
+Extended GET /v1/features/enabled (and the nutella MCP `list_enabled_features` tool) with an optional `include_launchdarkly` boolean. By default the endpoint returns `user.features.to_a`, which goes through `Hspt::Features::Manager.for_user`; in the `:off_only_mongo` evaluation mode (current default for highspot.com) Manager only returns Mongo/features.yaml flags, hiding LaunchDarkly-only flags such as `mjml_email_templates` and `platform_cdn_public_thumbnails` even when LD has them on for the user. The new opt-in param unions in `Hspt::Features::FlagService.for_user(user)` so the response can reflect the true enabled set.
+
+**Changes Made:**
+- Handler `Features::Handlers::GetEnabled`:
+  - Schema now declares `optional(:include_launchdarkly).filled(:bool)` alongside the existing `optional(:ids).array(:string)`.
+  - When the param is truthy, `handle` unions `FlagService.for_user(user)` with `user.features.to_a` and uniqs the result. The `ids` filter is applied after the union so LD-only IDs can be intersected.
+  - `FlagService.for_user` returns `[]` in unsupported environments, so callers don't need to special-case LD-disabled envs.
+  - Default behavior (param omitted or false) is unchanged.
+- Specs (under `describe "GET /v1/features/enabled"`): added cases for backwards-compat default, LD union, dedup of overlapping ids, ids+include_launchdarkly intersection, and explicit include_launchdarkly=false.
+- MCP spec `list_enabled_features.json` bumped to v1.1.0:
+  - Added `include_launchdarkly` to `input_schema.properties` and `gateway.query_from_input`.
+  - New opt-in example and explicit pitfall noting LD-only flags are hidden by default.
+
+**Notes:**
+- Verified `Dry::Types::Coercions::Params::TRUE_VALUES` includes `"True"` (the form Python's `str(True)` produces) so the toolkit's bool encoding is compatible with `Dry::Schema.Params + .filled(:bool)`. No additional toolkit fix needed beyond the array-encoding fix from earlier in this session.
+- Did NOT change the default behavior to opt-out (per user choice "LD merge OFF by default") to keep backwards compatibility for any consumer of /v1/features/enabled outside the MCP.
+- RSpec could not run locally (bundler missing many gems); validated via `ruby -c` for both files. Pre-commit RuboCop hook was unrunnable for the same reason; user explicitly chose `--no-verify` for the local commit -- CI will still enforce.
+- Committed directly to `hackweek-nutella-mcp` (nutella) and `hackweek/nutella-mcp` (ai-services) per user choice; no PRs opened.
+- The MCP container needs a rebuild (`make docker-build && make docker-up` in nutella-mcp/) before the new param is exposed to the LLM.
+
+---
