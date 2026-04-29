@@ -1091,3 +1091,17 @@ Closed two of the gaps identified during the email-configuration-for-notificatio
 **Notes:** Approximate thematic counts (~2.6k/6.4k subjects tagged); large share of subjects lacked domain markers in the first line.
 
 ---
+
+## 2026-04-28 - ai-services commit theme analysis vs nutella MCP
+
+**Repository:** ai-services (read-only git analysis)
+**Branch:** n/a
+**Files Changed:** none (analysis only)
+
+**Summary:** Classified last-6-month commit themes and compared new MCP tool specs to recurring engineering hotspots for nutella-mcp fit.
+
+**Changes Made:** Ran git logs and grep counts under `/Users/kiran.bachu/Codebase/ai-services` (~1630 non-merge commits sample).
+
+**Notes:** Report delivered in chat.
+
+---
