@@ -1105,3 +1105,29 @@ Closed two of the gaps identified during the email-configuration-for-notificatio
 **Notes:** Report delivered in chat.
 
 ---
+## 2026-04-28 - Nutella-MCP gap analysis: top 10 issues across git/Jira/Slack (last 6 mo)
+
+**Repository:** nutella-mcp (analysis only, no production code changes)
+**Branch:** n/a
+**Files Changed:**
+- /Users/kiran.bachu/.cursor/projects/Users-kiran-bachu-Codebase-nutella-mcp/canvases/nutella-mcp-gap-analysis.canvas.tsx (new, ~340 lines)
+
+**Summary:**
+End-to-end investigation to evaluate whether nutella-mcp covers the engineering issues Highspot has been hitting in the last 6 months, and to scope where new tools would pay off most. Triangulated three sources, clustered into top 10 issue themes, rated current MCP coverage on each, and proposed an 8-suite build order. Delivered as a Cursor canvas the user can open beside the chat.
+
+**Changes Made:**
+- Mapped current nutella-mcp surface: 41 tools exposed via ai-services agent-tools-registry (vs ~67 total specs); strong on user/group/spot/pitch entity reads, weak on processing/email-delivery/analytics/search-introspection.
+- Pulled 6,374 nutella commits + ~1,630 ai-services commits (180d, no-merges); classified into themes via two shell sub-agents.
+- Queried Jira HISPI (Highspot Customer Issues): 50 most recent customer escalations, dominant clusters analytics/CSV, content processing, email/notifications, training, CRM.
+- Searched Slack: #support, #ask-product, #eng-hispi-p1-triage, #eng-qa-support-triage to validate themes.
+- Ranked top 10 issue themes by ticket-volume x commit-volume x current MCP coverage gap.
+- Built canvas at canvases/nutella-mcp-gap-analysis.canvas.tsx with: 5-stat header, color-toned top-10 table, 8-card recommended build order (P0-P3), explicit "where MCP doesn't help" callout, and sources.
+
+**Notes:**
+- Top 3 MCP gaps (red rows): (1) Content/item processing pipeline (zero coverage today, every "stuck item" ticket needs it), (2) Email delivery/SMTP relays/SendGrid events (partial: prefs/rules exist, delivery side missing), (3) Analytics/scorecards/CSV exports (largest commit theme in nutella, zero MCP coverage).
+- Strongest existing area: permissions/access (get_user, get_group, list_groups, get_spot_policy, etc. all exposed).
+- Explicit non-MCP themes called out so the team doesn't try to MCP-ify them: test/QA infra, feature-flag plumbing, Buildkite/lint/CI, frontend renderer fixes.
+- HISPI query used priority in (P1, P2) returned 0 results; the project uses numeric priorities ("2" not "P2") - re-ran without filter and got the full 50.
+- No Jira tickets created (this was a discovery/analysis task, not action-driving).
+
+---
