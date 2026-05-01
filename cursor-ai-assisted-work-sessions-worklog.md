@@ -1438,3 +1438,35 @@ Translation: the env toggle is on, no targeting rule matched the caller's contex
 - Direct commits to feature branches per user choice; no PRs opened.
 
 ---
+
+## 2026-05-01 - Fix `list_spots` MCP Tool Default (Owner-Only Bug)
+
+**Repository:** ai-services (agent-toolkit + tools registry)
+**Branch:** (working branch)
+**Files Changed:**
+- agent-platform/packages/py/agent-toolkit/src/highspot_agent_toolkit/tool_spec.py
+- agent-platform/packages/py/agent-toolkit/src/highspot_agent_toolkit/invoke.py
+- agent-platform/agent-tools-registry/specs/common/list_spots.json
+- agent-platform/packages/py/agent-toolkit/src/highspot_agent_toolkit/specs/list_spots.json
+
+**Summary:**
+Diagnosed why the nutella MCP `list_spots` tool returned only 1 spot for `local@highspot.com` despite the seed script successfully creating 3 synthetic spots in the same domain and adding `local@highspot.com` as MANAGER on all of them. Root cause was NOT the seed (which works correctly) — it was a latent bug in `GatewayInvoker`: the `static_query` field declared in tool specs was silently dropped because it was never defined on the `GatewayConfig` Pydantic model and never merged into the request URL. As a result, `list_spots` hit `/api/v1/spots` with no params, which falls through `SpotQueries.for_user` → `SpotQueries.as_owner`, returning only spots the user OWNS. Since `local@highspot.com` only owns `Highspot's Content` (manager on the synthetic spots), they saw 1 spot.
+
+**Changes Made:**
+- `tool_spec.py`: added `static_query: dict[str, Any] | None` field to `GatewayConfig` so spec values are no longer silently dropped.
+- `invoke.py` (`_invoke_http`): merge `spec.gateway.static_query` into `query_params` BEFORE `query_from_input`, so input always wins (callers can override defaults). Verified via simulation: `right=edit` from input replaces `right=view` from static_query; `role=owner` adds alongside `right=view` (and the controller correctly honors `role` first via its `case` statement).
+- Both `list_spots.json` spec copies: added `"right": "view"` to `static_query`. New default URL is `/api/v1/spots?api=true&right=view`, which the controller routes to `SpotQueries.for_user → with_right(user, "view", ...)` — returning all spots the user can VIEW (owner + member + public + super-admin), matching the tool description.
+
+**Notes:**
+- The seed script (modified yesterday to default to `local@highspot.com`'s domain and auto-grant access) works correctly. The seed log confirms: `Domain source: target user 'local@highspot.com' lives in 'highspot.com'`, then `[already manager] Sales Playbook / Engineering Wiki / Private Test Spot` plus `[indexed] 6 users, 4 groups, 3 spots, 26 items, 4 lists`.
+- After the fix, `list_spots` should return 3 spots (Sales Playbook, Engineering Wiki, Highspot's Content). `Private Test Spot` (visibility=private) may need a separate `with_right` policy fix to surface — that's a follow-up.
+- `static_query` was the only spec-level field of its kind and is currently used only by `list_spots.json`, so the change has narrow blast radius. JSON spec parses cleanly; smoke-tested the merge logic in isolation.
+- No new tests added; existing `test_invoke_gateway.py` doesn't cover `static_query`. A regression test should be added when the user is ready (didn't add proactively to keep the diff minimal).
+- The MCP server picks up the changes automatically on restart since `nutella-mcp` declares `highspot-agent-toolkit` as an editable path dependency in `pyproject.toml`.
+
+**Follow-ups:**
+- Restart the running MCP server to pick up the new code + spec.
+- Investigate why `Private Test Spot` (visibility=private, user is manager) isn't returned by `with_right(user, "view")` — likely a separate `is_authorized?` check.
+- Consider adding regression test in `test_invoke_gateway.py` for `static_query` merge precedence.
+
+---
