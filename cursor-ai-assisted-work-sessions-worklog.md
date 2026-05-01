@@ -1329,3 +1329,56 @@ The canonical architecture doc (`agent-toolkit-plan.md`) and the original hackwe
 - No code changes — docs only.
 
 ---
+
+## 2026-04-29 - Add `debug-item-processing` skill to nutella-mcp plugin
+
+**Repository:** ai-plugins
+**Branch:** hackweek/nutella-mcp (commit `efc9d89`, pushed)
+**Files Changed:**
+- nutella-mcp/skills/debug-item-processing/SKILL.md (new, 280 lines)
+- nutella-mcp/skills/debug-item-processing/domain-knowledge.md (new, 324 lines)
+- nutella-mcp/README.md (added skill to the table)
+
+**Summary:**
+After using the nutella MCP to diagnose a real "unreadable item" case (item `69f2c714…`, flagged `unparseable` because `PDFRepairer` exited with code 1 on a corrupt PDF), packaged the diagnostic playbook as a reusable Cursor/Claude skill alongside the existing `debug-user-permissions`, `debug-email-deliverability`, and `debug-feature-flags-and-domain-config` skills.
+
+**Changes Made:**
+- New `SKILL.md` covering four scenarios: unparseable/unreadable items, items stuck in processing, individual stage failures (preview generation, metadata extraction, virus scan, magma_*), and "I reprocessed and it still fails" investigations. Includes a 6-phase workflow (resolve item → metadata → per-stage status → job error history → remediation decision → synthesize) with explicit decision trees, parallel-call efficiency rules, and remediation guardrails (never reprocess `virus`/`drm`/`encrypted` items; never reprocess `unparseable` without source replacement).
+- New `domain-knowledge.md` with the content-processing pipeline diagram, stage catalog by content type (PDF, Office, Image, Video, SmartPage, magma_*), terminal flag reference (`unparseable`, `virus`, `drm`, `encrypted`, `password_protected`, `too_large`, `unsupported_format`, `download_failed`) with reprocess-helps? matrix, common `Caused by:` causes (PDFRepairer exit 1, PDFBox encryption exceptions, Tika exceptions, IIOException, ClamAV verdicts, magma worker crashes, transient I/O), pipeline_actions timeline semantics, item vs version vs content distinction, and 5 worked investigation patterns.
+- README updated so `./install.sh nutella-mcp` auto-discovers and lists the new skill.
+
+**Notes:**
+- Skill scope chosen as "broad" (`debug-item-processing`) rather than narrow ("debug-unreadable-item") per user's preference — covers the full surface of item-processing failures, not just the unparseable case.
+- Frontmatter `description` deliberately enumerates trigger phrases ("why is this item unreadable", "stuck in Waiting to Process", "missing previews", "which stage failed") so the skill is selected automatically by the agent without the user having to invoke it by name.
+- Tools referenced are the actual nutella-mcp tools: `get_item`, `get_item_properties`, `get_item_processing_status`, `get_item_status`, `get_job_for_item`, `get_job_errors`, `reprocess_item`, `check_reprocess_done`, `list_item_versions`, `list_items_in_spot`. No fabricated tool names.
+- Local install (`~/.cursor/skills/`) deliberately deferred — user opted to skip the symlink step.
+
+---
+
+## 2026-05-01 - MCP seed: default to local@highspot.com's domain + auto grant_access
+
+**Repository:** nutella
+**Branch:** (uncommitted, working tree)
+**Files Changed:**
+- web/tasks/mcp_seed/runner.rb
+- web/tasks/seed_mcp_data.rake
+- web/tasks/mcp_seed/README.md
+
+**Summary:**
+Fixed the MCP synthetic data seeder so a single `bundle exec rake db:seed:mcp_data` lands all 26 items / 4 pitches / courses / meetings in the same domain as `local@highspot.com` (the user the MCP server authenticates as) and automatically wires up access — eliminating the silent-failure case where the seed ran in `local.test` but `local@highspot.com` lives in `highspot.com`, leaving every MCP `list_*` call returning either nothing or only the user's own real entities.
+
+**Changes Made:**
+- `runner.rb`: Added `TARGET_USER_EMAIL = "local@highspot.com"` constant and a new `lookup_target_user` helper. Reordered `DEFAULT_DOMAIN_CANDIDATES` to put `highspot.com` first.
+- `runner.rb#resolve_domain`: New resolution order — `MCP_SEED_DOMAIN` env var → domain of `local@highspot.com` if that user exists → `highspot.com`/`local.test`/`bedrock.com`/`localhost` → first enabled domain. Each branch now logs which source picked the domain.
+- `runner.rb#run`: New `step_auto_grant_target_user` step runs at the end of the orchestrator. If `local@highspot.com` exists in the same domain that was just seeded, it loads `AccessGrantor` and runs the same comprehensive grant (manager on all 3 spots, member of all 4 groups, collaborator on all 4 pitches, follower of all 6 users, bookmarks on 8 key items, password reset). Skippable via `MCP_SEED_SKIP_GRANT=1`. Cross-domain or missing-user cases print actionable `[skipped]` log lines instead of silently doing nothing.
+- `seed_mcp_data.rake`: Updated header comment block with the new resolution order, the auto-grant behaviour, and the new `MCP_SEED_SKIP_GRANT` env var.
+- `README.md`: Documented the new defaults, marked `local@highspot.com` as auto-granted in the "Logging in" section, and clarified that the manual `grant_access` task is now only needed for other users or after re-running the seed.
+
+**Notes:**
+- Backwards compatible: `MCP_SEED_DOMAIN` env var still wins over auto-detection, and the existing `db:seed:mcp_data:grant_access[email]` standalone rake task is unchanged.
+- Idempotent: re-running the seed on an already-seeded `highspot.com` domain just re-grants (no duplicate entities), and existing seed data in `local.test` from earlier runs is left intact (orphaned but harmless — will be overwritten on the next isolated `MCP_SEED_DOMAIN=local.test` run).
+- Verified live before the fix: MCP `list_spots` returned only `Highspot's Content` (the user's pre-existing real spot), `list_pitches` returned only `test`, no Course/Meeting items existed — confirming the synthetic data wasn't reachable from `local@highspot.com`.
+- All three modified files pass `ruby -c` syntax check.
+- No commits/pushes — left as uncommitted working tree changes per workspace rule (only commit when user explicitly asks).
+
+---
