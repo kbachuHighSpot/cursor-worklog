@@ -4,13 +4,13 @@ This log tracks weekly summaries of significant work across all sources (Cursor,
 
 ## Running Summary
 
-*Last updated: 2026-04-27*
+*Last updated: 2026-05-04*
 
-### Overall Key Accomplishments (Jan-Apr 2026)
+### Overall Key Accomplishments (Jan-May 2026)
 
 **Significant Cursor Activities:**
+- **Nutella MCP Hackweek Build-Out (Apr 23 – May 1)**: Drove the Mission Autonomous Nutella MCP project end-to-end. Created the `nutella-mcp` repo and synthetic-data seeder, shipped pitch tools, then ran a 6-month gap analysis (commits + Jira HISPI + Slack) to prioritize new tools. Closed ~10 of the gaps the same week — admin endpoints for spot + domain notification settings, SMTP relays, item processing status, reprocess polling, unsubscribe lookup, and a full feature-flag suite (`get_feature_flag_status` v2.0 → v2.1 with Mongo+LD+EvaluationReason, `list_enabled_features` `include_launchdarkly` opt-in, new `get_launchdarkly_flag_details` admin tool). Fixed two latent toolkit bugs along the way (array query-param encoding, dropped `static_query`). Tool surface grew from ~50 → ~65 HTTP tools; refreshed architecture docs and proposal so a new reader can land on either and get the correct picture. Added `debug-item-processing` skill packaging the diagnostic playbook from a real "unreadable item" investigation.
 - **Notification Rules System Implementation (Apr 18-27)**: Built complete Phase 1-3 implementation of unified notifications. Seeded ~382 notification rules from ALERT_CONFIG + EMAIL_SETTINGS (Apr 18). Created NotificationEngine with rules-first routing, NotificationRuleResolver with thread-safe caching and defensive copying (Apr 26). Built Phase 3 REST API (9 endpoints) with operator authorization and audit logging (Apr 27). Implemented Phase 5 magma admin UI consuming the REST API.
-- **Nutella MCP for Hackweek (Apr 23-27)**: Created nutella-mcp repo with pitch tools, synthetic data seeding, and integration with ai-services. Submitted PR for sortby value mapping for MCP compatibility.
 - **Semantic Email Migration (Feb-Apr)**: Built complete MJML-based rendering system replacing ~450 legacy Velocity templates. Designed EmailContentBuilder module split + auto-derived `_v2` architecture (Mar 12). Migrated all builders to self-registration pattern with `SemanticAlertRenderer.register` (Mar 26). Introduced Hashie::Dash typed data classes across 27 builders (Apr 8-14). Fixed IndifferentAccess mutation bug (94 failures). Wrapped 16 builder files with `Hspt::Intl.t()` for i18n (Apr 8). Created automated preview test coverage for all kinds (Mar 29). Architected 3-PR split strategy for the 71-file PR.
 - **Notification Rules System Design (Mar-Apr)**: Developed PM-editable template text plan with i18n tradeoff analysis (Mar 14). Created detailed phase plans (3-12) with architecture diagrams, code snippets, and cross-phase dependencies (Apr 25). Extended to multi-channel scope with phased REST APIs (Mar 29).
 - **CDN Infrastructure (Jan-Mar)**: Set up CDN Lambda local dev environment with Python standards and CI pipeline (Feb 17-19). Investigated cache invalidation feasibility (Mar 8). Analyzed CDN caching paths and Lambda memory for cache sizing (Mar 19).
@@ -21,11 +21,15 @@ This log tracks weekly summaries of significant work across all sources (Cursor,
 - **Execution Plan Document**: Created and shared semantic email migration execution plan with Nathan and Nav (Mar 17), updated and re-shared (Apr 17).
 
 **Significant Proposals:**
+- Nutella-MCP gap-analysis canvas (Apr 28): top 10 issue themes ranked by ticket-volume × commit-volume × MCP-coverage gap, plus 8-card recommended build order (P0–P3). Used to drive the hackweek tool build-out.
+- Recommended adding a dedicated LD admin-API tool (`get_launchdarkly_flag_details`) instead of fanning out `get_feature_flag_status` across all 168 LD flags (Apr 29) — saved ~84k tokens of MCP responses for thin data and surfaced rules/targets that Path A genuinely cannot expose.
 - Shared NUTELLA_MCP_PROPOSAL with Nav for review (Google Docs, Apr 13)
 - Proposed PR2/PR3 split plan in #crew-app-platform, negotiated scope with Derek and Rohit
 - Nutella MCP task list spreadsheet shared with Nav, Neng, Sanket, Ankita (Apr 23-27)
 
 **Significant Documents:**
+- Refreshed `docs/agent-toolkit-plan.md` and `docs/proposal.md` in nutella-mcp (Apr 29) — now reflect the shipped ~65 HTTP tool surface, both LD auth paths (SDK key vs admin token), and the recent toolkit fixes.
+- `GAP_ANALYSIS.md` synced into nutella-mcp from the gap-analysis canvas (Apr 29) with a sync rule so the markdown stays in lockstep with the canvas.
 - Content CDN Alerts Runbook (Confluence ENGDOCS, Nov 2025)
 - CDN local dev setup guide (Confluence ENGDOCS, Feb 2026)
 - Notifications System tech spec (Confluence ENGDOCS)
@@ -38,6 +42,7 @@ This log tracks weekly summaries of significant work across all sources (Cursor,
 - Contributed to Mission Autonomous Spring 2026 sign-up and Engineering Demos & Updates pages (Confluence, Apr 23-27)
 
 **Significant Helping Others:**
+- Reviewed Nathan Wang's nutella-mcp #6 (feature-flag and domain-config MCP tools, merged Apr 29) — coordinated handoff with my parallel `get_feature_flag_status` extension to avoid scope overlap.
 - 23+ PRs reviewed across crews: Scott Fletcher (6 PRs, region settings), Dylan Kwiatkowski (3 PRs, Buildkite config), Prateek Singhal (2 PRs, VPC S3 access), Mike Coulson (2 PRs, ItemHistory), AMoo-Miki (1 PR, AWS SSO)
 - Reviewed nutella-mcp initial setup PR #3 (merged Apr 23)
 - Reviewed magma Tiltfile setup PRs #8771 and nutella #70226 (Apr 23)
@@ -49,7 +54,7 @@ This log tracks weekly summaries of significant work across all sources (Cursor,
 
 **Significant PRs:**
 - **Notification Rules (4 stacked PRs)**: PR #70041 (seed 382 rules, merged Apr 22) -> PR #70323 (backfill push channel, merged Apr 27) -> PR #70320 (NotificationEngine Phase 2, open) -> PR #70329 (Phase 3 REST API, open). Magma PR #8831 (admin UI).
-- **Nutella MCP**: nutella-mcp #1 (CONTRIBUTING.md, merged Apr 23), #4 (synthetic data seeds, open), ai-services #2920 (pitch tools, open), nutella #70368 (sortby mapping, open)
+- **Nutella MCP — Hackweek build-out**: nutella-mcp #1 (CONTRIBUTING.md, merged Apr 23), #4 (synthetic data seeds), nutella #70368 (sortby mapping), ai-services #2920 (pitch tools); plus ~10 direct commits to `hackweek/nutella-mcp` (ai-services) and `hackweek-nutella-mcp` (nutella) shipping notification-settings endpoints, feature-flag suite, GatewayInvoker bug fixes, MCP seeder defaults to `local@highspot.com` domain with auto-grant, and `static_query` fix for `list_spots`.
 - **Semantic Email Migration (3 stacked PRs)**: PR1 #69502 (legacy templates, merged) -> PR2 #69507 (27 builders + preview, 65 files, merged Apr 16) -> PR3 #69595 (integration layer: routing/metrics/FF, merged Apr 17). Original PR #67262 was 71 files spanning 3 months.
 - **CDN Cache Invalidation (HS-159835)**: nutella #68979 (reprocess invalidation, merged Mar 31), terraform #5171 (latest su0 policy, merged Apr 7), tf-scale-unit-base #182 (base policy, merged Apr 7), terraform #5200 (all SUs rollout, merged Apr 7)
 - **CDN Lambda Mem Optimization**: PR #3 (content-cdn-lambda-handler, 99.6% cache reduction, merged Mar 10) + PR #4 (retry logging, merged Mar 13) + terraform version bumps
@@ -70,6 +75,9 @@ This log tracks weekly summaries of significant work across all sources (Cursor,
 - HS-155824: email_tracking_details_v1 slow query (P2, To-Do)
 
 ### Overall Key Challenges
+- Hackweek tool-surface expansion exposed several latent toolkit bugs: array query params silently encoded as Python list repr (`?ids=['a']`); `static_query` field declared in specs but missing from `GatewayConfig` model so values were dropped; `list_spots` consequently returned only owner-scope spots even when the seed data was correct.
+- LD admin REST API vs SDK conflation: built `get_launchdarkly_flag_details` (admin token) before realizing the LD SDK already exposes `EvaluationReason` per-context — the right default for "why is X off for me?" is the cheaper SDK path. Both tools kept; documented when to use each.
+- MCP seed silent-failure: seeder ran in `local.test` but `local@highspot.com` lives in `highspot.com`, so every MCP `list_*` call returned nothing despite "successful" seed runs. Fixed by defaulting to the target user's actual domain and auto-granting access at the end of the orchestrator.
 - Semantic email migration touches deeply interconnected systems (AlertPresenter, EntityCache, ALERT_CONFIG, i18n) -- broad changes like fallback removal cascade into 90+ failures requiring iterative debugging
 - PR size management -- the original 71-file PR couldn't be reviewed effectively; splitting into 3 PRs required careful dependency analysis of cross-file references
 - Mock data vs production code tension -- preview mock data format must exactly match what AlertPresenter expects for entity resolution, discovered through multiple rounds of breakage
@@ -86,13 +94,75 @@ This log tracks weekly summaries of significant work across all sources (Cursor,
 - Worklog automation gap: migration scripts and investigations weren't auto-logged because rules lacked specific significance criteria and mid-session logging instructions (Apr 6)
 
 ### Current Focus (This Week)
-- **Notification Rules Phase 2+3**: NotificationEngine with rules-first routing (#70320) and REST API (#70329) in code review, addressing Bugbot comments
-- **Hackweek - Mission Autonomous**: Nutella MCP pitch tools integration with ai-services
-- **Phase 5 Admin UI**: Magma entities view + Hiccup admin controller consuming Phase 3 REST API
+- **Nutella MCP polish post-hackweek**: Wrap up follow-ups from the gap-fill week — restart the running MCP server to pick up `static_query` and feature-flag-suite changes, investigate why `Private Test Spot` isn't returned by `with_right(user, "view")`, add regression test in `test_invoke_gateway.py` for `static_query` merge precedence.
+- **Notification Rules Phase 2+3**: NotificationEngine with rules-first routing (#70320) and REST API (#70329) still in code review, addressing Bugbot comments.
+- **Phase 5 Admin UI**: Magma entities view + Hiccup admin controller consuming Phase 3 REST API.
 
 ### Current Blockers
 - GitHub MCP auth broken -- using `gh` CLI as fallback
+- Workato Google Drive MCP returning Unauthorized -- weekly review skipped that source
 - HS-151210 (Pinterest font request) remains Blocked
+
+---
+
+## 2026-05-04 - Weekly Review (2026-04-27 to 2026-05-04)
+
+**Summary:**
+Mission Autonomous hackweek dominated the week — used the nutella MCP gap analysis from Apr 28 to drive a tightly-scoped tool build-out: ~10 new specs/tools shipped, two latent agent-toolkit bugs fixed, a much smarter feature-flag suite (Mongo + LaunchDarkly + EvaluationReason in one MCP call), and a fixed seeder + `list_spots` behavior so `local@highspot.com` actually sees the synthetic data. Architecture docs and proposal refreshed to match. Notification rules work continued in the background — Phase 3 REST API PR #70329 still iterating on Bugbot, plus a new task ticket for channel routing in the rule definition (HS-180222).
+
+### Significant Cursor Activities
+- **Nutella-MCP gap analysis (Apr 28)**: Triangulated 6 months of nutella commits (~6.4k), ai-services commits (~1.6k), Jira HISPI escalations (50 most recent), and Slack support/triage channels. Built a Cursor canvas with a 5-stat header, top-10 ranked theme table, 8-card recommended build order (P0–P3), and explicit "where MCP doesn't help" callout. Top gaps: content/item processing, email delivery/SMTP relays, analytics/scorecards (zero coverage). Strongest area: permissions/access.
+- **Notification settings endpoints + specs (Apr 28)**: Closed two persona gaps with `GET /api/v1/admin/spots/:spot_id/notification_settings` and `/admin/domains/:domain_id/notification_settings`. Both follow the existing admin-agent service-identity auth pattern; `domain_id` endpoint includes a `present` flag per `NotificationsConfig::Type` so callers can distinguish "unset / defaults applied at runtime" from "explicitly stored config".
+- **4 quick-win MCP specs (Apr 29)**: `get_smtp_relays`, `get_item_processing_status`, `check_reprocess_done`, `check_unsubscribes`. All wrapped existing nutella endpoints; documented HTTP 202 polling semantics for reprocess and the "POST is a read-only batch lookup" caveat for unsubscribes. MCP-exposed tool count moved 50 → 54.
+- **Extended `get_feature_flag_status` to v2.0.0 (Apr 29)**: Now answers "is feature X actually on right now?" by consulting MongoDB (`FeatureCache`) and LaunchDarkly (`Hspt::Features::FlagService` + `Manager`), not just `features.yaml`. Backwards-compatible — top-level `status` field preserved; new optional `userId`/`domainId` params with conditional auth (self-lookup needs only auth; lookups for others require `Operator::RIGHT_FEATURES`).
+- **Array query-param encoding fix in agent-toolkit (Apr 29)**: Root-caused `list_enabled_features({ids:[...]})` always returning `400 "Invalid feature IDs supplied."`. `GatewayInvoker._build_request` was calling `urlencode()` without `doseq=True`, so `["a", "b"]` became `?ids=['a','b']`. Fixed with Rails/Rack bracket notation (`ids[]=a&ids[]=b`); 171 tests still pass with two new regression tests.
+- **`list_enabled_features` `include_launchdarkly` opt-in (Apr 29)**: Without it, `:off_only_mongo` evaluation mode (current default for `highspot.com`) hides LD-only flags like `mjml_email_templates`. New optional bool unions `FlagService.for_user(user)` into the response so the MCP can reflect the true enabled set.
+- **New `get_launchdarkly_flag_details` MCP tool (Apr 29)**: Wraps `Hspt::Features::LaunchDarklyApi::FlagManagement.get_flag_details` and normalizes the per-environment block into `variations`, `fallthrough`, `off_variation`, `individual_targets`, `rules` (with clauses + percentage rollouts), and `prerequisites`. Auth: `Operator::RIGHT_FEATURES` (read-only but exposes individual targets so it's strictly more sensitive than `get_feature_flag_status`).
+- **Architecture docs refresh (Apr 29)**: Rewrote `docs/agent-toolkit-plan.md` end-to-end and added a "Status as of Apr 2026" banner to `docs/proposal.md`. Documents both LD auth paths (SDK key for runtime evaluation vs `LAUNCHDARKLY_API_TOKEN` admin-API token), the now-shipped tool surface, and the recent toolkit fixes.
+- **`debug-item-processing` skill (Apr 29)**: After diagnosing a real `unparseable` PDF (`PDFRepairer` exit 1), packaged the playbook as a Cursor skill. 6-phase workflow with decision trees and remediation guardrails (never reprocess `virus`/`drm`/`encrypted`, never reprocess `unparseable` without source replacement). Companion `domain-knowledge.md` covers the pipeline, terminal flag matrix, common `Caused by:` causes, and 5 worked patterns.
+- **MCP seeder default-domain + auto-grant (May 1)**: Fixed silent-failure case where the seeder ran in `local.test` but `local@highspot.com` lives in `highspot.com`. New resolution order: `MCP_SEED_DOMAIN` env var → domain of `local@highspot.com` → `highspot.com`/`local.test`/`bedrock.com`/`localhost`. New `step_auto_grant_target_user` step makes the seeded user manager on all spots, member of all groups, collaborator on all pitches, follower of all users, with bookmarks on key items.
+- **LaunchDarkly `EvaluationReason` in `get_feature_flag_status` v2.1.0 (May 1)**: While debugging "why is `platform_cdn_public_thumbnails` off for me?" realized the LD SDK already exposes the answer via `LDClient#variation_detail` — no admin token needed. Wired `EvaluationDetail` through `Hspt::Features::FlagService` → handler → MCP response; added `variation_index`, `reason: { kind, rule_index, rule_id, in_experiment, prerequisite_key, error_kind }` plus made `enabled_in_context` the resolved variation *value* (so multivariate flags surface correctly). Diagnostic flow validated against `platform_cdn_public_thumbnails`: `kind: FALLTHROUGH` clearly explains "not in any include rule".
+- **`list_spots` static_query fix (May 1)**: Diagnosed why MCP `list_spots` returned only 1 spot for `local@highspot.com` despite seed creating 3. Root cause was a latent toolkit bug — `static_query` field declared in specs was silently dropped because it wasn't on `GatewayConfig` Pydantic model. Added the field to the model, merged into `query_params` before `query_from_input` (so input always wins), and set `"right": "view"` in `list_spots.json` so the controller routes to `with_right(user, "view", ...)` and returns owner + member + public spots.
+
+### Significant Proposals
+- Recommended `new_tool` path over fanning out `get_feature_flag_status` across 168 LD flags (Apr 29) — saved ~84k tokens of MCP responses for thin data.
+- 8-card recommended build order from the gap-analysis canvas (Apr 28) drove the tool prioritization for the rest of the week.
+
+### Significant Documents
+- `docs/agent-toolkit-plan.md` (full rewrite) and `docs/proposal.md` (status banner) in nutella-mcp — reflect shipped state + LaunchDarkly support.
+- `GAP_ANALYSIS.md` synced from canvas with a sync rule to keep them in lockstep.
+- Engineering Demos & Updates (Confluence ENGDOCS, contributed May 4)
+- Mission Autonomous (Spring 2026) - Project Ideas & Team Sign-up (Confluence ENGDOCS, contributed May 1)
+
+### Significant Helping Others
+- Reviewed Nathan Wang's nutella-mcp PR #6 — feature-flag and domain-config MCP tools (merged Apr 29). Coordinated handoff with my parallel `get_feature_flag_status` extension to avoid scope overlap.
+- Self-review iteration on PR #70329 (Phase 3 REST API) addressing Bugbot comments — `deep_dup` to prevent caller hash mutation in override commands, scope-type validation, Semgrep `nosemgrep` justifications, generic error messages.
+
+### Significant PRs
+- **ai-services #2920** (closed Apr 28, replaces #2919): Add MCP pitch tools for nutella-mcp.
+- **nutella #70368** (closed Apr 28): Map public API sortby values to internal Apollo values for MCP compatibility.
+- **nutella #70329** (HS-180223, still open): Phase 3 notification rules REST API (operator-only) — actively iterating on Bugbot.
+- **Direct commits (no PR) to hackweek branches**: ~14 nutella commits + ~14 ai-services commits + 6 nutella-mcp commits + 1 ai-plugins commit shipping the gap-fill tool surface, toolkit fixes, MCP seeder fixes, architecture docs, and debug-item-processing skill. Per user choice — each will land via a real PR before merging out of `hackweek/nutella-mcp`.
+
+### Significant Jira Tickets
+- **HS-179437**: Notifications CS1 Foundations (P1, In Dev) — epic-level work continues.
+- **HS-180222**: Support channel routing in the Rule definition (Task, P3, In Progress, updated Apr 28) — new task scoped this week.
+- **HS-180223**: REST API and Admin Task for NotificationRules (Task, P3, In Progress, updated Apr 28) — PR #70329 still in code review.
+- **HISPI-12550**: Email alerts not aligning with users' configured time zones (Bug, P2, **Deployed** Apr 27).
+
+### Key Challenges This Week
+- **`urllib.parse.urlencode` without `doseq=True`** silently corrupted any MCP tool with array query params — invisible until you hit a strict `Dry::Schema.Params` controller. Once caught, the fix was small but it had been lying in wait.
+- **Conflating LD admin REST API with SDK evaluation**: built `get_launchdarkly_flag_details` (admin token) first, then on day 2 the user's architectural question "why can't Path B take Path A's approach?" surfaced that `LDClient#variation_detail` already returns `EvaluationReason` for free. The admin tool stayed (it answers configuration questions Path A can't), but the SDK path is now the right default for per-context "why?" questions.
+- **`static_query` was silently dropped** by `GatewayInvoker` because the field was declared in tool specs but never defined on `GatewayConfig`. Made `list_spots` look like a SpotQueries scoping bug when it was actually an agent-toolkit Pydantic-model gap.
+- **MCP seed silent-failure**: seeder defaulted to `local.test` while the MCP server authenticates as `local@highspot.com` (which lives in `highspot.com`), so synthetic data was unreachable. Fixed by detecting the target user's actual domain and auto-granting at the end of the orchestrator. Confirmed live: `list_spots` was returning only "Highspot's Content" (the user's pre-existing real spot) before the fix.
+- **RSpec couldn't run locally** all week (bundler env missing gems on this machine); validated via `ruby -c` and JSON-schema checks, used `--no-verify` for hackweek-branch commits per user's call — CI enforcement caught everything I missed.
+
+**Notes:**
+- GitHub MCP auth still broken (401 Bad credentials) — used `gh` CLI as fallback for PR data.
+- Slack search returned no significant messages this week — most of the work was committed directly to hackweek branches without channel announcements; documented in worklog instead.
+- Workato Google Drive MCP returned `Unauthorized` — skipped that source for this review.
+- Atlassian MCP working normally — Jira and Confluence pulled cleanly.
+- Carry-over: restart the running MCP server to pick up the new code + spec from the May 1 fixes; investigate why `Private Test Spot` (visibility=private, user is manager) isn't returned by `with_right(user, "view")`; add regression test in `test_invoke_gateway.py` for `static_query` merge precedence.
 
 ---
 
