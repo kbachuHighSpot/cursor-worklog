@@ -28,6 +28,9 @@ This log tracks weekly summaries of significant work across all sources (Cursor,
 - Nutella MCP task list spreadsheet shared with Nav, Neng, Sanket, Ankita (Apr 23-27)
 
 **Significant Documents:**
+- Hackweek Nutella MCP demo video + presentation deck delivered to Mission Autonomous Showcase (Google Drive, May 1).
+- Nutella-MCP Gap Analysis — Top 10 Issues (Apr 2026) Google Doc (Apr 29), companion to the canvas.
+- Nutella MCP task list + Hackweek Team Sync doc shared with Nav, Sanket, Neng, Ankita (Apr 23 – Apr 30).
 - Refreshed `docs/agent-toolkit-plan.md` and `docs/proposal.md` in nutella-mcp (Apr 29) — now reflect the shipped ~65 HTTP tool surface, both LD auth paths (SDK key vs admin token), and the recent toolkit fixes.
 - `GAP_ANALYSIS.md` synced into nutella-mcp from the gap-analysis canvas (Apr 29) with a sync rule so the markdown stays in lockstep with the canvas.
 - Content CDN Alerts Runbook (Confluence ENGDOCS, Nov 2025)
@@ -100,7 +103,7 @@ This log tracks weekly summaries of significant work across all sources (Cursor,
 
 ### Current Blockers
 - GitHub MCP auth broken -- using `gh` CLI as fallback
-- Workato Google Drive MCP returning Unauthorized -- weekly review skipped that source
+- Slack `slack_search_public` doesn't surface messages from private channels (e.g. `#temp-hackwk-nutella-mcp`); use `slack_search_public_and_private` for hackweek/team channels
 - HS-151210 (Pinterest font request) remains Blocked
 
 ---
@@ -129,12 +132,17 @@ Mission Autonomous hackweek dominated the week — used the nutella MCP gap anal
 - 8-card recommended build order from the gap-analysis canvas (Apr 28) drove the tool prioritization for the rest of the week.
 
 ### Significant Documents
+- **Hackweek demo deliverables (Apr 29–May 1)**: "Hackweek project - Nutella MCP" video and presentation (Google Drive, owned by me, shared with Nav, Sanket, Neng, Ankita); "hackweek - nutella-mcp item processing demo" video (Apr 30); final video uploaded to Drive folder Apr 30 with thanks to Nav for polishing.
+- **Nutella-MCP Gap Analysis — Top 10 Issues (Apr 2026)** (Google Doc, Apr 29) — companion doc to the canvas, shared with the hackweek team.
+- **Nutella MCP task list** spreadsheet (Google Sheets, updated Apr 29) — tracks tool implementation across the team.
+- **Nutella MCP Hackweek Team Sync** doc (Apr 30, contributor) — daily sync notes with Nav, Sanket, Neng, Ankita.
 - `docs/agent-toolkit-plan.md` (full rewrite) and `docs/proposal.md` (status banner) in nutella-mcp — reflect shipped state + LaunchDarkly support.
 - `GAP_ANALYSIS.md` synced from canvas with a sync rule to keep them in lockstep.
 - Engineering Demos & Updates (Confluence ENGDOCS, contributed May 4)
 - Mission Autonomous (Spring 2026) - Project Ideas & Team Sign-up (Confluence ENGDOCS, contributed May 1)
 
 ### Significant Helping Others
+- **Hackweek presentation prep with Nav (Apr 29–May 1)**: Active collaboration in `#temp-hackwk-nutella-mcp` and DMs — video editing, narrative tuning, last-minute audio fixes, voiceover recording. Final demo delivered May 1 at the Showcase. Self-noted miss: insufficient end-to-end re-testing after late edits caused volume issue in the final video.
 - Reviewed Nathan Wang's nutella-mcp PR #6 — feature-flag and domain-config MCP tools (merged Apr 29). Coordinated handoff with my parallel `get_feature_flag_status` extension to avoid scope overlap.
 - Self-review iteration on PR #70329 (Phase 3 REST API) addressing Bugbot comments — `deep_dup` to prevent caller hash mutation in override commands, scope-type validation, Semgrep `nosemgrep` justifications, generic error messages.
 
@@ -159,8 +167,8 @@ Mission Autonomous hackweek dominated the week — used the nutella MCP gap anal
 
 **Notes:**
 - GitHub MCP auth still broken (401 Bad credentials) — used `gh` CLI as fallback for PR data.
-- Slack search returned no significant messages this week — most of the work was committed directly to hackweek branches without channel announcements; documented in worklog instead.
-- Workato Google Drive MCP returned `Unauthorized` — skipped that source for this review.
+- Slack: `slack_search_public` returned 0 results (the `#temp-hackwk-nutella-mcp` channel is private); `slack_search_public_and_private` worked and surfaced the hackweek presentation-prep thread on retry.
+- Workato Google Drive: initial call returned `Unauthorized` (transient); retried successfully and pulled the full hackweek deliverable set (video, presentation, task list, gap-analysis doc, team sync doc).
 - Atlassian MCP working normally — Jira and Confluence pulled cleanly.
 - Carry-over: restart the running MCP server to pick up the new code + spec from the May 1 fixes; investigate why `Private Test Spot` (visibility=private, user is manager) isn't returned by `with_right(user, "view")`; add regression test in `test_invoke_gateway.py` for `static_query` merge precedence.
 
