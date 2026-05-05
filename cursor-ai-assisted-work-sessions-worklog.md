@@ -1470,3 +1470,29 @@ Diagnosed why the nutella MCP `list_spots` tool returned only 1 spot for `local@
 - Consider adding regression test in `test_invoke_gateway.py` for `static_query` merge precedence.
 
 ---
+## 2026-05-05 - Investigation: Tracking-tag parity gap in semantic email pipeline + follow-up ticket HS-183419
+
+**Repository:** nutella (investigation only, no code change in this entry)
+**Branch:** HS-180223/notification-rules-rest-api (URL-parity fix already shipped here)
+**Files Reviewed:**
+- nutella/web/api/presenters/alert_presenter.rb (`tracked_url`, `for_email`)
+- nutella/web/common/email/email_tracking.rb (`tracked_url`, `record`, `email_from_source`)
+- nutella/web/common/email/semantic/builders/base.rb (`build_item_url`, `build_spot_url`, `extract_presenter_text`, `build_email_header_and_footer`)
+- nutella/web/common/email/semantic/core/semantic_email_registry.rb (`render_alert`)
+- nutella/web/common/email/semantic_email_commands.rb (legacy presenter call sites)
+- All `SemanticAlertRenderer.register` lambda registrations across `share_builder`, `feedback_builder`, `spot_access_builder`, `workflow_builder`, `learning_builder`, `generic_builder`, `pitch_relationship_builder`, `send_failed_builder`
+
+**Summary:**
+While answering a follow-up question about the `bulk_items_feedback` "View Items" URL fix shipped in HS-180223, traced through how the legacy email path adds tracking query parameters versus the semantic email path. Identified a system-wide gap: the semantic pipeline never threads `tracking_tag` into registered alert lambdas, so all semantic alert URLs lose `source_alert=<alert.id>` and `source=email.<tag>` query params that the legacy path adds via `AlertPresenter#tracked_url`. This affects click-attribution analytics (`email_tracking` correlation), the front-end's auto-mark-read behavior, and `EmailTracking.email_from_source` reverse-resolution.
+
+**Changes Made:**
+- No code change. Confirmed the URL-destination fix already shipped under HS-180223 lands users on the correct alert-set search view; only analytics/UX side-effect parity is missing — and it is missing for *every* semantic-email URL today, not just `bulk_items_feedback`.
+- Created Jira ticket [HS-183419](https://highspot.atlassian.net/browse/HS-183419) "Plumb tracking_tag through semantic email builder lambdas to restore link-tracking parity with legacy emails", parented under epic [HS-179437](https://highspot.atlassian.net/browse/HS-179437) (Notifications CS1 - Foundations). Captured scope (~30+ register call sites + helper additions in `EmailContentBuilder::Base`), acceptance criteria, and out-of-scope items.
+- Added AI-action tracking comment on HS-183419 per the Atlassian MCP rule.
+
+**Notes:**
+- Root cause is structural: lambdas are registered as `lambda { |alert, to_user| ... }` so `tracking_tag` isn't in scope at URL-construction time, and `build_item_url`/`build_spot_url`/etc. were designed without a tracking-tag parameter. The legacy path doesn't have this issue because `AlertPresenter` carries `tracking_tag` as instance state.
+- `tracking_tag` does reach semantic emails for the envelope/footer (unsubscribe, view-in-browser) via `build_email_header_and_footer(tracking_tag)` — the gap is specifically the per-link tracking on body URLs.
+- Recommended in HS-183419: wrap all URLs (not just legacy `ALERT_CONFIG[:tracked_urls]` allowlist), since `source_alert` + `source=email.<tag>` are safe additive params and the allowlist is mostly an artifact of legacy presenter plumbing. Final call deferred to ticket implementation.
+
+---
