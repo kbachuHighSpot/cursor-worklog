@@ -6,6 +6,67 @@ Weekly summaries and YTD running summary are in [weekly-summary-worklog.md](week
 
 ---
 
+## 2026-05-06 - Fix: course_inactive_learners Body Rewrite Was Invisible in Preview (Missing KIND_PREFERS_SEMANTIC_BODY Opt-In)
+
+**Repository:** nutella + ai-plugins + ~/.cursor/skills
+**Branch:** HS-182399/semantic-email-text-and-styling-fixes (nutella)
+
+**Files Changed:**
+- nutella/web/common/email/semantic/builders/alert/immediate/learning_builder_kinds.rb
+- nutella/web/spec/unit/common/email/builders/alert/immediate/learning_builder_spec.rb
+- ~/.cursor/skills/migrate-semantic-email-body-copy/SKILL.md
+- ai-plugins/nutella-semantic-email-migration/migrate-semantic-email-body-copy/SKILL.md
+
+**Summary:**
+User reported that the prior `course_inactive_learners` "click here." ->
+"click the link below:" rewrite still wasn't visible in the legacy compare
+preview. Audit pinpointed the cause: the kind was never added to
+`KIND_PREFERS_SEMANTIC_BODY`, so `build_learning_email`'s variation-kind
+precedence rule was `body_copy = legacy_messages_text || variation_body`
+— legacy text won by default and the rewrite stayed invisible. The
+existing unit test was silently broken too (it asserted the new copy
+against `legacy_defaults` that DID include `messages_text`, which should
+have failed but couldn't be verified locally because of bundler env
+issues).
+
+This is the second variation kind that hit this exact precedence trap
+in this branch (the first was caught earlier when I added kinds like
+`learning_path_pass` to `KIND_PREFERS_SEMANTIC_BODY`). Updated both copies
+of the `migrate-semantic-email-body-copy` skill to call out the trap more
+visibly at the top of Step 5, since it was buried in a dense decision
+table before.
+
+**Changes Made:**
+- `learning_builder_kinds.rb`: added `course_inactive_learners` to
+  `KIND_PREFERS_SEMANTIC_BODY` (alphabetical position).
+- `learning_builder_spec.rb`: added an explicit
+  `expect(described_class::KIND_PREFERS_SEMANTIC_BODY).to include(:course_inactive_learners)`
+  assertion alongside the existing variation-body tests so this regression
+  trips loudly next time. Added a comment explaining why the assertion is
+  needed (without the opt-in the variation body silently loses to legacy
+  messages_text).
+- Skill (personal + plugin): added a "First, double-check the precedence
+  wiring" callout to the top of Step 5 with a blockquote prompting the
+  reader to verify `KIND_PREFERS_SEMANTIC_BODY` membership for any body
+  rewrite — especially for variation kinds where the precedence rule is
+  `legacy || variation` (as opposed to non-variation rewrites where the
+  opt-in just flips precedence on a tie).
+
+**Notes:**
+- The `body_copy = legacy_messages_text || variation_body` rule for
+  un-opted-in variation kinds is intentional (it lets variation kinds
+  silently fall back to the legacy text during the migration), but it
+  also makes the opt-in mandatory for any rewrite to actually ship.
+- Worth a one-time pass through other variation kinds in
+  `learning_builder_kinds.rb` to confirm none of them have a stale
+  variation-body rewrite that's silently shadowed. All existing rewrites
+  (`lessons_assigned`, `notify_pending_reviews_course`,
+  `learning_path_learning_activities_assigned`, `learning_path_enroll`)
+  ARE in `KIND_PREFERS_SEMANTIC_BODY`, so this looks like an
+  isolated miss.
+
+---
+
 ## 2026-05-06 - Semantic Email PM Review: course_in_learning_path_ended Inline LP Link + Card/CTA Reshuffle
 
 **Repository:** nutella
