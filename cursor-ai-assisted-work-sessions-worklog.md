@@ -1550,3 +1550,29 @@ The `learning_path_continue` alert kind shared its section title with `course_co
 - Legacy `ALERT_CONFIG[:learning_path_continue][:message]` at `alert_commands.rb:3678` was intentionally left untouched — it still drives the legacy in-app alerts UI / legacy email path.
 
 ---
+
+## 2026-05-05 - course_ending_soon: timezone fix wasn't reaching the rendered email — corrected
+
+**Repository:** nutella
+**Branch:** HS-180223/notification-rules-rest-api
+**Files Changed:**
+- nutella/web/common/email/semantic/builders/alert/immediate/learning_builder.rb
+- nutella/web/common/email/semantic/builders/alert/immediate/learning_builder_kinds.rb
+- nutella/web/common/email/semantic/preview/semantic_email_preview.rb
+- nutella/web/spec/unit/common/email/builders/alert/immediate/learning_builder_spec.rb
+
+**Summary:**
+While verifying the `course_ending_soon` time + timezone change against the email preview comparison, found the fix was not actually reaching the rendered email on either the production path OR the side-by-side preview. Root cause: `build_learning_email`'s body resolution defaults to `config_defaults[:messages_text]` (populated by `extract_presenter_text` in production and by `legacy_config_defaults` in the preview) over `body_copy_for_kind`, so the semantic body containing the new `{timezone}` slot was never reached for these kinds. Same gap applied to `course_in_learning_path_ending_soon`.
+
+**Changes Made:**
+- `learning_builder_kinds.rb`: extended `KIND_PREFERS_SEMANTIC_BODY` to include `course_ending_soon` and `course_in_learning_path_ending_soon` (was previously just `learning_path_continue`). Updated the doc comment to call out two cases this set covers: copy that refers to "the following <thing>:", AND copy that carries information not present in the legacy template (e.g. course end time + timezone).
+- `learning_builder.rb` `body_copy_for_kind` for both kinds: split into a present-tz branch ("…on {scheduled_end} ({timezone}). …") and a missing-tz branch ("…on {scheduled_end}. …") so older alerts persisted in the DB before the data builder change don't render with an empty `()`. Added two new i18n ids (`lBbCeN0z` and `cIlpEsN0`) for the no-timezone variants.
+- `semantic_email_preview.rb`: split `course_ending_soon` out of the catch-all `when` clause so the preview can pass a `mock_alert_data` containing the new `course_scheduled_end_with_time` + `timezone` fields. Updated `course_in_learning_path_ending_soon`'s mock to include the same fields. Side-by-side comparison now shows: legacy "April 15, 2026" vs. semantic "April 15, 2026 5:00 PM (PST)" — exactly the parity the user asked to verify.
+- Tests: added a `semantic body wins over legacy messages_text` describe block asserting that for both kinds the semantic copy renders even when `messages_text` and `messages_html` are explicitly populated, and that the legacy interpolated title doesn't leak through. Strengthened the existing backward-compat tests to assert no empty `()` is rendered when timezone is absent.
+
+**Notes:**
+- Validates a broader insight: any future "semantic copy carries information the legacy template doesn't" change must also opt the kind into `KIND_PREFERS_SEMANTIC_BODY`, otherwise `messages_text` will silently win and the new data is wasted.
+- `messages_html` is suppressed for `KIND_PREFERS_SEMANTIC_BODY` kinds (existing behavior) — this also matters here because the legacy HTML body would otherwise render alongside the semantic plain-text body and contradict it.
+- Legacy in-app alerts text and the legacy email path are still untouched (semantic-only scope per prior decision).
+
+---
