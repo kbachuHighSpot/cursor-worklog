@@ -6,6 +6,88 @@ Weekly summaries and YTD running summary are in [weekly-summary-worklog.md](week
 
 ---
 
+## 2026-05-06 - Semantic Email PM Review: course_in_learning_path_ended Inline LP Link + Card/CTA Reshuffle
+
+**Repository:** nutella
+**Branch:** HS-182399/semantic-email-text-and-styling-fixes
+
+**Files Changed:**
+- nutella/web/common/email/semantic/builders/alert/immediate/learning_builder.rb
+- nutella/web/common/email/semantic/builders/alert/immediate/learning_builder_kinds.rb
+- nutella/web/common/email/semantic/preview/semantic_email_preview.rb
+- nutella/web/spec/unit/common/email/builders/alert/immediate/learning_builder_spec.rb
+
+**Summary:**
+PM review on `course_in_learning_path_ended` Section Text:
+> Old: "Learners will move to Incomplete when all other courses are complete unless the end date is updated."
+> New: "Learners in the learning path: {LP Name+Link} will move to Incomplete when all other courses are complete unless the end date is updated."
+
+PM also referenced the velocity template which links both the course AND the
+LP, so the fix isn't just a copy change — it's also a card/CTA reshuffle.
+Confirmed scope with the user via three branching questions
+(link_treatment / card_choice / cta_button) and got: HTML body with inline
+<a>, course-that-ended as the primary card, CTA matches legacy
+(`:href => [:assigned_item, :url]` -> course URL).
+
+Architectural note: this is the first KIND_PREFERS_SEMANTIC_BODY kind that
+emits its own custom `html_body_copy` (rather than carrying the legacy
+`messages_html` through). All other migrated kinds use plain-text body_copy
+because the MJML template HTML-escapes body_copy via h() — there's no
+existing pattern for inline links in semantic bodies. Established the
+pattern: build the linked HTML inline in build_learning_email, set
+html_body via Hspt::Intl.t with the pre-built <a> string passed as a
+template parameter (mirrors transactional_builder's dsr_link / marketplace
+patterns), and nil out body_copy so the email shows one sentence not two.
+
+**Changes Made:**
+- `learning_builder_kinds.rb`: added `:course_in_learning_path_ended` to
+  `KIND_PREFERS_SEMANTIC_BODY` (suppresses the legacy messages_html
+  duplicate that today renders below the semantic body).
+- `learning_builder.rb`:
+  - Top of `build_learning_email`: added a per-kind `course, lesson = lesson, course`
+    swap. Production registers this kind with `course = fetch_item(:item)`
+    (the LP) and `lesson = fetch_item(:assigned_item)` (the course-ended);
+    the swap aligns the rest of the function so `course` = course-ended
+    (becomes primary card + CTA target) and `lesson` = LP (linked inline).
+  - Skip the secondary-card `cards << build_item_card(lesson, ...)` for this
+    kind so the LP doesn't render as both an inline link AND a card.
+  - After the existing `html_body = ...` line, added a per-kind block that
+    builds `<a href="LP_URL" style="color: #0D75D2; ...">LP NAME</a>`
+    (using `ERB::Util.h` for both URL and title escaping), passes the
+    pre-built link string into a fresh i18n key `cIlPHtL2`, and sets
+    `body_copy = nil` so the email shows only the linked HTML body.
+  - `body_copy_for_kind` clause rewritten as a plain-text fallback with
+    LP name (key `cIlPPtL2`) plus a no-LP-name branch (key `cIlPFbL2`) for
+    when the html_body override can't fire. Old generic key `lBbCl1ed`
+    rotated out since the rendered string changed on every branch.
+- `semantic_email_preview.rb`: dedicated `when "course_in_learning_path_ended"`
+  clause now mocks the LP separately (`mock_item(title: "Sales Training 101 LP",
+  id: "lp-001")`) and passes the LP as `course:` and the existing
+  `default_item` as `lesson:` — matching how production wires the entities.
+- `learning_builder_spec.rb`: new describe block with five assertions —
+  KIND_PREFERS_SEMANTIC_BODY membership, html_body has the link to
+  `https://app.highspot.com/items/lp-1` and the LP title, body_copy is nil,
+  primary card is the course-that-ended (not the LP), CTA URL is the
+  course URL (matching legacy), and the missing-lesson fallback path
+  renders the plain-text "no LP name" body.
+
+**Notes:**
+- The HTML link uses inline color `#0D75D2` (the default `action-primary`
+  color matching the template's primary-identifier links). Brand colors
+  aren't directly accessible inside `build_learning_email`; if a future
+  ask requires brand-aware coloring of inline links, plumbing brand into
+  the builder would be a separate refactor.
+- Hspt::Intl.t does literal `{key}` substitution without escaping, so
+  passing a pre-built HTML string (with `ERB::Util.h`-escaped sub-values)
+  is safe. Pattern matches `transactional_builder.rb` (dsr_link) and
+  `marketplace_builder.rb` (consumer_email).
+- This kind is now the canonical reference for "how to add inline links
+  to a semantic email body". Worth folding into the
+  `migrate-semantic-email-body-copy` skill if a similar PM ask comes in
+  for a second kind.
+
+---
+
 ## 2026-05-06 - Semantic Email PM Review: course_inactive_learners "click here" -> "click the link below:"
 
 **Repository:** nutella
