@@ -6,6 +6,52 @@ Weekly summaries and YTD running summary are in [weekly-summary-worklog.md](week
 
 ---
 
+## 2026-05-06 - Semantic Email Template: Reply-Only Card Padding Matches Design Spec (16px All Sides)
+
+**Repository:** nutella
+**Branch:** HS-182399/semantic-email-text-and-styling-fixes
+
+**Files Changed:**
+- nutella/web/common/email/semantic/templates/semantic_email.mjml.erb
+- nutella/web/spec/unit/common/email/semantic_email_renderer_spec.rb
+
+**Summary:**
+PM provided the Figma spec for the rounded reply card when no item is anchored:
+`width: 568px; padding: 16px; flex-direction: column; align-items: flex-end;
+gap: 16px;`. Audit showed the 568px width and 16px gap were already correct
+(rounded card sits inside a 600px email body with 16px left/right outer
+padding, and adjacent replies have 16px bottom + 0px top), but the inner
+left padding for reply-only mode was 32 + 16 = 48px (a holdover from the
+border-left vertical-line indent that itself was already removed in the
+prior fix). Collapsed that to a flat 16px so the spec matches end-to-end.
+`align-items: flex-end` is a no-op in our markup because each reply's inner
+table renders at width=100%, so there's no horizontal slack for `flex-end`
+to act on; flagged this in the response so PM can confirm right-alignment
+isn't actually expected.
+
+**Changes Made:**
+- `semantic_email.mjml.erb`: introduced `reply_left_pad` (32px when
+  `has_card_content`, 16px otherwise) and split the reply `<td>` into two
+  branches so the reply-only case renders `<td valign="top">` with no style
+  attribute at all (no border-left, no extra padding-left). The 16px gap
+  between adjacent replies is preserved by the existing 16px mj-table bottom
+  padding.
+- `semantic_email_renderer_spec.rb`: updated the existing reply-only test
+  to assert the new `16px 16px 16px 16px` padding pattern and a bare
+  `<td valign="top">` (was asserting the old `32px` left pad and a
+  `padding-left: 16px` style attribute).
+
+**Notes:**
+- This is the third PM-driven adjustment to reply-only cards in this
+  branch (top padding, then vertical line, now full padding). The
+  `has_card_content` flag introduced earlier is now the single source of
+  truth for all three behaviors.
+- `align-items: flex-end` from the spec was left unimplemented; the
+  response flagged it so PM can confirm whether right-alignment of inner
+  reply content (avatar + author + comment) is actually intended.
+
+---
+
 ## 2026-05-06 - Semantic Email Preview: Seed `lesson:` for `lesson_reviewed` + Document Entity-Routing Gap
 
 **Repository:** nutella + ai-plugins + ~/.cursor/skills
