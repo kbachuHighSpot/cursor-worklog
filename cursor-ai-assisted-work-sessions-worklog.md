@@ -1524,3 +1524,29 @@ The semantic email body for `course_ending_soon` already had a `({timezone})` sl
 - `assigned_to_required_course_ending_soon` (offered as an option in the scoping question) is not a real alert kind; the only `course_scheduled_end`-bearing kinds were the two changed here.
 
 ---
+
+## 2026-05-05 - learning_path_continue: dedicated semantic section title + body copy
+
+**Repository:** nutella
+**Branch:** HS-180223/notification-rules-rest-api
+**Files Changed:**
+- nutella/web/common/email/semantic/builders/alert/immediate/learning_builder.rb
+- nutella/web/common/email/semantic/builders/alert/immediate/learning_builder_kinds.rb
+- nutella/web/spec/unit/common/email/builders/alert/immediate/learning_builder_spec.rb
+
+**Summary:**
+The `learning_path_continue` alert kind shared its section title with `course_continue` ("You may continue your work") and was registered in `CARD_ONLY_KINDS`, so the semantic email had a card but no section text. Even after removing it from `CARD_ONLY_KINDS`, the existing build flow prefers the legacy `messages_text` ("You may now continue your work in the learning path Sales Training 101") over `body_copy_for_kind`, which would have leaked the inline-interpolated title into the section body. Introduced a small `KIND_PREFERS_SEMANTIC_BODY` allowlist so the semantic copy can win for kinds whose text refers to "the following <thing>:" and rely on the card below for the title.
+
+**Changes Made:**
+- `learning_builder_kinds.rb`: removed `learning_path_continue` from `CARD_ONLY_KINDS`; added a new `KIND_PREFERS_SEMANTIC_BODY = %i[learning_path_continue].freeze` constant; added a `KIND_LABELS` entry `learning_path_continue: { i18n_key: "lPcCnTl1", subject: "Continue your learning path" }`.
+- `learning_builder.rb` `section_title_for_kind`: split `learning_path_continue` from the shared `course_continue` clause so it returns the new `Hspt::Intl.t("lPcCnTl1", "Continue your learning path")` title.
+- `learning_builder.rb` `body_copy_for_kind`: added a `learning_path_continue` clause returning `Hspt::Intl.t("lPcCnBd1", "You may now continue your work in the following learning path:")`, placed next to `learning_path_enroll` for consistency.
+- `learning_builder.rb` `build_learning_email`: when `kind_sym ∈ KIND_PREFERS_SEMANTIC_BODY`, the body copy resolution prefers `body_copy_for_kind` over `messages_text`, and `messages_html` is suppressed so the legacy HTML body cannot duplicate (or contradict) the semantic plain-text body.
+- Added unit tests covering: the new section title, exact-equality on the body copy, that the legacy interpolated title doesn't leak through, that `messages_html` is suppressed, that the course card still renders, and a regression test confirming `course_continue` still uses its original title and remains card-only.
+
+**Notes:**
+- `course_continue` retains its existing i18n id (`lB0tZa2g`) and "You may continue your work" title — only the LP variant was split off.
+- `KIND_PREFERS_SEMANTIC_BODY` is intentionally narrow (one kind today) but the pattern is reusable: any future kind whose semantic copy needs to win over the legacy `messages_text` can be added to the same set.
+- Legacy `ALERT_CONFIG[:learning_path_continue][:message]` at `alert_commands.rb:3678` was intentionally left untouched — it still drives the legacy in-app alerts UI / legacy email path.
+
+---
