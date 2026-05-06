@@ -6,6 +6,34 @@ Weekly summaries and YTD running summary are in [weekly-summary-worklog.md](week
 
 ---
 
+## 2026-05-06 - Push migrate-semantic-email-body-copy Skill to ai-plugins
+
+**Repository:** highspot/ai-plugins
+**Branch:** add-nutella-semantic-email-migration
+**Commit:** 3aca4b4
+**Files Changed:**
+- nutella-semantic-email-migration/migrate-semantic-email-body-copy/SKILL.md (new, 230 lines)
+- nutella-semantic-email-migration/README.md
+- nutella-semantic-email-migration/.cursor-plugin/plugin.json
+- nutella-semantic-email-migration/.claude-plugin/plugin.json
+
+**Summary:**
+Adapted the personal `migrate-semantic-email-body-copy` skill (from `~/.cursor/skills/`) for inclusion in the team's `nutella-semantic-email-migration` plugin and pushed to the existing `add-nutella-semantic-email-migration` branch on highspot/ai-plugins, ready to roll into PR #TBD.
+
+**Changes Made:**
+- Forked the personal SKILL.md into the plugin layout. Personal-scope adjustments: dropped the `update-worklog` step (personal-only), added a "Quick Reference: Related Rules" cross-link block matching the convention of the other 6 skills in the plugin, and inlined references to `migrate-notification-kind` (companion skill for the initial legacy -> semantic migration).
+- Updated decision-table description: "post-migration follow-up" framing to differentiate from `migrate-notification-kind` (initial migration).
+- README.md: bumped skills count "6 -> 7"; added the new skill row to the table; updated the install description.
+- Both plugin.json files (cursor + claude): updated description to mention "post-migration PM-review copy fixes" alongside the other 6 workflow buckets.
+
+**Notes:**
+- Compare URL: https://github.com/highspot/ai-plugins/compare/add-nutella-semantic-email-migration?expand=1
+- The branch already existed with the initial plugin commit (4490310); the new commit is 3aca4b4 on top of it.
+- Did not open the PR -- user said "push to" the branch. Awaiting explicit "open the PR" instruction.
+- Personal version at `~/.cursor/skills/migrate-semantic-email-body-copy/SKILL.md` is unchanged. It will be overwritten by a symlink to the plugin version when `./install.sh nutella-semantic-email-migration` is re-run after the PR merges. No conflict since the personal copy is the source of truth for the plugin version.
+
+---
+
 ## 2026-05-06 - Semantic Email PM Review: 7-Kind Learning Builder Batch
 
 **Repository:** nutella
