@@ -6,6 +6,34 @@ Weekly summaries and YTD running summary are in [weekly-summary-worklog.md](week
 
 ---
 
+## 2026-05-06 - New Skill: migrate-semantic-email-body-copy
+
+**Repository:** ~/.cursor/skills (personal skills, not under version control)
+
+**Files Changed:**
+- ~/.cursor/skills/migrate-semantic-email-body-copy/SKILL.md (new, 230 lines)
+
+**Summary:**
+Captured the recurring PM-review-driven semantic email body-copy migration recipe as a personal Cursor skill. Triggers when the user asks to update section title/text for an alert kind, reports a semantic email rendering legacy "title-inlined" copy, or hands over a "Needs Fix <kind>" PM-review batch list.
+
+**Changes Made:**
+- Authored `~/.cursor/skills/migrate-semantic-email-body-copy/SKILL.md` covering:
+  - Why the recipe exists (legacy `messages_text` from `extract_presenter_text` wins by default, semantic body needs `KIND_PREFERS_SEMANTIC_BODY` opt-in to render).
+  - File map (LearningBuilder, GenericBuilder, SessionProctorBuilder, kind constants, digest builder, preview, specs).
+  - Six-step recipe with checkboxes (locate → decide opt-in vs rewrite → rewrite with fresh i18n id → spec → preview routing → worklog).
+  - Decision table: existing semantic copy matches PM ask -> opt-in; doesn't match -> rewrite + opt-in; no clause exists -> add clause + opt-in (+ KIND_LABELS, LEARNING_KINDS).
+  - i18n id rotation rule (rotate any time the rendered string changes; never edit in place).
+  - Spec template mirroring the existing `body rewrites + opt-in` describe block in `learning_builder_spec.rb`.
+  - PM-review batch input format with the standard "Needs Fix <kind>" pattern.
+  - Common gotchas (forgetting opt-in, wrong builder, Hashie property silently dropped, `CARD_ONLY_KINDS` collision, preview parity gaps in `LegacyEmailPreview.build_config_defaults`).
+
+**Notes:**
+- This formalizes the recipe applied many times during the HS-182399 branch (course_ending_soon, learning_path_failed, learning_path_certified, learning_path_certification_revoked, learning_path_replace_contact, learning_path_continue, learning_path_pass, lesson_submit_failed, lesson_progress_reset, lesson_reviewed, lessons_assigned, notify_pending_reviews_course, both session_learner_registered_from_waitlist[_calendar], session_learner_upcoming_reminder, session_proctor_upcoming_reminder, session_proctor_assigned, cloudservice_*).
+- Pending kinds that the next pass should now resolve in one prompt each: `learning_path_unenrolled`, `auto_unenrolled_from_learning_path`, `learners_enrolled`, `learners_unenrolled`, plus `learning_path_incomplete` (still awaiting full text from PM).
+- Personal skills under `~/.cursor/skills/` are not version-controlled in nutella; not surfacing as a project skill yet because the recipe is currently scoped to one user's branch and review cadence.
+
+---
+
 ## 2026-05-06 - Semantic Email PM Review: learning_path_pass Opt-In to Semantic Body
 
 **Repository:** nutella
