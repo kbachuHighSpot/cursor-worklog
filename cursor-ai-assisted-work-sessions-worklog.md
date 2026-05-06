@@ -6,6 +6,27 @@ Weekly summaries and YTD running summary are in [weekly-summary-worklog.md](week
 
 ---
 
+## 2026-05-06 - Semantic Email Preview: Fix learning_path_learning_activities_assigned Routing
+
+**Repository:** nutella
+**Branch:** HS-182399/semantic-email-text-and-styling-fixes
+
+**Files Changed:**
+- nutella/web/common/email/semantic/preview/semantic_email_preview.rb
+
+**Summary:**
+After collapsing both variants of `learning_path_learning_activities_assigned` to the plural copy in `build_variation_body`, PM still saw the fix missing in the legacy compare view. Root cause: the preview routing for this kind didn't pass a `variation:` parameter, so the builder's `var_info = resolve_variation(kind_sym, variation)` returned nil, the variation branch was skipped, and `body_copy_for_kind` (which has no `when :learning_path_learning_activities_assigned` clause) fell through to the section-title fallback. The fix to `build_variation_body` was correct but unreachable from the preview.
+
+**Changes Made:**
+- `semantic_email_preview.rb`: removed `learning_path_learning_activities_assigned` from the no-variation `when` group at line 2556. Added a dedicated clause that passes `variation: "learning_activities"` and `alert_data: { summary: { num_items: "1" } }` so `build_variation_body` actually executes (mirrors how `course_inactive_learners` is wired at line 2584-2586).
+- Added an inline comment block explaining the routing requirement so the next person doesn't re-collapse the kind into the no-variation group.
+
+**Notes:**
+- Same structural issue likely affects `lessons_assigned` -- it's also a variation kind and its base preview entry routes through line 2495 with no `variation:` parameter. The fix shipped in the previous batch (i18n key `lAsCnLp1` -> `lAsCnLp2`, "lesson(s)" -> "lessons") may also be invisible in the legacy compare view for the same reason. Did NOT preemptively fix per "minimal changes for bug fixes"; flagged in chat for user confirmation.
+- Followup capture for the `migrate-semantic-email-body-copy` skill: the existing Step 5 only mentions seeding mock data fields. It should also call out that variation kinds need a `variation:` parameter passed in the preview routing, otherwise `build_variation_body` silently doesn't run. Worth adding once the user confirms whether lessons_assigned has the same issue.
+
+---
+
 ## 2026-05-06 - Push migrate-semantic-email-body-copy Skill to ai-plugins
 
 **Repository:** highspot/ai-plugins
