@@ -1496,3 +1496,31 @@ While answering a follow-up question about the `bulk_items_feedback` "View Items
 - Recommended in HS-183419: wrap all URLs (not just legacy `ALERT_CONFIG[:tracked_urls]` allowlist), since `source_alert` + `source=email.<tag>` are safe additive params and the allowlist is mostly an artifact of legacy presenter plumbing. Final call deferred to ticket implementation.
 
 ---
+
+## 2026-05-05 - course_ending_soon / course_in_learning_path_ending_soon: surface time + timezone in semantic emails
+
+**Repository:** nutella
+**Branch:** HS-180223/notification-rules-rest-api
+**Files Changed:**
+- nutella/web/common/models/commands/alerts/alert_commands.rb
+- nutella/web/common/email/semantic/builders/alert/immediate/learning_builder.rb
+- nutella/web/spec/unit/common/email/builders/alert/immediate/learning_builder_spec.rb
+
+**Summary:**
+The semantic email body for `course_ending_soon` already had a `({timezone})` slot but no data was ever populated for it, so the rendered text dropped both the time-of-day and the timezone. Updated the alert data builders for `course_ending_soon` and `course_in_learning_path_ending_soon` to surface a date+time string and a timezone abbreviation in the alert payload, and updated the matching semantic body copy so the LP variant also displays the end date+time+timezone (it previously displayed nothing about the date in the semantic body). Legacy alert text is intentionally untouched.
+
+**Changes Made:**
+- Added `AlertCommands.format_course_end_for_user(user, end_time)` helper that localizes the course end timestamp to the recipient's timezone and returns `{ formatted_date: "April 15, 2026 5:00 PM", timezone_abbr: "PST" }`.
+- `create_course_ending_soon` now writes `summary[:course_scheduled_end_with_time]` and `summary[:timezone]` alongside the legacy `summary[:course_scheduled_end]` (which keeps its `%m/%d/%Y` shape so the legacy in-app alerts UI is unchanged).
+- `create_course_ending_soon_within_lp` (kind `course_in_learning_path_ending_soon`) gets the same data enrichment.
+- `learning_builder.rb` `body_copy_for_kind` now prefers `summary[:course_scheduled_end_with_time]` for both kinds, falling back to the legacy `summary[:course_scheduled_end]` so alerts already in the DB before this change still render with date-only.
+- LP variant body copy was rewritten from a static "Learners enrolled..." sentence to "The course is ending on {scheduled_end} ({timezone}). Learners enrolled in that course will need to complete it before that end date." with a fresh i18n id `cIlpES2t`.
+- Added unit tests covering: full date+time+tz rendering for both kinds, retention of the LP "learner-completion" sentence, and backward-compat fallback when only the legacy `course_scheduled_end` field is present (older alerts).
+
+**Notes:**
+- Decision per user: render path = semantic only. Legacy text format and i18n id at `alert_commands.rb:2328-2329` (`course_ending_soon`) and `2425-2447` (`course_in_learning_path_ending_soon`) intentionally left as-is.
+- Format chosen: "April 15, 2026 5:00 PM (PST)" — date + time + abbreviation, no literal "at".
+- Helper deliberately separate from the existing `format_due_date_with_timezone` because the existing helper produces `"Monday, April 15"` (no year, no time-of-day) and is wired to `course_due_date_reminder` / `course_due_date_overdue`. Sharing the helper would have changed those alerts too.
+- `assigned_to_required_course_ending_soon` (offered as an option in the scoping question) is not a real alert kind; the only `course_scheduled_end`-bearing kinds were the two changed here.
+
+---
