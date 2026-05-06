@@ -6,6 +6,32 @@ Weekly summaries and YTD running summary are in [weekly-summary-worklog.md](week
 
 ---
 
+## 2026-05-06 - Semantic Email PM Review: 7-Kind Learning Builder Batch
+
+**Repository:** nutella
+**Branch:** HS-182399/semantic-email-text-and-styling-fixes
+
+**Files Changed:**
+- nutella/web/common/email/semantic/builders/alert/immediate/learning_builder.rb
+- nutella/web/common/email/semantic/builders/alert/immediate/learning_builder_kinds.rb
+- nutella/web/spec/unit/common/email/builders/alert/immediate/learning_builder_spec.rb
+
+**Summary:**
+Batch PM-review pass on 7 LearningBuilder kinds. Triaged into three buckets per the `migrate-semantic-email-body-copy` skill: pure opt-in (3), already-correct (2), and rewrite + opt-in (2). The two ambiguous rewrites (lessons_assigned text template, learning_path_learning_activities_assigned singular variant) were resolved via AskQuestion before any change.
+
+**Changes Made:**
+- `learning_builder_kinds.rb`: added `auto_unenrolled_from_learning_path`, `learners_enrolled`, `learners_unenrolled` to `KIND_PREFERS_SEMANTIC_BODY` (alphabetical positions). Updated `VARIATION_LABELS` for `lessons_assigned` (i18n key `lAsCnLp1` -> `lAsCnLp2`, body "lesson(s)" -> "lessons") and `learning_path_learning_activities_assigned` (singular variant body collapsed to the plural string under the existing `sS9TmZ7m` key).
+- `learning_builder.rb#build_variation_body`: rewrote the `lessons_assigned` clause with fresh i18n id and the always-plural template ("The course instructor has assigned you {amount} lessons for the following course:"). Collapsed the `learning_path_learning_activities_assigned` clause so both variants render the plural copy ("New learning activities have been added to the following learning path:"), reusing the existing `sS9TmZ7m` key (rendered string for that key did not change). Action buttons still differentiate by variation via `action_text_for_variation` ("View Lesson" vs "View Course"; "View New Activity" vs "View Learning Path").
+- `learning_builder_spec.rb`: added regression tests in `body rewrites + opt-in` for the three opt-ins (auto_unenrolled_from_learning_path, learners_enrolled, learners_unenrolled), each asserting new copy + no title leak + KIND_PREFERS_SEMANTIC_BODY membership. Updated existing `lessons_assigned` tests to reflect the new "1 lessons" / "3 lessons" output. Added a singular-variant test for `learning_path_learning_activities_assigned` asserting it now collapses to the plural copy.
+
+**Notes:**
+- 2 kinds in the original batch (`learning_path_replace_contact`, `lesson_reviewed`) were already opted-in with PM-approved copy and existing spec coverage -- no changes needed; verified-only.
+- AskQuestion was used twice to resolve genuinely ambiguous cases ("1 lessons" -- drop parens?; singular variant of learning_activities_assigned -- collapse?). Both confirmed before any rewrite, per the skill's "don't infer, ask" rule.
+- i18n rotation: `lAsCnLp1` -> `lAsCnLp2` for the `lessons_assigned` body string change; `sS9TmZ7m` reused for the singular variant of learning_activities_assigned because the rendered string for that key did not change (only the variant pointing at it did).
+- This batch is a pure validation of the new `migrate-semantic-email-body-copy` skill end-to-end -- recipe applied with no improvisation.
+
+---
+
 ## 2026-05-06 - Semantic Email PM Review: learning_path_unenrolled Opt-In to Semantic Body
 
 **Repository:** nutella
