@@ -6,6 +6,57 @@ Weekly summaries and YTD running summary are in [weekly-summary-worklog.md](week
 
 ---
 
+## 2026-05-06 - Semantic Email PM Review: course_inactive_learners "click here" -> "click the link below:"
+
+**Repository:** nutella
+**Branch:** HS-182399/semantic-email-text-and-styling-fixes
+
+**Files Changed:**
+- nutella/web/common/email/semantic/builders/alert/immediate/learning_builder_kinds.rb
+- nutella/web/common/email/semantic/builders/alert/immediate/learning_builder.rb
+- nutella/web/spec/unit/common/email/builders/alert/immediate/learning_builder_spec.rb
+
+**Summary:**
+PM review on `course_inactive_learners` Section Text:
+`...To continue learning, click here` -> `...To continue learning, click the link below:`.
+The legacy text used a `:here_text => "here"` interpolation that rendered as
+a literal `[here]` hyperlink, which the semantic body doesn't reproduce
+(semantic emails surface their action as a CTA button below the item card,
+not an inline link). New copy points readers to that CTA button instead.
+
+Audit confirmed the kind was already fully wired for semantic precedence:
+- `KIND_PREFERS_SEMANTIC_BODY` includes it
+- Preview routing already passes `variation: "days"` (this is the reference
+  the more recent `lessons_assigned` and
+  `learning_path_learning_activities_assigned` fixes pointed back to)
+- `body_copy_for_kind` doesn't have a clause; `build_variation_body` owns
+  the body
+
+So the change was purely a string + i18n rotation in the variation body.
+
+**Changes Made:**
+- `learning_builder_kinds.rb`: `VARIATION_LABELS[:course_inactive_learners]`
+  body strings changed for both `day` + `days` variants; i18n keys rotated
+  `1PY2utBu -> cIlDayB2` and `sgmJ62Lf -> cIlDsyB2`.
+- `learning_builder.rb`: `build_variation_body` clause for
+  `:course_inactive_learners` matches the new keys + strings on all three
+  branches (`day`, `days`, fallback `else`); fallback i18n rotated
+  `A385CdUr -> cIlDfaB2`.
+- `learning_builder_spec.rb`: added three tests under the existing
+  "variation kinds" describe block — `days` happy path, `day` variant, and
+  the missing-variation fallback. Each asserts the full expected string and
+  that "click here" no longer appears.
+
+**Notes:**
+- No production code changed beyond the body string and i18n keys; the
+  legacy email path is unchanged (still uses `:here_text => "here"` with
+  the inline link).
+- Kept the existing "the following course" phrasing — only the trailing
+  "click here." -> "click the link below:" portion changed, per the diff
+  PM provided.
+
+---
+
 ## 2026-05-06 - Semantic Email Template: Reply-Only Card Padding Matches Design Spec (16px All Sides)
 
 **Repository:** nutella
