@@ -6,6 +6,30 @@ Weekly summaries and YTD running summary are in [weekly-summary-worklog.md](week
 
 ---
 
+## 2026-05-06 - Semantic Email Template: Tighten Padding for Reply-Only Cards
+
+**Repository:** nutella
+**Branch:** HS-182399/semantic-email-text-and-styling-fixes
+
+**Files Changed:**
+- nutella/web/common/email/semantic/templates/semantic_email.mjml.erb
+- nutella/web/spec/unit/common/email/semantic_email_renderer_spec.rb
+
+**Summary:**
+PM review on `bulk_pitch_ownership_transfer` and `bulk_digital_room_ownership_transfer` flagged "too much top padding in the comment card when no item is attached." Both kinds intentionally produce a reply-only card (item_preview/primary_identifier/meta_data/content all nil, only replies populated). The shared MJML template was emitting an unconditional `<mj-text css-class="card-content" padding="16px">` wrapper around the (empty) header block, contributing ~32px of dead vertical space above the reply.
+
+**Changes Made:**
+- `semantic_email.mjml.erb`: extended the existing field-presence pattern to the wrapper itself. Derived `has_card_content` from the four header fields and conditionally rendered the `card-content` `<mj-text>` block. Made the first reply's top padding contextual: 0px (today's behavior) when card-content is present, 16px when absent so the reply still sits 16px from the top of the rounded card box (matching a normal card's header offset).
+- Hoisted `meta` and `content` derivations above the wrapper (they're now needed for the `has_card_content` check) and removed the redundant inner re-derivations.
+- `semantic_email_renderer_spec.rb`: added two specs locking the contract -- (1) reply-only cards skip the `card-content` wrapper and apply 16px top padding to the first reply, (2) cards with header content keep the existing zero top padding on the reply.
+
+**Notes:**
+- Generic, defensive template fix: in practice only `bulk_pitch_ownership_transfer` and `bulk_digital_room_ownership_transfer` produce the literal "all-nil header" shape today, but the same fix protects any future kind that opts into a reply-only card (e.g. if `restricted_template_updated`'s no-item branch is ever fixed to keep its replies, or any new bulk-action notification follows the same pattern).
+- Cards that have any header content (item_preview, primary_identifier, meta_data, or content) are unaffected -- the existing 16/16 spacing around the header and the 0/16 padding on the reply continue to render exactly as before.
+- The existing `renders replies within items` spec uses a card with `primary_identifier` set, so it still hits the wrapper branch; the two new specs cover the new reply-only branch and pin the regression.
+
+---
+
 ## 2026-05-06 - Semantic Email Preview: Restore CTA Parity for bulk_items_feedback
 
 **Repository:** nutella
