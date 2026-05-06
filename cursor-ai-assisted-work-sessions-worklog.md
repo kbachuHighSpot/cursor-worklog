@@ -6,6 +6,29 @@ Weekly summaries and YTD running summary are in [weekly-summary-worklog.md](week
 
 ---
 
+## 2026-05-06 - Semantic Email PM Review: learning_path_unenrolled Opt-In to Semantic Body
+
+**Repository:** nutella
+**Branch:** HS-182399/semantic-email-text-and-styling-fixes
+
+**Files Changed:**
+- nutella/web/common/email/semantic/builders/alert/immediate/learning_builder_kinds.rb
+- nutella/web/spec/unit/common/email/builders/alert/immediate/learning_builder_spec.rb
+
+**Summary:**
+PM review on `learning_path_unenrolled`: section text was rendering the legacy "You were unenrolled from the learning path Sales Training 101" (inlining the LP title). The semantic copy "You were unenrolled from the following learning path:" already existed in `learning_builder.rb#body_copy_for_kind` (i18n `lBbLpHun`); the kind was just missing the one-line opt-in to `KIND_PREFERS_SEMANTIC_BODY`.
+
+**Changes Made:**
+- `learning_builder_kinds.rb`: added `learning_path_unenrolled` to `KIND_PREFERS_SEMANTIC_BODY` (alphabetical position, between `learning_path_replace_contact` and `lesson_progress_reset`).
+- `learning_builder_spec.rb`: added a regression test under `body rewrites + opt-in` mirroring the `learning_path_pass` test (asserts new copy, asserts no LP title leakage, asserts kind is in `KIND_PREFERS_SEMANTIC_BODY`).
+
+**Notes:**
+- Second use of the `migrate-semantic-email-body-copy` skill. The new "Step 2 decision: Body copy matches existing semantic wording -> opt-in" path applied cleanly.
+- `:auto_unenrolled_from_learning_path` shares the same `when` clause and i18n id (`lBbLpHun`) but was intentionally NOT opted in -- PM only flagged the manual-unenroll kind, and the user previously deferred (`ask_later`) the auto-unenroll variant. The spec comment calls this out so the next pass through is one-line if/when PM reviews it.
+- Preview routing was already in place (`semantic_email_preview.rb:2556`); no preview changes needed.
+
+---
+
 ## 2026-05-06 - Semantic Email PM Review: Suppress CTA on learning_path_certification_revoked
 
 **Repository:** nutella
