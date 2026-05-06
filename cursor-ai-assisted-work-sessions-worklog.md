@@ -6,6 +6,29 @@ Weekly summaries and YTD running summary are in [weekly-summary-worklog.md](week
 
 ---
 
+## 2026-05-06 - Semantic Email Template: Drop Stray Vertical Line on Reply-Only Cards
+
+**Repository:** nutella
+**Branch:** HS-182399/semantic-email-text-and-styling-fixes
+
+**Files Changed:**
+- nutella/web/common/email/semantic/templates/semantic_email.mjml.erb
+- nutella/web/spec/unit/common/email/semantic_email_renderer_spec.rb
+
+**Summary:**
+PM follow-up on the earlier reply-only card padding fix: the reply's inner `<td>` still rendered `border-left: 1px solid #CFCFCF` even when the card had no header content above. Without an item to anchor against, the vertical line reads as a stray rule.
+
+**Changes Made:**
+- `semantic_email.mjml.erb`: extended the existing `has_card_content` flag to drive the reply `<td>`'s inline style. When `has_card_content` is true (normal card), keep `border-left: 1px solid #CFCFCF; padding-left: 16px;`; when false (reply-only card), emit `padding-left: 16px;` only. Updated the surrounding comment block to document both effects of `has_card_content` on the reply rendering (top padding + border-left).
+- `semantic_email_renderer_spec.rb`: extended the existing `skips the empty card-content wrapper for reply-only cards` test to assert the reply `<td>` has no `border-left` style. Extended the `keeps zero top padding on the reply when header content is present` test to assert the `border-left` IS present in the normal-card case (regression guard so the visual anchor stays for cards that have an item).
+
+**Notes:**
+- Same defensive pattern as the previous template fix -- the `has_card_content` flag now drives three coupled effects on a reply-only card: (1) skip the empty card-content wrapper, (2) give the first reply 16px top padding, (3) drop the border-left rule.
+- Did not touch the 32px left padding on `<mj-table>` (the indent that visually paired with the line). Per minimal-changes; if PM wants the indent reduced too on reply-only cards, that's a follow-up one-line change.
+- Affects the same kinds as the prior padding fix in practice: `bulk_pitch_ownership_transfer` and `bulk_digital_room_ownership_transfer` (the only kinds today producing a literal all-nil-header card with replies).
+
+---
+
 ## 2026-05-06 - Semantic Email Preview: Fix learning_path_learning_activities_assigned Routing
 
 **Repository:** nutella
