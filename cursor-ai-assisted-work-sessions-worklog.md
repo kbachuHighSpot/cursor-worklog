@@ -1576,3 +1576,40 @@ While verifying the `course_ending_soon` time + timezone change against the emai
 - Legacy in-app alerts text and the legacy email path are still untouched (semantic-only scope per prior decision).
 
 ---
+
+## 2026-05-05 - PM-review batch: 13 Learning & Courses semantic email copy fixes
+
+**Repository:** nutella
+**Branch:** HS-180223/notification-rules-rest-api
+**Files Changed:**
+- nutella/web/common/email/semantic/builders/alert/immediate/learning_builder.rb
+- nutella/web/common/email/semantic/builders/alert/immediate/learning_builder_kinds.rb
+- nutella/web/spec/unit/common/email/builders/alert/immediate/learning_builder_spec.rb
+
+**Summary:**
+Applied a batch of PM-review copy fixes to Learning & Courses semantic emails. Several items also required structural changes: (a) extending `KIND_PREFERS_SEMANTIC_BODY` precedence into the variation branch of `build_learning_email`, (b) removing `answers_removed` from `CARD_ONLY_KINDS` (analogous to the prior `learning_path_continue` change), and (c) opting 11 kinds into `KIND_PREFERS_SEMANTIC_BODY` so the new (or already-correct) semantic copy actually wins over the legacy `messages_text`. Five kinds where the requested copy already matched existing semantic body but the user opted to defer the opt-in (`learning_path_pass`, `learning_path_unenrolled`, `auto_unenrolled_from_learning_path`, `learners_enrolled`, `learners_unenrolled`) were left untouched, as was `learning_path_incomplete` (truncated request — clarification deferred).
+
+**Changes Made:**
+- `section_title_for_kind`: added two missing entries — `lesson_author_for_required_ranges_item_version_update` ("Item version update may affect lessons", `lAfRrIv1`) and `enrollment_errors_added` ("Enrollment errors updated", `eEaTtl01`). Both previously fell through to the generic "Learning" title.
+- `build_learning_email`: extended `KIND_PREFERS_SEMANTIC_BODY` precedence into the variation branch (`var_info` true) so kinds like `lessons_assigned`, `notify_pending_reviews_course`, and `learning_path_learning_activities_assigned` can also have their semantic body win over `messages_text`.
+- `body_copy_for_kind` body rewrites with rotated i18n ids:
+  - `learning_path_replace_contact` → "You have been assigned as the Contact for the following learning path:" (`lPrCnt01`).
+  - `learning_path_certified` → "You have earned the following certification:" (`lPcRrTb1`).
+  - `learning_path_certification_revoked` → "The following certification was revoked by an instructor:" (`lPcRtRv1`).
+  - `lesson_submit_failed` → "{user}'s Lesson submission has failed for the following course:" (`lSfFlCs1`).
+  - `lesson_reviewed` → "{lesson_name} has been reviewed in the following course:" (`lRvWdLn1`) with a graceful fallback to "A lesson has been reviewed in the following course:" (`lRvWdNoL`) when the lesson entity isn't passed.
+  - `lesson_progress_reset` → "The lesson {lesson_name} has been updated, and your answers have been reset. Please continue work in this lesson to make progress in the following course:" (`lPrRsLn1`) with the same graceful fallback (`lPrRsNoL`).
+  - `answers_removed` (new clause) → "The course instructor has reset your answers in the following course:" (`aRmCnRs1`); kind also removed from `CARD_ONLY_KINDS` so the body actually renders alongside the existing card.
+- `build_variation_body` rewrites:
+  - `lessons_assigned`: collapsed both `lesson` and `lessons` variants into a single template "The course instructor has assigned you {amount} lesson(s) for the following course:" (`lAsCnLp1`). `VARIATION_LABELS[:lessons_assigned]` updated in lockstep so the variation map stays consistent for callers that introspect by key.
+  - `notify_pending_reviews_course`: renamed "in the following course" → "in the course below" across all three variants (`multi_learner` → `nPrCmL01`, `dual_learner` → `nPrCdL01`, `single_learner` → `nPrCsL01`). `VARIATION_LABELS` updated to match.
+- `KIND_PREFERS_SEMANTIC_BODY` now includes 14 kinds (was 3): `learning_path_continue`, `course_ending_soon`, `course_in_learning_path_ending_soon`, plus the 11 added today (`answers_removed`, `learning_path_certification_revoked`, `learning_path_certified`, `learning_path_failed`, `learning_path_learning_activities_assigned`, `learning_path_replace_contact`, `lesson_progress_reset`, `lesson_reviewed`, `lesson_submit_failed`, `lessons_assigned`, `notify_pending_reviews_course`).
+- Added a `PM-review copy fixes (Learning & Courses)` describe block in `learning_builder_spec.rb` covering: the two new section titles, every body rewrite, lesson-name interpolation + missing-lesson fallback for both `lesson_*` kinds, the collapsed `lessons_assigned` template at amount=1 and amount=3, the "course below" rename for all three `notify_pending_reviews_course` variants, the variation-branch precedence for `learning_path_learning_activities_assigned`, the `answers_removed` transition (no longer card-only, body renders, card still present), and `messages_html` suppression for both body-rewrite and variation kinds.
+
+**Notes:**
+- Deferred per user input: `learning_path_pass`, `learning_path_unenrolled`, `auto_unenrolled_from_learning_path`, `learners_enrolled`, `learners_unenrolled` (these have semantic bodies that already match the requested copy but require an opt-in to actually render — the user wants to review separately) and `learning_path_incomplete` (request was truncated with "...").
+- `lesson_reviewed` and `lesson_progress_reset` use `lesson.title` for interpolation; if `lesson` isn't supplied to the builder the body falls back to a generic phrasing (no broken `{lesson_name}` placeholder leaks into the rendered email).
+- `lessons_assigned` collapse uses `subs[:amount].presence || "1"` so the legacy `lesson` variation (which doesn't carry `num_items`) still renders grammatically.
+- All legacy `ALERT_CONFIG` entries in `alert_commands.rb` are intentionally untouched — semantic-only scope per the running design decision.
+
+---
