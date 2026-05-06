@@ -6,6 +6,41 @@ Weekly summaries and YTD running summary are in [weekly-summary-worklog.md](week
 
 ---
 
+## 2026-05-05 - Semantic Email PM Review: Session Reminder & Waitlist Copy Fixes
+
+**Repository:** nutella
+
+**Files Changed:**
+- nutella/web/common/email/semantic/builders/alert/immediate/session_proctor_builder.rb
+- nutella/web/common/email/semantic/builders/alert/immediate/learning_builder.rb
+- nutella/web/common/email/semantic/builders/alert/immediate/learning_builder_kinds.rb
+- nutella/web/common/email/semantic/builders/alert/immediate/generic_builder.rb
+- nutella/web/common/email/semantic/preview/semantic_email_preview.rb
+- nutella/web/spec/unit/common/email/builders/alert/immediate/learning_builder_spec.rb
+- nutella/web/spec/unit/common/email/builders/alert/immediate/generic_builder_spec.rb
+- nutella/web/spec/unit/common/email/builders/alert/immediate/session_proctor_builder_spec.rb (new)
+
+**Summary:**
+Applied PM-reviewed copy fixes to five session-related semantic email kinds. Each kind now uses a "the following session on {session_date}:" framing (with the item card carrying the title) instead of inlining the item title in the body, and three kinds get explicit hard-coded section titles. All five kinds have graceful fallback when `session_info[:session_date]` is missing.
+
+**Changes Made:**
+- `session_proctor_assigned` (`session_proctor_builder.rb`): added `:session_info` property to `SessionProctorAlertEmailData`, introduced a `SECTION_TITLE` lambda that yields "Session instructor assigned", reworked `build_session_proctor_email` to accept `kind_sym:` and `session_date:` and emit "You are a Session Instructor for the following session on {session_date}:" (with a date-less fallback). Other kinds passing through this builder (e.g. `session_proctor_unassigned`) are untouched.
+- `session_learner_registered_from_waitlist[_calendar]` (`learning_builder.rb`): rewrote the shared `body_copy_for_kind` clause to interpolate `session_info[:session_date]` ("...on {session_date} and no longer on the waitlist:"), with a date-less fallback.
+- `learning_builder_kinds.rb`: added both waitlist kinds to `KIND_PREFERS_SEMANTIC_BODY` so the new semantic copy wins over the legacy `messages_text` (which inlines the item title) and the legacy `messages_html` is suppressed.
+- `session_learner_upcoming_reminder` + `session_proctor_upcoming_reminder` (`generic_builder.rb`): added `:session_info` property to `GenericAlertEmailData`, a shared `UPCOMING_SESSION_SECTION_TITLE` lambda that yields the literal "Upcoming Session", and registered both kinds in `SECTION_TITLE_OVERRIDES`. Extended `stripped_body_for_kind` with role-specific bodies ("You have the following session to attend on {session_date}:" / "You are hosting the following session on {session_date}:") that interpolate `session_info[:session_date]` and clear the legacy HTML body.
+- `semantic_email_preview.rb`: split the previous combined `when` clause so the two upcoming reminder kinds now flow through `build_generic_kind_preview` (matching production registration via GenericBuilder's SESSION_KINDS); the waitlist kinds continue to flow through LearningBuilder. Updated `build_session_proctor_preview` to thread `kind_sym:` and `session_date: mock_session.session_date` so the new copy renders in the preview.
+- Tests:
+  - `session_proctor_builder_spec.rb` (new): asserts the literal "Session instructor assigned" title, the new body with date interpolation, the date-less fallback, and that the legacy item-title body no longer wins. Includes a regression test for `session_proctor_unassigned` so it preserves the legacy text.
+  - `learning_builder_spec.rb`: added a `session_learner_registered_from_waitlist[_calendar] copy with session_date` describe block covering interpolation, fallback, KIND_PREFERS_SEMANTIC_BODY precedence, html_body suppression, and the item-card invariant for both kinds.
+  - `generic_builder_spec.rb`: added SECTION_TITLE_OVERRIDES tests asserting the "Upcoming Session" title for both reminder kinds (with and without session_info), and `.stripped_body_for_kind` tests for the role-specific bodies, fallbacks, and a sanity check that unrelated kinds still return nil.
+
+**Notes:**
+- All new copy uses fresh i18n IDs (`sPaCsTl1`, `sPaBdy01`, `sPaBdyN0`, `sLrFwSd1`, `sLrFwSdN0`, `sLuRmSd1`, `sLuRmSdN0`, `sPuRmSd1`, `sPuRmSdN0`, `uSsCsTl1`).
+- Per user direction, the date is rendered using the existing `session_info[:session_date]` field (`strftime("%A %B %d, %Y %I:%M%p %Z")`) for parity with the legacy email path; no new data builder field was introduced.
+- The user-supplied `session_learner_upcoming_reminder` copy contained a typo ("an the") and a mismatched bracket (`{Event Date]`); user confirmed the intended phrasing as "You have the following session to attend on {Event Date}:".
+
+---
+
 ## BACKFILLED ENTRIES (Jan-Apr 2026)
 
 *The following entries were reconstructed from git commit history (Jan-Feb) and Cursor agent transcripts (Mar-Apr). Added on 2026-04-06.*
