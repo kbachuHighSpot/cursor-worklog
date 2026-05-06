@@ -6,6 +6,29 @@ Weekly summaries and YTD running summary are in [weekly-summary-worklog.md](week
 
 ---
 
+## 2026-05-06 - Semantic Email PM Review: Suppress CTA on learning_path_certification_revoked
+
+**Repository:** nutella
+**Branch:** HS-182399/semantic-email-text-and-styling-fixes
+
+**Files Changed:**
+- nutella/web/common/email/semantic/builders/alert/immediate/learning_builder_kinds.rb
+- nutella/web/spec/unit/common/email/builders/alert/immediate/learning_builder_spec.rb
+
+**Summary:**
+PM review on `learning_path_certification_revoked`: semantic email was rendering a CTA button (defaulting to "View Learning Path") even though the legacy `ALERT_CONFIG` for this kind has no `:action` slot, so the legacy email is button-less. Bring the semantic side into parity by adding the kind to the existing `NO_CTA_KINDS` allowlist.
+
+**Changes Made:**
+- `learning_builder_kinds.rb`: added `:learning_path_certification_revoked` to `NO_CTA_KINDS` (was previously empty `%i[]`). Expanded the comment to explain the parity rule (add a kind here when its legacy ALERT_CONFIG has no `:action` slot).
+- `learning_builder_spec.rb`: added a regression test in the existing `body rewrites + opt-in` block asserting (a) `section_action` is nil and (b) the kind is in `NO_CTA_KINDS`.
+
+**Notes:**
+- First test of the new `migrate-semantic-email-body-copy` skill. CTA suppression isn't body-copy work strictly, but it's the same parity-with-legacy class of fix the skill covers (`NO_CTA_KINDS` is one of the constants the skill lists alongside `KIND_PREFERS_SEMANTIC_BODY`, `CARD_ONLY_KINDS`, etc.). Worth a one-line addition to the skill to call out the rule explicitly: "missing CTA in legacy -> add to `NO_CTA_KINDS`."
+- `suppress_cta = NO_CTA_KINDS.include?(kind_sym)` at `learning_builder.rb:40` directly nils the `button` at line 138, so no other path needs touching.
+- Did not change `learning_path_certs_enabled` / `learning_path_certs_disabled` / `learning_path_certs_earned_disabled` -- their ALERT_CONFIG entries weren't audited as part of this ticket.
+
+---
+
 ## 2026-05-06 - New Skill: migrate-semantic-email-body-copy
 
 **Repository:** ~/.cursor/skills (personal skills, not under version control)
