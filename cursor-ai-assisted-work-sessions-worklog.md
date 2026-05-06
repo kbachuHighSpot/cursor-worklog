@@ -6,6 +6,52 @@ Weekly summaries and YTD running summary are in [weekly-summary-worklog.md](week
 
 ---
 
+## 2026-05-06 - Semantic Email Preview: Seed `lesson:` for `lesson_reviewed` + Document Entity-Routing Gap
+
+**Repository:** nutella + ai-plugins + ~/.cursor/skills
+**Branch:** HS-182399/semantic-email-text-and-styling-fixes (nutella)
+
+**Files Changed:**
+- nutella/web/common/email/semantic/preview/semantic_email_preview.rb
+- ~/.cursor/skills/migrate-semantic-email-body-copy/SKILL.md
+- ai-plugins/nutella-semantic-email-migration/migrate-semantic-email-body-copy/SKILL.md
+
+**Summary:**
+PM flagged `lesson_reviewed` Section Text needed to read
+`{Lesson Name} has been reviewed in the following course:`. Audit confirmed the
+rewrite is already live in `body_copy_for_kind` (i18n key `lRvWdLn1`) and the
+kind is in `KIND_PREFERS_SEMANTIC_BODY`, so no builder code changes were needed.
+The actual gap was in the preview wiring: the `when "lesson_reviewed"` clause
+never passed a `lesson:` keyword argument, so `lesson&.title` was nil and the
+builder returned the dataless fallback `"A lesson has been reviewed in the
+following course:"` — which is what PM was seeing in the legacy compare view.
+
+This is a third preview-routing trap in two days, but a different flavor from
+the variation-kind issue: instead of a missing `variation:` parameter, the body
+copy reads a positional/keyword entity (lesson, from_user, etc.) that the
+preview clause failed to seed. Updated both copies of the
+`migrate-semantic-email-body-copy` skill to call out this distinct case
+alongside the variation-routing one.
+
+**Changes Made:**
+- `semantic_email_preview.rb`: dedicated `when "lesson_reviewed"` clause now
+  builds a separate `mock_lesson = mock_item(title: "Lesson 1", id: "lesson-001")`,
+  passes it as `lesson:` to the builder, and seeds `assigned_item.title` with
+  the lesson title so the legacy `ASSIGNED_ITEM_TITLE` placeholder also renders
+  the correct lesson name (was previously misseeded with the course title).
+- Skill (personal + plugin): added a "Body copy that reads positional/keyword
+  entities needs those entities seeded too" callout to Step 5 with the canonical
+  `lesson_reviewed` / `lesson_progress_reset` snippet.
+
+**Notes:**
+- `lesson_progress_reset` follows the exact same pattern (interpolates
+  `lesson&.title` with a dataless fallback) and almost certainly needs the same
+  preview wiring update next time PM reviews it. Skill update calls it out so
+  it'll be caught the moment it surfaces.
+- No production code or copy changed — only preview wiring + documentation.
+
+---
+
 ## 2026-05-06 - Semantic Email Preview: Wire `lessons_assigned` Variation + Document Routing Gap
 
 **Repository:** nutella + ai-plugins + ~/.cursor/skills
