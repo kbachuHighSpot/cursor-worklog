@@ -6,6 +6,95 @@ Weekly summaries and YTD running summary are in [weekly-summary-worklog.md](week
 
 ---
 
+## 2026-05-06 - Semantic Email PM Review: course_in_learning_path_ending_soon Inline LP Link + Card/CTA Reshuffle (Batch Audit)
+
+**Repository:** nutella
+**Branch:** HS-182399/semantic-email-text-and-styling-fixes
+
+**Files Changed:**
+- nutella/web/common/email/semantic/builders/alert/immediate/learning_builder.rb
+- nutella/web/common/email/semantic/preview/semantic_email_preview.rb
+- nutella/web/spec/unit/common/email/builders/alert/immediate/learning_builder_spec.rb
+
+**Summary:**
+PM dropped a 14-item batch of fixes. After a full audit, 12 of 14 turned
+out to already be implemented on this branch (just uncommitted, ready to
+ship in the same PR): `lesson_reviewed`,
+`lesson_author_for_required_ranges_item_version_update` (title),
+`lesson_progress_reset`, `lesson_submit_failed`,
+`notify_pending_reviews_course` (all 3 variants),
+`enrollment_errors_added` (title), `answers_removed`,
+`session_proctor_assigned`, both
+`session_learner_registered_from_waitlist*`, both session
+`*_upcoming_reminder` kinds. All have correct
+`KIND_PREFERS_SEMANTIC_BODY` opt-ins and matching copy.
+
+The only genuinely new work was `course_in_learning_path_ending_soon`,
+which needed the same inline-LP-link + entity-swap pattern we built for
+`course_in_learning_path_ended` — but with the rich
+`course_scheduled_end_with_time` + timezone interpolated into the body
+(consistent with the existing rich-date format adopted earlier in this
+branch for `course_ending_soon`). PM's exact desired copy was
+"Learners enrolled in the course below will need to complete it before
+that end date of {Date} to be able to complete the learning path: {LP
+Name+Link}."
+
+**Changes Made:**
+- `learning_builder.rb` `build_learning_email`:
+  - Extended the per-kind `course, lesson = lesson, course` swap to
+    cover both `course_in_learning_path_ended` AND
+    `course_in_learning_path_ending_soon`. Production registers both
+    kinds with course=LP, lesson=course, but legacy CTA targets the
+    course (`:href => [:assigned_item, :url]`) — the swap aligns the
+    primary card + CTA with that.
+  - Extended the secondary-card skip to also cover ending_soon.
+  - Added a parallel `html_body` override block for ending_soon that
+    interpolates `date_text` (rich `course_scheduled_end_with_time` +
+    `(tz)` when timezone present, falls back to date-only otherwise)
+    and the LP link. Uses `ERB::Util.h` for safe escaping. Sets
+    `body_copy = nil` to avoid double-rendering. Fresh i18n id
+    `cIlsHtL2`.
+- `learning_builder.rb` `body_copy_for_kind`: rewrote the
+  `course_in_learning_path_ending_soon` clause to match the new copy
+  shape, with graceful degradation for both missing LP entity and
+  missing timezone. Two fresh i18n ids: `cIlsPtL2` (with LP name) and
+  `cIlsFbL2` (without LP). Old ids `cIlpES2t` / `cIlpEsN0` retired.
+- `semantic_email_preview.rb`: rewrote the
+  `course_in_learning_path_ending_soon` route to pass
+  `course: mock_lp, lesson: default_item` (pre-swap), mirroring the
+  `_ended` route. Preview now correctly shows the linked LP HTML body +
+  the course-ending card.
+- `learning_builder_spec.rb`:
+  - Removed the three obsolete test contexts that asserted the old
+    "The course is ending on..." copy (lines 219-241, 262-270,
+    306-315).
+  - Added a parallel `course_in_learning_path_ending_soon links the LP
+    inline + targets the course card/CTA` describe block with six
+    assertions: `KIND_PREFERS_SEMANTIC_BODY` membership (regression
+    guard), HTML body has the rich date+tz + linked LP, primary card is
+    the course-ending, CTA URL is the course URL, plain-text fallback
+    when LP is missing renders correctly, and the timezone-parens-drop
+    backward-compat behaviour for older alerts.
+
+**Notes:**
+- Audit pattern: when a PM batch lands, first read each kind's current
+  state in `learning_builder.rb` / `learning_builder_kinds.rb` and the
+  preview routing, then classify into "already implemented" vs. "new
+  work". Saved meaningful effort here — 12 of 14 were duplicates of
+  prior PM-review fixes.
+- New `KIND_PREFERS_SEMANTIC_BODY` membership assertion in the
+  ending_soon describe block follows the same pattern I added for
+  `course_inactive_learners` in the prior change. Worth doing on every
+  body-rewrite kind going forward — the precedence trap is invisible
+  without it.
+- Preview routing now uses two `course_in_learning_path_*` patterns
+  with identical pre-swap entity ordering (LP as `course`, course as
+  `lesson`); both routes hand-roll a `mock_lp` and pass through the
+  default course as `lesson`. Could be folded into a shared helper if
+  more LP-link kinds appear.
+
+---
+
 ## 2026-05-06 - Fix: course_inactive_learners Body Rewrite Was Invisible in Preview (Missing KIND_PREFERS_SEMANTIC_BODY Opt-In)
 
 **Repository:** nutella + ai-plugins + ~/.cursor/skills
