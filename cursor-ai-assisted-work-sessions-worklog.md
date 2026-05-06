@@ -6,6 +6,48 @@ Weekly summaries and YTD running summary are in [weekly-summary-worklog.md](week
 
 ---
 
+## 2026-05-06 - Semantic Email Preview: Wire `lessons_assigned` Variation + Document Routing Gap
+
+**Repository:** nutella + ai-plugins + ~/.cursor/skills
+**Branch:** HS-182399/semantic-email-text-and-styling-fixes (nutella)
+
+**Files Changed:**
+- nutella/web/common/email/semantic/preview/semantic_email_preview.rb
+- ~/.cursor/skills/migrate-semantic-email-body-copy/SKILL.md
+- ai-plugins/nutella-semantic-email-migration/migrate-semantic-email-body-copy/SKILL.md
+
+**Summary:**
+Followed up on PM feedback that `lessons_assigned` looked unchanged in the legacy
+compare view despite the previous body-copy rewrite. Root cause was the same as
+`learning_path_learning_activities_assigned` from the prior session: the preview's
+`when "lessons_assigned"` clause did not pass a `variation:` parameter, so
+`build_variation_body` was skipped and the preview rendered the section-title
+fallback. Pulled the kind out of the shared
+`course_due_date_reminder/course_continue/answers_removed` group, gave it its own
+`when` clause that passes `variation: "lessons"` plus a `summary: { num_items: "1" }`
+mock payload, and refreshed both copies of the `migrate-semantic-email-body-copy`
+skill so future migrations don't repeat the same trap.
+
+**Changes Made:**
+- `semantic_email_preview.rb`: dedicated `when "lessons_assigned"` branch that
+  invokes `LearningBuilder.build_learning_email(... variation: "lessons", alert_data:
+  { summary: { num_items: "1" } } ...)`, mirroring the existing
+  `course_inactive_learners` and `learning_path_learning_activities_assigned`
+  wiring.
+- Skill (personal + plugin): added a "Variation kinds need a `variation:`
+  parameter" callout to Step 5 with the canonical preview snippet plus the list
+  of kinds known to live in `build_variation_body`
+  (`lessons_assigned`, `learning_path_learning_activities_assigned`,
+  `course_inactive_learners`, `learning_path_enroll`,
+  `notify_pending_reviews_course`).
+
+**Notes:**
+- This is the second routing miss in two days; the skill update should prevent a
+  third by making the variation-routing check a first-class checklist item.
+- No production code or copy changed; only preview wiring + documentation.
+
+---
+
 ## 2026-05-06 - Semantic Email Template: Drop Stray Vertical Line on Reply-Only Cards
 
 **Repository:** nutella
