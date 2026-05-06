@@ -6,6 +6,28 @@ Weekly summaries and YTD running summary are in [weekly-summary-worklog.md](week
 
 ---
 
+## 2026-05-06 - Semantic Email PM Review: learning_path_pass Opt-In to Semantic Body
+
+**Repository:** nutella
+**Branch:** HS-182399/semantic-email-text-and-styling-fixes
+
+**Files Changed:**
+- nutella/web/common/email/semantic/builders/alert/immediate/learning_builder_kinds.rb
+- nutella/web/spec/unit/common/email/builders/alert/immediate/learning_builder_spec.rb
+
+**Summary:**
+PM review on `learning_path_pass`: section text was rendering "You have passed the learning path Sales Training 101" (legacy `messages_text` inlining the LP title). The semantic body copy "You have passed the following learning path:" already existed in `learning_builder.rb#body_copy_for_kind` (i18n `lBbLpBps`); the kind was just missing the one-line opt-in to `KIND_PREFERS_SEMANTIC_BODY`, so the legacy text was winning.
+
+**Changes Made:**
+- `learning_builder_kinds.rb`: added `learning_path_pass` to `KIND_PREFERS_SEMANTIC_BODY` (alphabetical position).
+- `learning_builder_spec.rb`: added a regression test under `body rewrites + opt-in` mirroring the existing `learning_path_failed` test (asserts new copy, asserts no LP title leakage, asserts kind is in `KIND_PREFERS_SEMANTIC_BODY`).
+
+**Notes:**
+- Same recipe used many times in this branch (cf. `learning_path_failed`, `learning_path_certified`, `learning_path_certification_revoked`, `learning_path_replace_contact`, `lesson_submit_failed`, `course_ending_soon`, etc.). The recipe is documented in `learning_builder_kinds.rb`'s comment block (lines 9-14 + 115-122) but isn't yet captured as a Cursor skill -- worth formalizing if more "the following <thing>:" PM rewrites arrive in this batch.
+- No `body_copy_for_kind` change needed -- the semantic copy was already in place and i18n-keyed.
+
+---
+
 ## 2026-05-06 - Semantic Email Template: Tighten Padding for Reply-Only Cards
 
 **Repository:** nutella
