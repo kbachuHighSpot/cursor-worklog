@@ -6,6 +6,27 @@ Weekly summaries and YTD running summary are in [weekly-summary-worklog.md](week
 
 ---
 
+## 2026-05-06 - Semantic Email Preview: Restore CTA Parity for bulk_items_feedback
+
+**Repository:** nutella
+**Branch:** HS-182399/semantic-email-text-and-styling-fixes
+
+**Files Changed:**
+- nutella/web/common/email/semantic/preview/legacy_compare/legacy_email_preview.rb
+
+**Summary:**
+The semantic preview comparison was missing the "View Items" CTA on `bulk_items_feedback` (and any other kind whose `[:action][:href]` resolves to a presenter-computed URL like `[:item, :alert_set_url]`). The legacy email shows the button; the semantic preview did not. Production was unaffected because `extract_presenter_text` already wires `:action_url` via `AlertPresenter#resolve_action_href` -- the gap was in `LegacyEmailPreview.build_config_defaults`, which only populated `subject` / `preheader` / `messages_text` / `action_text` and silently dropped the URL.
+
+**Changes Made:**
+- Extended `build_config_defaults` to also resolve `config[:action][:href]` via the existing `resolve_action_href` helper and write the result to `defaults[:action_url]`. Skips the `"#"` fallback so we don't render a dead button.
+
+**Notes:**
+- Generic fix per user direction: the same parity gap silently affects every kind whose href depends on a presenter-computed slot (alert_set_url, comment_url, request_access_url, enrollment_errors_table_url, etc.); they all now render their CTA in the preview matching production.
+- Kinds whose href is the plain `[:item, :url]` / `[:spot, :url]` are unaffected -- their semantic builders already build the URL directly via `build_item_url` / `build_spot_url` and ignore `config_defaults[:action_url]`.
+- The existing `share_builder` spec already pins both branches of the contract (`action_url` present -> button renders with that URL; absent -> button dropped); no new tests needed for that surface. `LegacyEmailPreview` itself is marked TEMPORARY in code, so I deliberately did not add a new spec file for it.
+
+---
+
 ## 2026-05-05 - Semantic Email PM Review: Session Reminder & Waitlist Copy Fixes
 
 **Repository:** nutella
