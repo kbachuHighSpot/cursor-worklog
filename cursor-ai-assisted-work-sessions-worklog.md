@@ -6,6 +6,30 @@ Weekly summaries and YTD running summary are in [weekly-summary-worklog.md](week
 
 ---
 
+## 2026-05-07 - Fix: lesson_submitted / lesson_submitted_new card + CTA URL parity
+
+**Repository:** nutella
+**Branch:** HS-180220/notification-emails (working branch)
+**Files Changed:**
+- nutella/web/common/email/semantic/builders/alert/immediate/learning_builder.rb
+- nutella/web/common/email/semantic/preview/semantic_email_preview.rb
+
+**Summary:**
+Fixed semantic-email parity issues for `lesson_submitted` and `lesson_submitted_new`. The semantic preview was rendering two cards (course + lesson) and the CTA was pointing at `<course_url>/review`, while legacy `:href => [:assigned_item, :review_url]` targets the lesson's review URL with a `#submission-review` fragment. The email's purpose, subject, and CTA ("Review Submission") all focus on the lesson; the course is only contextual.
+
+**Changes Made:**
+- Added a `skip_course_card` set in `LearningBuilder#build_learning_email` that suppresses the course (primary) card for `:lesson_submitted` and `:lesson_submitted_new`, leaving the lesson card as the sole, actionable card.
+- Removed `:lesson_submitted` and `:lesson_submitted_new` from the `<course_url>/review` munging case (kept `:notify_pending_reviews_course`, which legitimately uses that URL).
+- Added a dedicated `case` clause for `:lesson_submitted` / `:lesson_submitted_new` in CTA URL resolution that prefers presenter-resolved `config_defaults[:action_url]` (legacy `[:assigned_item, :review_url]`), falling back to `<lesson_url>#submission-review`.
+- Split the preview routing in `semantic_email_preview.rb` so `lesson_submit_failed` keeps its previous course-only mock setup, while `lesson_submitted` / `lesson_submitted_new` now also pass a distinct `mock_lesson` ("Module 3: Closing Techniques") so the lesson card and lesson-targeted CTA render correctly.
+
+**Notes:**
+- `lesson_submit_failed` body refers to "the following course:" so its course card stays — only the two submission-ready kinds were changed.
+- No `[RULE:inlined_card_title]` regressions: existing semantic body for these kinds is `"{user}'s Training and Coaching Lesson submission is ready for review."` (no inlined entity title).
+- Spec coverage for these two kinds still pending; preview should be re-eyeballed and a unit test added before merging.
+
+---
+
 ## 2026-05-06 - Fix: [RULE:inlined_card_title] Violations Across Families #2-7 (Pitch ownership, Spot access, Share meeting, Session proctor, Workflow, Generic, Restricted template, Learning)
 
 **Repository:** nutella
