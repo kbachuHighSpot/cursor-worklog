@@ -6,6 +6,55 @@ Weekly summaries and YTD running summary are in [weekly-summary-worklog.md](week
 
 ---
 
+## 2026-05-06 - Fix: lesson_reviewed Legacy/Semantic Preview Mock-Data Mismatch
+
+**Repository:** nutella
+**Branch:** HS-182399/semantic-email-text-and-styling-fixes
+
+**Files Changed:**
+- nutella/web/common/email/semantic/preview/legacy_compare/legacy_email_preview.rb
+
+**Summary:**
+After fixing the semantic side of `lesson_reviewed` to render only the
+course card and route the CTA to the lesson, the legacy compare side
+still rendered "Sales Training 101 in Sales Training 101 has been
+reviewed" — same name twice. Root cause: the global legacy mock
+(`mock_alert_data`) hard-codes `assigned_item.title => item.title`
+(legacy_email_preview.rb:639-643), so any kind whose body interpolates
+both `[{assigned_item}]` and `[{item}]` collapses to the course title
+twice in the legacy compare diff. Production passes a distinct lesson
+under `:assigned_item`; the semantic preview now mirrors that with
+"Module 3: Closing Techniques", so the two sides drifted.
+
+**Changes Made:**
+- `legacy_email_preview.rb` `inject_kind_specific_data!`: added a
+  per-kind clause for `:lesson_reviewed` that overrides
+  `assigned_item.title`, `assigned_item.url`, and
+  `assigned_item.results_url` to a distinct lesson identity (id
+  `lesson-001`, title "Module 3: Closing Techniques") that matches the
+  semantic preview's `mock_lesson`. Comment cites the global-mock root
+  cause so future readers see why the override exists.
+
+**Notes:**
+- `inject_kind_specific_data!` is called before `expand_messages`,
+  `build_subject`, `build_preheader`, and `build_config_defaults`, so a
+  single override covers the body text, subject, preheader, and
+  `messages_text` defaults that flow into the semantic preview's
+  legacy_config_defaults helper. Verified by reading the three render
+  paths in legacy_email_preview.rb.
+- Same global-mock symptom likely affects `lesson_submitted`,
+  `lesson_progress_reset`, `lesson_submit_failed`, and
+  `lessons_assigned` (all use `assigned_item` as a lesson and reference
+  it inline in the legacy body). Skipped them in this PR per
+  "minimal changes for bug fixes" — will address in the same hook
+  pattern when PM flags them, or proactively if they're already on the
+  next batch.
+- LP-link kinds (`course_in_learning_path_*`) are unaffected since they
+  use `assigned_item` for a course; the per-kind switch in
+  `inject_kind_specific_data!` keeps the override scoped.
+
+---
+
 ## 2026-05-06 - Fix: lesson_reviewed Was Rendering Two Item Cards + Wrong CTA URL
 
 **Repository:** nutella
