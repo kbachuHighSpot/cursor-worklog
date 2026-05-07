@@ -6,6 +6,75 @@ Weekly summaries and YTD running summary are in [weekly-summary-worklog.md](week
 
 ---
 
+## 2026-05-07 - Refactor: derive assessment preview body HTML from ALERT_CONFIG instead of hardcoding
+
+**Repository:** nutella (latest)
+**Branch:** HS-182399/semantic-email-text-and-styling-fixes
+**Files Changed:**
+- nutella/web/common/email/semantic/preview/semantic_email_preview.rb
+
+**Summary:**
+Eliminated ~70 lines of hardcoded HTML strings for assessment preview bodies
+by promoting `defaults[:messages_text]` (already produced from ALERT_CONFIG
+`:email_messages` via the existing `build_config_defaults` ->
+`expand_messages` -> `flatten_template` chain) into `messages_html`. The
+HTML renders through the same template-tag pipeline production uses, so
+the preview is automatically production-faithful and resyncs whenever the
+ALERT_CONFIG strings change.
+
+**Changes Made:**
+- Removed `build_assessment_body_html` (73 lines of hardcoded per-variation
+  HTML headers / status / footer text for `assessment_assigned`,
+  `single_assessment_completed` (3 variations), and `single_assessment_rejected`).
+- Replaced its 3 call sites with `assessment_defaults = defaults.merge(
+  messages_html: defaults[:messages_text])` so the semantic builder consumes
+  the ALERT_CONFIG-derived HTML directly.
+- Added inline comments explaining the `defaults[:messages_text]` source for
+  each kind (which ALERT_CONFIG entry / variation it derives from).
+
+**Notes:**
+- ALERT_CONFIG template tags (`HTML_P_WITH_FONT_SIZE_BIG`, `HTML_STRONG_START`,
+  `ASSESSMENT_MEETING_TITLE`, `ASSESSMENT_OPPORTUNITY_NAME`,
+  `ASSESSMENT_MEETING_START_DATE`, etc.) all resolve through
+  `AlertCommands::TEMPLATE_TAGS` against the existing `mock_alert_data`
+  meeting/assessed_user fields, so no mock-data additions were needed.
+- Other ALERT_CONFIG candidates audited but skipped:
+    * `ASSESSMENT_SUBMITTED_VARIATIONS` map - strings live in
+      `AlertCommands.create_assessment_submitted_for_*` (imperative code,
+      not config), so hardcoding is correct.
+    * `amf_assessment_submitted` mock count - just mock data.
+    * `PRODUCTION_DEFAULT_VARIATION` / `KINDS_WITH_EMPTY_EXTERNAL_COMMENT` -
+      preview-specific overrides of ALERT_CONFIG, not derivable from it.
+    * `NO_CARD_KINDS` addition - builder-side semantic concern.
+
+---
+
+## 2026-05-07 - Fix: pitch_viewed integration spec broken by preheader override
+
+**Repository:** nutella (latest)
+**Branch:** HS-182399/semantic-email-text-and-styling-fixes
+**Files Changed:**
+- nutella/web/spec/unit/common/email/semantic_email_integration_spec.rb
+
+**Summary:**
+The `Pitch Activity: pitch_viewed > mentions the actor in rendered HTML`
+integration spec was failing because the `override_preheader_with_body`
+renderer change (added in this branch) replaces the builder's explicit
+preheader with body-derived content. `pitch_activity_builder` keeps actor
+identifiers (email / forwarded_by) only in the preheader, so
+`jane@acme.com` no longer appears anywhere in the rendered HTML.
+
+**Changes Made:**
+- Renamed test from "mentions the actor in rendered HTML" to "renders the
+  pitch activity context in HTML".
+- Replaced `expect(html).to include("jane@acme.com")` with two assertions
+  on body content that IS reliably rendered: pitch name "Q4 Sales Deck"
+  and the activity body_copy "viewed item at: 2:30pm PST".
+- Added a comment explaining why actor email is no longer in HTML and
+  pointing at `SemanticEmailRenderer#override_preheader_with_body`.
+
+---
+
 ## 2026-05-07 - Wire semantic previews to vary per variation for new assessment entries
 
 **Repository:** nutella (latest)
