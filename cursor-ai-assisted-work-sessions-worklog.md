@@ -6,6 +6,61 @@ Weekly summaries and YTD running summary are in [weekly-summary-worklog.md](week
 
 ---
 
+## 2026-05-07 - Add per-production-path preview entries for assessment_submitted, single_assessment_completed, amf_assessment_submitted
+
+**Repository:** nutella (latest)
+**Branch:** (current working branch)
+**Files Changed:**
+- nutella/web/common/email/semantic/preview/semantic_email_preview.rb
+- nutella/web/common/email/semantic/preview/legacy_compare/legacy_email_preview.rb
+- nutella/web/common/email/semantic/builders/alert/immediate/learning_builder_kinds.rb
+
+**Summary:**
+Expanded the semantic email preview kind list to expose every production
+sub-path / variation for the assessment notification family, and made the
+previews production-faithful across both legacy and semantic sides.
+
+**Changes Made:**
+- semantic_email_preview.rb:
+  - Replaced single `assessment_submitted` entry with 7 variation entries
+    (manager_review, manager_review_for_direct_manager, training, meeting,
+    customer_for_user, customer_for_direct_manager, self_for_direct_manager)
+    matching the 7 `create_assessment_submitted_for_*` production paths.
+  - Added `amf_assessment_submitted/meeting` (singular) entry to complement
+    existing default `:meetings` variation.
+  - Cleaned up `assessment_submitted` semantic preview routing: dropped the
+    misleading `course: default_item` and the hardcoded "External Feedback"
+    append (production sets external_comment to "" in all 7 paths).
+  - Plumbed `entry[:variation]` through `build_immediate_single_email` →
+    `legacy_config_defaults` so per-sub-path comment overrides flow into
+    semantic preview defaults too.
+- legacy_email_preview.rb:
+  - Introduced `ASSESSMENT_SUBMITTED_VARIATIONS` map with production-faithful
+    subject / message / submessage strings for all 7 sub-paths (sourced from
+    AlertCommands lines ~9769–9914).
+  - Added `variation:` kwarg to `inject_kind_specific_data!` and dispatched
+    per-sub-path overrides for `:assessment_submitted` (preserving prod's
+    inline HTML styling for `comment.message` / `comment.submessage`).
+  - Updated `build_config_defaults` to forward `variation` into
+    `inject_kind_specific_data!` so semantic preview's `defaults[:messages_text]`
+    reflects the chosen sub-path.
+- learning_builder_kinds.rb:
+  - Added `:assessment_submitted` to `NO_CARD_KINDS` for consistency with
+    sibling assessment kinds (production carries no `:item`).
+
+**Notes:**
+- `single_assessment_completed/failed` and `single_assessment_completed/not_assessed`
+  were already in the kind list and route through standard `resolve_variation`
+  against existing ALERT_CONFIG variations - no further work needed.
+- `assessment_submitted` ALERT_CONFIG has no formal `:variations`; the
+  variation suffix is synthetic and drives only the `inject_kind_specific_data!`
+  override path. `resolve_variation` returns the config unchanged when
+  `:variations` is missing.
+- All CTAs continue to resolve via `config_defaults[:action_url]` only - no
+  fallbacks (per established rule).
+
+---
+
 ## 2026-05-07 - Fix: lesson_submitted / lesson_submitted_new card + CTA URL parity
 
 **Repository:** nutella
