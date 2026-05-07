@@ -6,6 +6,78 @@ Weekly summaries and YTD running summary are in [weekly-summary-worklog.md](week
 
 ---
 
+## 2026-05-06 - Fix: lesson_reviewed Was Rendering Two Item Cards + Wrong CTA URL
+
+**Repository:** nutella
+**Branch:** HS-182399/semantic-email-text-and-styling-fixes
+
+**Files Changed:**
+- nutella/web/common/email/semantic/builders/alert/immediate/learning_builder.rb
+- nutella/web/common/email/semantic/preview/semantic_email_preview.rb
+- nutella/web/spec/unit/common/email/builders/alert/immediate/learning_builder_spec.rb
+
+**Summary:**
+PM review pass on `lesson_reviewed` preview surfaced two bugs and one
+preview-data clarity issue:
+
+1. **Two cards rendered.** `build_learning_email`'s secondary-card block
+   added a lesson card for every kind except the LP-link kinds. For
+   `lesson_reviewed`, the body already names the lesson inline
+   ("{lesson_name} has been reviewed in the following course:") AND the
+   CTA targets the lesson — the separate card was triple-redundant.
+2. **Wrong CTA URL.** The `course_url` munging block appended `/results`
+   to the course URL. Legacy is `:href => [:assigned_item,
+   :results_url]` — the *lesson*'s results URL. The bug had been there
+   since the initial migration; nothing pointed at the right URL.
+3. **Confusable preview titles.** Mock used "Lesson 1" alongside
+   "Sales Training 101", which IS distinct but reads as a generic
+   sibling — easy to misread the lesson card as another course in the
+   diff.
+
+**Changes Made:**
+- `learning_builder.rb` cards block: hoisted the LP-link skip into a
+  `skip_lesson_card` allowlist that now also covers `:lesson_reviewed`.
+  Comment updated to spell out the three reasons (LP-link kinds use
+  inline `<a>` in html_body; `lesson_reviewed` names the lesson inline
+  in body_copy and routes the CTA to it). Only the course card renders
+  now.
+- `learning_builder.rb` button_url block:
+  - Removed the `:lesson_reviewed` clause from the `course_url` suffix
+    case (which was wrongly producing `course/results`).
+  - Added a dedicated `when :lesson_reviewed` branch that returns
+    `"#{build_item_url(lesson)}/results"` when the lesson entity is
+    available, falling back to `course_url` only when it's missing.
+    Comment cites legacy `:href` derivation.
+- `semantic_email_preview.rb`: renamed the mock lesson from
+  `"Lesson 1"` to `"Module 3: Closing Techniques"` so the legacy/semantic
+  diff makes the course-vs-lesson roles unambiguous at a glance. Title
+  is also seeded into `assigned_item.title` so the legacy compare side
+  surfaces the same lesson name.
+- `learning_builder_spec.rb`: added three new tests under the existing
+  `lesson interpolation with graceful fallback` describe block:
+  - `lesson_reviewed renders only the course card (no secondary lesson
+    card)` — locks in the cards-block fix.
+  - `lesson_reviewed CTA points at the lesson's results URL (not the
+    course's)` — locks in the CTA fix; would have caught the
+    `course/results` bug.
+  - `lesson_reviewed CTA falls back to course URL when lesson entity is
+    missing` — covers the graceful-degradation branch.
+
+**Notes:**
+- The card-rendering pattern in `build_learning_email` is starting to
+  accumulate kind-specific exceptions (LP-link kinds, lesson_reviewed).
+  The `skip_lesson_card` allowlist with a per-reason comment is the
+  cleanest reflection of the underlying principle: skip the secondary
+  card whenever the lesson is already represented in the body or as the
+  CTA target. Worth folding into the skill if more kinds end up here.
+- `course_url` is still used as a fallback by several branches even
+  though the var name no longer accurately reflects intent for
+  lesson-targeted kinds. Considered renaming to `primary_url` but the
+  rename touches enough call sites that it's not worth the diff in this
+  PR; called out for follow-up.
+
+---
+
 ## 2026-05-06 - Semantic Email PM Review: course_in_learning_path_ending_soon Inline LP Link + Card/CTA Reshuffle (Batch Audit)
 
 **Repository:** nutella
