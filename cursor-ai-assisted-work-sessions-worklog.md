@@ -6,6 +6,273 @@ Weekly summaries and YTD running summary are in [weekly-summary-worklog.md](week
 
 ---
 
+## 2026-05-06 - Fix: [RULE:inlined_card_title] Violations Across Families #2-7 (Pitch ownership, Spot access, Share meeting, Session proctor, Workflow, Generic, Restricted template, Learning)
+
+**Repository:** nutella
+**Branch:** HS-180220/notification-emails (working branch)
+**Files Changed:**
+- nutella/web/scripts/notifications-migration/compare_email_previews.py
+- nutella/web/common/email/semantic/builders/alert/immediate/pitch_relationship_builder.rb
+- nutella/web/common/email/semantic/builders/alert/immediate/spot_access_builder.rb
+- nutella/web/common/email/semantic/builders/alert/immediate/share_builder.rb
+- nutella/web/common/email/semantic/builders/alert/immediate/session_proctor_builder.rb
+- nutella/web/common/email/semantic/builders/alert/immediate/workflow_builder.rb
+- nutella/web/common/email/semantic/builders/alert/immediate/restricted_template_updated_builder.rb
+- nutella/web/common/email/semantic/builders/alert/immediate/generic_builder.rb
+- nutella/web/common/email/semantic/builders/alert/immediate/learning_builder_kinds.rb
+- nutella/web/common/email/semantic/builders/alert/immediate/learning_builder.rb
+- nutella/web/common/email/semantic/preview/semantic_email_preview.rb
+- nutella/web/spec/unit/common/email/builders/alert/immediate/collaborator_builder_spec.rb
+- nutella/web/spec/unit/common/email/builders/alert/immediate/ownership_transfer_builder_spec.rb
+- nutella/web/spec/unit/common/email/builders/alert/immediate/send_failed_builder_spec.rb
+- nutella/web/spec/unit/common/email/builders/alert/immediate/request_access_builder_spec.rb
+- nutella/web/spec/unit/common/email/builders/alert/immediate/share_builder_spec.rb
+- nutella/web/spec/unit/common/email/builders/alert/immediate/session_proctor_builder_spec.rb
+- nutella/web/spec/unit/common/email/builders/alert/immediate/generic_builder_spec.rb
+- /Users/kiran.bachu/.cursor/skills/migrate-semantic-email-body-copy/SKILL.md
+
+**Summary:**
+Cleared the remaining `[RULE:inlined_card_title]` violations from the semantic-email migration report by walking the rspec.log family-by-family. Family #1 (Send-failed) had been completed earlier; this session covered Families #2-7 across two distinct fix patterns:
+- **Pattern B (direct builder method body)** for builders where `body_copy` was assigned directly from `config_defaults[:messages_text]` (Send-failed, Pitch ownership/collaborator, Spot access, Share meeting, Session proctor unassigned, Workflow, Generic policy-violation, Restricted template) — replaced with builder-local helpers that emit "the following <entity>:" wording without inlining titles.
+- **Pattern A (LearningBuilder allowlist)** for kinds whose `body_copy_for_kind` clauses already used the right wording but weren't opted into `KIND_PREFERS_SEMANTIC_BODY` — flipped the precedence so the semantic body wins over legacy `messages_text`.
+
+Also cleaned up two latent **inverted-precedence bugs** in `workflow_builder.rb` and `generic_builder.rb` where `body_copy = strip_html_tags(config_defaults[:messages_text]) || body_copy` was overwriting the carefully-built semantic body with the legacy text the builder had just rejected.
+
+**Changes Made:**
+
+*Family #2 — Pitch ownership / collaborator (9 kinds):*
+- Renamed `pitch_relationship_body_noun(_plural)` → `pitch_relationship_body_entity(_plural)` and updated all i18n placeholders from `{noun}` to `{entity}` to match user-preferred terminology.
+- Added `from_display_name`, `build_collaborator_added_body_copy`, `build_collaborator_removed_body_copy`, `build_pitch_ownership_transfer_body_copy`, `build_bulk_ownership_transfer_body_copy`, `build_ownership_transferred_to_you_body_copy` helpers; replaced every `messages_text` body assignment in the 5 builder methods with these helpers.
+- `build_bulk_pitch_ownership_transfer_email` now accepts `num_items:` and registration lambdas thread the count from alert data.
+- Digital rooms render as "External Share" (legacy term) per user choice.
+- Added preview route for `digital_room_collaborator_removed` (was missing — user noted only 5 of 6 kinds appeared in previews).
+- `collaborator_builder_spec.rb` and `ownership_transfer_builder_spec.rb` rewritten to assert new wording, no inlined pitch titles, from-user fallbacks, External Share for digital rooms, pluralization for bulk transfers.
+
+*Family #3 — Spot access (4 kinds):*
+- Added `from_display_name`, `build_spot_access_body_copy(from_user, access_message)` (preserves dynamic verb phrase from `data.spot_access.message` like "granted you access to" / "made you a co-owner of"), `build_request_access_body_copy(from_user, item)`, `build_support_request_body_copy(from_user, message)`.
+- `build` reads `data.spot_access&.message` and threads it as `access_message:` through `build_spot_access_email`.
+- `build_request_access_spot_email` `with_item` body changed from "{from} requested access to {spot_title} to view the following item:" to "{from} requested access to the following spot to view {item}:" — drops spot title (it's on the card).
+- Removed obsolete `strip_entity_inline` call.
+- Preview helper passes `access_message: "granted you access to"` to mirror production.
+- Updated `request_access_builder_spec.rb`: dropped the assertion that body includes "Confidential Playbook"; added contexts for from-user fallback, no-from variations, support request wording, and a full `build_spot_access_email` describe block (verb-substitution, partner-user fallback, default verb when access_message missing).
+
+*Family #4 — Share meeting (2 kinds):*
+- Added `build_share_meeting_body_copy(from_user, shared_full_meeting)` — produces "{from} has shared the following meeting with you:" / "the following meeting highlight" / no-from fallbacks.
+- `build_share_meeting_email` now uses the helper instead of `strip_html_tags(config_defaults[:messages_text])`.
+- Added a `describe ".build_share_meeting_email"` block in `share_builder_spec.rb` covering full-meeting / highlight / no-from variants and asserting the meeting title is on the card but not in the body.
+
+*Family #6 — Session proctor unassigned (2 kinds, also fixed assigned title path):*
+- Added `:session_proctor_unassigned` entry to the `SECTION_TITLE` lambda ("Session instructor unassigned").
+- Replaced the catch-all `else strip_html_tags(config_defaults[:messages_text])` body branch with an explicit `when :session_proctor_unassigned` clause that produces "You have been removed as a Session Instructor for the following session on {session_date}:" plus a date-less fallback.
+- Updated `session_proctor_builder_spec.rb`: replaced "preserves the legacy messages_text" assertions with the new semantic body assertions, added a date-less fallback test, and asserted the new section title.
+
+*Family #7 — Workflow / Generic / Restricted template (6 kinds):*
+- `workflow_builder.rb`: removed line `body_copy = strip_html_tags(config_defaults[:messages_text]) || body_copy` which was overwriting the carefully constructed variation body with the legacy text. The semantic body now wins for `workflow_items_reviewed_decline`, `workflow_items_reviewed_decline_step_aware`, `workflow_items_reviewed_submit_for_review`, `workflow_items_reviewed_approve_level`.
+- `generic_builder.rb` (`build_items_violate_spot_policy_email`): same inverted-precedence fix — removed the `strip_html_tags(config_defaults[:messages_text]) || body_copy` line so "The following Spot has..." wins over the legacy "{Spot title} has...".
+- `restricted_template_updated_builder.rb`: fixed the data-class `property :restricted_template` → `:restricted_template_item` (the actual payload key); added `fetch_template_item` that calls `EntityFetch.item` with `treat_nil_as_missing: Hspt::EntityCache::GRANDFATHER_TRUE` (matching the existing pattern); added `build_restricted_template_updated_body_copy(from_user, variation, template_title, num_items)` with 4 graceful-fallback branches per variation (with/without from-user, with/without template title); threaded `template_title:` and `num_items:` through `build_restricted_template_updated_email` and the preview helper.
+- `generic_builder_spec.rb`: added meaningful assertions for `build_items_violate_spot_policy_email` covering both `:default` and `:item` variations and verifying the spot title is not inlined in the body.
+
+*Family #5 — LearningBuilder Pattern A (~17 kinds):*
+- Extended `KIND_PREFERS_SEMANTIC_BODY` from 24 → 41 kinds. Added: `amf_assessment_submitted`, `amf_single_assessment_submitted`, `course_due_date_overdue`, `course_due_date_reminder`, `course_replace_contact`, `enrollment_errors_added`, `learning_path_certs_disabled`, `learning_path_certs_earned_disabled`, `learning_path_certs_enabled`, `learning_path_completed`, `learning_path_due_date_overdue`, `learning_path_due_date_reminder`, `learning_path_ending_soon`, `learning_path_enroll`, `learning_path_incomplete`, `learning_path_overdue`, `lesson_author_for_required_ranges_item_version_update`. All these kinds already had `body_copy_for_kind` clauses producing "the following <thing>:" copy; they just weren't opted in.
+- Added a missing `body_copy_for_kind` case for `:learning_path_due_date_reminder` (the only newly-opted-in kind without one) — produces "The following learning path has a due date of {due_date} ({timezone}). Please complete it before the deadline." with a no-tz fallback (`lPdRmTzN` / `lPdRmNoTz`).
+
+**Notes:**
+- All Ruby syntax checks and lint passes confirmed across the modified files. Existing `learning_builder_spec.rb` blocks for kinds I newly opted in (`lesson_author_for_required_ranges_item_version_update`, `enrollment_errors_added`, `learning_path_overdue` cluster, certs) only assert section titles — they continue to pass.
+- The `compare_email_previews.py` script was updated earlier this session to (a) replace the strict legacy-vs-semantic preheader equality check with `[PREHEADER MISSING]` / `[PREHEADER LENGTH]` rules (≤200 chars) and (b) tailor the `[RULE:inlined_card_title]` violation message based on whether the kind is a LearningBuilder kind (Pattern A) or non-LearningBuilder kind (Pattern B), so future report runs guide the engineer to the right fix shape.
+- The `migrate-semantic-email-body-copy` Cursor skill was rewritten in the same session to fully document Pattern A vs. Pattern B with file-by-file recipes, gotchas, and the `SendFailedBuilder` worked example.
+- Consistent terminology pivot: where the body builders previously referred to the type (pitch/External Share/spot/etc.) as a "noun", everything now uses "entity" both in code and i18n placeholders.
+- All comments in the modified builders/specs were stripped of references to Cursor skills and `[RULE:...]` migration tags — those were one-time scaffolding for the migration and now read as noise in the final source.
+- All legacy `ALERT_CONFIG` entries in `alert_commands.rb` remain untouched — semantic-only scope per the running design decision.
+
+---
+
+## 2026-05-06 - Fix: session_learner/proctor_upcoming_reminder Previews Missing Item Card + Reply Card
+
+**Repository:** nutella
+**Branch:** HS-182399/semantic-email-text-and-styling-fixes
+
+**Files Changed:**
+- nutella/web/common/email/semantic/builders/alert/immediate/generic_builder.rb
+- nutella/web/common/email/semantic/preview/semantic_email_preview.rb
+- nutella/web/spec/unit/common/email/builders/alert/immediate/generic_builder_spec.rb
+
+**Summary:**
+PM flagged that `session_learner_upcoming_reminder` and
+`session_proctor_upcoming_reminder` previews were missing both the item
+card (the training event) and the reply card (the trainer's comment).
+Two distinct root causes — one preview-infrastructure, one builder
+plumbing — fixed together because the two symptoms always co-occur for
+these kinds and a partial fix would leave a half-rendered card.
+
+**Root Cause #1 — Item card silently dropped in preview**
+
+`SemanticEmailPreview.mock_alert` built `data["item"]` (and `data["spot"]`)
+WITHOUT an `"id"` key — only title / url / description / etc. The
+GenericBuilder registration lambda calls `fetch_item(data)` →
+`EntityFetch.item(ref[:id], ...)` which returns nil immediately when
+`ref[:id]` is nil. So the registered lambda received no item, and
+`build_generic_immediate_email` skipped its `if item; cards << build_item_card(...); end`
+branch — silently producing a card-less email in the preview.
+
+This bug only surfaces for kinds routed through `build_generic_kind_preview`
+(which invokes the registered lambda) — not for kinds routed through
+direct `build_*_email` calls in `build_immediate_single_email` (which
+pass mock entities explicitly). The two upcoming-reminder kinds are
+exactly in the registered-lambda path, hence the symptom.
+
+Compounding factor: even after adding `id` to `data["item"]`, the
+EntityCache only contained the default `mock_item` (id `MOCK_IDS[:item]`
+= `"aaaa…101"`) seeded by `prepopulate_entity_cache` — NOT the
+alert-specific `item_obj` (id `"item-000"`). A cache miss still
+returned nil. Fix had to seed the cache with mock_alert's own entities.
+
+**Root Cause #2 — Reply card rendered as inline body text**
+
+Both kinds carry `:comment => FROM_WROTE_COMMENT_MARKDOWN_HTML` in
+their legacy ALERT_CONFIG (alert_commands.rb:3434, 3475), so
+`has_comment_config` was true and the GenericBuilder registration block
+DID process the comment — but appended it as plain text:
+
+  body_text = [body_text, "Alice Smith wrote: Great work…"].compact.join("\n\n")
+
+This is the "free-floating sentence at the bottom of the body" pattern,
+not the LearningBuilder-style "reply chip on the item card" pattern
+(which the PM expected for parity with other Learning & Courses kinds).
+`build_generic_immediate_email` had no `replies:` parameter at all, so
+there was no path to attach a reply to the item card.
+
+**Fix (3 layers):**
+
+1. **mock_alert id+cache seeding** (`semantic_email_preview.rb`)
+   - Added `"id" => item_obj.id` to `data["item"]`
+   - Added `"id" => spot_obj.id` to `data["spot"]`
+   - At the end of `mock_alert`, seed `Hspt::EntityCache` with the
+     constructed item/spot/pitch/group entities under both their direct
+     id (`"item-000"`) AND the `"alert_<id>"` alias used by AlertPresenter.
+     This is in addition to (not replacing) `prepopulate_entity_cache`'s
+     defaults — different IDs, no overwrite.
+   - Side benefit: any other kinds routed through `build_generic_kind_preview`
+     or `build_via_registry` that previously dropped their item cards
+     for the same root cause will now render correctly.
+
+2. **`replies:` plumbing** (`generic_builder.rb#build_generic_immediate_email`)
+   - Added `replies: []` keyword param.
+   - Pass replies to `build_item_card(item, item_url, to_user, replies: replies)`.
+   - If item is missing, fall back to attaching replies to the spot card
+     (preserves graceful degradation for spot-only generic kinds).
+   - Default empty array preserves backwards compatibility — no other
+     caller passes `replies:` so no behaviour change for existing kinds.
+
+3. **`COMMENT_AS_REPLY_KINDS` allowlist** (`generic_builder.rb`)
+   - New constant listing the two upcoming-reminder kinds.
+   - In the `ALL_GENERIC_KINDS.each` registration lambda, the existing
+     `if has_comment_config` block now branches:
+     - kind in `COMMENT_AS_REPLY_KINDS` → `replies << build_reply(from, to, comment_msg)`
+     - otherwise → existing inline-text append (unchanged for all other kinds)
+   - Replies array threads through to `build_generic_immediate_email`.
+
+**Spec Coverage** (`generic_builder_spec.rb`):
+- New `describe "COMMENT_AS_REPLY_KINDS"` block asserting the constant
+  contains exactly the two upcoming-reminder kinds (catches accidental
+  drift / new kinds being added without explicit decision).
+- New `describe ".build_generic_immediate_email replies plumbing"`
+  block with two assertions:
+  - When `replies:` is passed and `item:` is present, the item card's
+    `:replies` field equals the passed array.
+  - Default behaviour (no `replies:` kwarg) still produces an empty
+    `:replies` array on the item card — protects backwards compat.
+
+**Notes:**
+- The `mock_alert` cache-seeding is intentionally permissive: it seeds
+  ALL entities present (item / spot / pitch / group) under their actual
+  IDs, not just the two upcoming-reminder kinds. This is correct because
+  the bug applies universally to any kind going through the registry
+  preview path — the upcoming reminders just happened to be the ones a
+  PM noticed first.
+- `build_generic_immediate_email` now also passes `replies:` to
+  `build_spot_card` when item is absent — preserves the "reply attaches
+  to the primary card" invariant for spot-only generic kinds (none
+  currently in `COMMENT_AS_REPLY_KINDS`, but the plumbing is consistent).
+- Production behaviour for `session_*_upcoming_reminder` is unchanged
+  text-wise, but the comment now renders as a proper reply chip on the
+  training event card — same content, better UX, matches the
+  LearningBuilder pattern PM is familiar with from other Learning kinds.
+- Did NOT touch the legacy compare side: legacy ALERT_CONFIG already
+  has `:comment` configured for both kinds, so the legacy preview
+  pipeline already renders the comment via its standard path.
+
+**Follow-up (same session):** PM noticed an extra unrelated "Q4 Sales
+Playbook" item card on the `session_learner_upcoming_reminder` preview
+after the above fix. Root cause: production payload for both upcoming
+reminder kinds (alert_commands.rb:8376-8385) contains only
+`:item / :comment / :training_event / :offset / :session_info /
+:email_attachment` — no `:spot`. But `mock_alert` always injects
+`data["spot"]`, and the previous fix's universal cache-seeding now
+makes `fetch_spot` resolve that mock spot — so a spot card rendered
+next to the training event card. Before the fix, `fetch_spot` returned
+nil (id miss) and the spot card was silently dropped — masking this
+mismatch.
+
+Fix: added a per-kind clause to mock_alert's `case kind_sym` block
+that calls `data.delete("spot")` for both upcoming reminder kinds.
+Preview now faithfully matches production payload shape and renders
+only the training event card (with reply chip).
+
+---
+
+## 2026-05-06 - Semantic Email PM Review: learning_path_not_certified body rewrite + opt-in
+
+**Repository:** nutella
+**Branch:** HS-182399/semantic-email-text-and-styling-fixes
+
+**Files Changed:**
+- nutella/web/common/email/semantic/builders/alert/immediate/learning_builder.rb
+- nutella/web/common/email/semantic/builders/alert/immediate/learning_builder_kinds.rb
+- nutella/web/spec/unit/common/email/builders/alert/immediate/learning_builder_spec.rb
+
+**Summary:**
+PM asked for `learning_path_not_certified` section text:
+"You did not earn the following certification:". Existing semantic body
+read "You did not earn the certification for the following learning path:"
+— old framing that referred to the LP entity in the inline copy. New
+copy mirrors the parallel `learning_path_certified` rewrite ("You have
+earned the following certification:") and aligns with the legacy
+ALERT_CONFIG framing (subject "You did not earn the [{item}]
+certification", action "View Certification").
+
+**Changes:**
+1. `learning_builder.rb` — rewrote the `when :learning_path_not_certified`
+   clause in `body_copy_for_kind` with a fresh i18n id `lBbLpNcF` (old
+   `lBbLpAnc` retired so existing translations don't fall out of sync).
+2. `learning_builder_kinds.rb` — added `:learning_path_not_certified` to
+   `KIND_PREFERS_SEMANTIC_BODY` (alphabetical: between
+   `:learning_path_learning_activities_assigned` and
+   `:learning_path_pass`). Without this opt-in the rewrite would have
+   stayed dormant — `body_copy_for_kind` returns the new string, but the
+   precedence wiring in `build_learning_email` defaults to legacy
+   `messages_text` (which inlines the LP title) for kinds not on the
+   allowlist. This is the same precedence trap that bit
+   `course_inactive_learners` earlier in the session.
+3. `learning_builder_spec.rb` — added regression spec mirroring the
+   `learning_path_pass` / `learning_path_unenrolled` pattern: asserts
+   exact body string, asserts no LP title leaks ("Sales Training 101"),
+   AND asserts `KIND_PREFERS_SEMANTIC_BODY` membership (the third
+   assertion guards against silent regressions where a future change
+   removes the opt-in and the spec keeps passing on the same legacy
+   default text).
+
+**Notes:**
+- This kind already had a `when` clause and was framed via section title
+  "Certification not earned" (`lBcNcN2b` in `learning_builder.rb:268`,
+  `learning_builder_kinds.rb:66`). Only the body needed rewriting.
+- Did NOT touch the legacy `ALERT_CONFIG[:learning_path_not_certified]`
+  copy in `alert_commands.rb` — that drives both the Velocity legacy
+  template and the AlertPresenter subject; changing it would affect more
+  than the semantic email body. The semantic-side rewrite is sufficient
+  because `KIND_PREFERS_SEMANTIC_BODY` makes the new body win.
+
+---
+
 ## 2026-05-06 - Fix: lesson_progress_reset Production Entity-Reversal Bug + Preview/Mock Alignment + No-CTA + Card Cleanup
 
 **Repository:** nutella
