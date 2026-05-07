@@ -6,6 +6,45 @@ Weekly summaries and YTD running summary are in [weekly-summary-worklog.md](week
 
 ---
 
+## 2026-05-07 - Jira: close 26.4.0 work and split CS1 epic into beta follow-up
+
+**Repository:** N/A (Jira via MCP)
+**Files Changed:** N/A
+
+**Summary:**
+Closed out the 26.4.0-shippable work from epic [HS-179437](https://highspot.atlassian.net/browse/HS-179437)
+("Notifications CS1 - Foundations (UX + Rules Engine)") and reparented the
+remaining open scope to the new beta epic
+[HS-183484](https://highspot.atlassian.net/browse/HS-183484)
+("Notifications CS1 - Foundations - [Highspot Beta]") so each epic now reflects
+a single release boundary.
+
+**Changes Made:**
+- Set Fix Version `26.4.0` and transitioned to `Closed` on the 8 "Ready for Test"
+  tickets: HS-183699, HS-182039, HS-180233, HS-180222, HS-180220, HS-180219,
+  HS-180218, HS-180217. Two distinct close transitions were used (id `551` for
+  Tasks/Bugs, id `531` for Features); HS-182039 (Bug) required a Root Cause
+  Category and was closed with "Root Cause Category Not Applicable".
+- Reparented 14 remaining open tickets (To-Do / In Progress / Code Review) to
+  HS-183484: HS-183419, HS-182399, HS-180232, HS-180231, HS-180230, HS-180229,
+  HS-180228, HS-180227, HS-180226, HS-180225, HS-180224, HS-180223, HS-180221,
+  HS-156497.
+- Left HS-152606 (already Closed under HS-179437 with fix version 26.2.1) in
+  place per user direction.
+
+**Final state:**
+- HS-179437: 9 children, all Closed (1 with 26.2.1, 8 with 26.4.0).
+- HS-183484: 14 open children (12 To-Do, 1 In Progress, 1 Code Review).
+
+**Notes:**
+- All edits via the Atlassian MCP (`editJiraIssue`, `transitionJiraIssue`).
+- Used the `parent` field to reparent; both `parent` and `customfield_10008`
+  (Epic Link) updated server-side. Initial JQL re-query showed indexing lag of a
+  few seconds; per-issue `getJiraIssue` confirmed the reparenting on every
+  ticket.
+
+---
+
 ## 2026-05-07 - Refactor: derive assessment preview body HTML from ALERT_CONFIG instead of hardcoding
 
 **Repository:** nutella (latest)
