@@ -6,6 +6,53 @@ Weekly summaries and YTD running summary are in [weekly-summary-worklog.md](week
 
 ---
 
+## 2026-05-07 - Wire semantic previews to vary per variation for new assessment entries
+
+**Repository:** nutella (latest)
+**Branch:** (current working branch)
+**Files Changed:**
+- nutella/web/common/email/semantic/preview/semantic_email_preview.rb
+
+**Summary:**
+Made the SEMANTIC preview body render production-faithful per-variation copy
+for the new variation entries added in the prior commit. Previously all
+variation entries rendered an identical semantic preview because the
+routing didn't account for the variation. Now `single_assessment_completed`
+shows correct status/header/footer per `:active` / `:failed` / `:not_assessed`,
+and `amf_assessment_submitted` shows singular vs plural meeting copy.
+
+**Changes Made:**
+- `build_assessment_body_html`:
+  - Added `variation:` kwarg.
+  - For `:single_assessment_completed`, the body now switches header text,
+    intro text, status string, and footer text based on the variation
+    (`:active` -> "Published" / "Take a moment to read the feedback.",
+    `:failed` -> "Failed - The assessment could not be generated due to
+    system error." / "You can retry the assessment with other skills...",
+    `:not_assessed` -> "Not Assessed - The assessment resulted in Skills
+    that weren't observable..." / no footer).
+- `single_assessment_completed` semantic preview routing:
+  - Passes `variation:` to `build_assessment_body_html` so the rendered
+    `messages_html` reflects the per-variation production copy.
+- `amf_assessment_submitted` semantic preview routing:
+  - Passes `variation:` to `build_learning_email`.
+  - Sets `meetings: { count: "1" }` for `:meeting` (singular), `"3"` for
+    `:meetings` (plural) so `body_copy_for_kind` picks the matching
+    singular/plural template.
+
+**Notes:**
+- `assessment_submitted/<sub_path>` semantic previews now naturally vary
+  through `defaults[:messages_text]` because the prior commit plumbed
+  `entry[:variation]` through `legacy_config_defaults` -> `build_config_defaults`
+  -> `inject_kind_specific_data!`. Since `:assessment_submitted` is not in
+  `KIND_PREFERS_SEMANTIC_BODY`, the legacy `messages_text` precedence
+  produces the per-sub-path body. No additional routing change needed.
+- Subject also varies per sub-path because ALERT_CONFIG's `ASSESSMENT_SUBJECT`
+  template pulls from `data["subject"]["message"]` which is overridden in
+  `inject_kind_specific_data!`.
+
+---
+
 ## 2026-05-07 - Add per-production-path preview entries for assessment_submitted, single_assessment_completed, amf_assessment_submitted
 
 **Repository:** nutella (latest)
