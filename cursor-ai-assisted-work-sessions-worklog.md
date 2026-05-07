@@ -6,6 +6,106 @@ Weekly summaries and YTD running summary are in [weekly-summary-worklog.md](week
 
 ---
 
+## 2026-05-06 - Fix: lesson_progress_reset Production Entity-Reversal Bug + Preview/Mock Alignment + No-CTA + Card Cleanup
+
+**Repository:** nutella
+**Branch:** HS-182399/semantic-email-text-and-styling-fixes
+
+**Files Changed:**
+- nutella/web/common/email/semantic/builders/alert/immediate/learning_builder.rb
+- nutella/web/common/email/semantic/builders/alert/immediate/learning_builder_kinds.rb
+- nutella/web/common/email/semantic/preview/semantic_email_preview.rb
+- nutella/web/common/email/semantic/preview/legacy_compare/legacy_email_preview.rb
+- nutella/web/spec/unit/common/email/builders/alert/immediate/learning_builder_spec.rb
+
+**Summary:**
+PM flagged `lesson_progress_reset` preview text as wrong. Investigation
+surfaced a multi-layer bug — far beyond the surface-level "preview shows
+'A lesson has been updated...' instead of '{lesson_name}'" symptom. PM
+confirmed scope = full correctness, so all five layers fixed in one PR.
+
+Root cause: `lesson_progress_reset` is the only lesson kind where
+`AlertCommands.create_lesson_progress_reset` writes `:item => lesson`
+and `:assigned_item => course` — REVERSED from every other lesson kind
+(which use `:item => course, :assigned_item => lesson`). The legacy
+template handles this naturally because it interpolates by key
+(`[{item}]` for the lesson, `[{assigned_item_title}]` for the course),
+but the semantic builder's `LEARNING_KINDS.each` registration block
+reads positionally:
+
+  course = fetch_item(data, :item)        # = LESSON_entity, mis-named!
+  lesson = fetch_item(data, :assigned_item)  # = COURSE_entity, mis-named!
+
+So `body_copy_for_kind` reads `lesson.title` and renders the COURSE
+title in the lesson slot. Production semantic emails for this kind
+have been shipping "The lesson [course name] has been updated..." since
+this kind was migrated. Plus the legacy `ALERT_CONFIG` has no `:action`
+slot, so the semantic CTA was also wrong (legacy is button-less).
+
+**Changes Made:**
+- `learning_builder.rb` registration block: added a per-kind entity
+  swap (`if kind_sym == :lesson_progress_reset; course, lesson = lesson, course; end`)
+  immediately after the `fetch_item` calls. Comment cites
+  `AlertCommands.create_lesson_progress_reset` and the legacy
+  template's `[{item}]`/`[{assigned_item_title}]` token placement so
+  future readers see the production-data shape.
+- `learning_builder_kinds.rb`: added `:lesson_progress_reset` to
+  `NO_CTA_KINDS` (legacy has no `:action`).
+- `learning_builder.rb` `skip_lesson_card` allowlist: added
+  `:lesson_progress_reset` (lesson is named inline in body_copy AND
+  there's no CTA, so a separate card would have no purpose). Comment
+  block updated with the third reason for the skip pattern.
+- `semantic_email_preview.rb`: split `lesson_progress_reset` out of the
+  shared `lesson_submitted, lesson_progress_reset, lesson_submit_failed,
+  lesson_submitted_new` clause. New dedicated route passes
+  `course: default_item, lesson: mock_lesson` (with title
+  "Module 3: Closing Techniques", id `lesson-001`) — natural call
+  shape for `build_learning_email` (the registration swap means
+  production-data layout is the inverse). Comment notes the swap
+  rationale.
+- `legacy_email_preview.rb` `inject_kind_specific_data!`: added
+  `:lesson_progress_reset` clause that overrides `data["item"]`
+  (title + name + url) to a lesson identity (id `lesson-001` matching
+  the semantic preview's `mock_lesson`). Leaves
+  `data["assigned_item"]["title"]` at its default ("Sales Training 101")
+  which is what `[{assigned_item_title}]` correctly resolves to for
+  this kind.
+- `learning_builder_spec.rb`: added three new assertions next to the
+  existing lesson_progress_reset interpolation tests:
+  - `lesson_progress_reset is in NO_CTA_KINDS`
+  - `lesson_progress_reset has no CTA button` (asserts
+    `section_action.dig(:button).nil?`)
+  - `lesson_progress_reset renders only the course card (no lesson
+    card)` — locks in the skip_lesson_card extension.
+
+  Existing tests at L516-L533 (body interpolation with lesson present
+  and dataless fallback) stay green: they call `build_learning_email`
+  directly in natural (course=course, lesson=lesson) shape, bypassing
+  the registration swap which only fires on the production path.
+
+**Notes:**
+- Two-call-site contract for `build_learning_email`: the production
+  registration block now normalises entity layout via per-kind swaps
+  (LP-link kinds had this already; lesson_progress_reset added now), so
+  direct callers (tests, preview) can always pass entities in their
+  natural roles. This separation keeps `build_learning_email`'s
+  internals consistent and pushes production-data-shape weirdness to
+  the boundary where it belongs.
+- The skill's "Variation kinds need a `variation:` parameter" /
+  "entity arguments need to be seeded" callouts cover Step 5 routing
+  traps but don't currently mention the production-data-layout
+  asymmetry that lesson_progress_reset hit. Worth adding a "production
+  data layout asymmetries (item-vs-assigned_item swaps)" callout to
+  the skill — there are two now (LP-link kinds, lesson_progress_reset);
+  if a third surfaces it's officially a pattern.
+- `course_url` variable in `button_url` resolution is now misnamed for
+  three kinds (lesson_reviewed targets the lesson; LP-link kinds target
+  the course-after-swap; lesson_progress_reset has no button so it
+  doesn't matter). Rename to `primary_url` flagged in earlier worklog
+  entry; still worth a follow-up if the kind list keeps growing.
+
+---
+
 ## 2026-05-06 - Fix: lesson_reviewed Legacy/Semantic Preview Mock-Data Mismatch
 
 **Repository:** nutella
