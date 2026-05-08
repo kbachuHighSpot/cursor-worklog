@@ -6,6 +6,98 @@ Weekly summaries and YTD running summary are in [weekly-summary-worklog.md](week
 
 ---
 
+## 2026-05-08 - compare_email_previews.py: add 14 new migration rule checks
+
+**Repository:** latest (nutella/web)
+**Branch:** kbachu/email-rendering
+**Files Changed:**
+- nutella/web/scripts/notifications-migration/compare_email_previews.py
+- nutella/web/scripts/notifications-migration/README.md
+
+**Summary:**
+Added 14 new migration-rule checks to `compare_email_previews.py` to catch
+recurring classes of legacy → semantic email regressions that the existing
+checks missed. Tuned each rule against the full 312-kind sweep until only
+genuine bugs remained (15 → 2 hits after FP fixes).
+
+**Changes Made:**
+
+Phase 1 — simple structural / hygiene checks:
+- `[RULE:duplicate_sections]` — flag identical 28px section titles rendered
+  twice (builder loop bug). Skipped for `digest` (per-notification
+  timestamps render at 28px legitimately).
+- `[RULE:body_copy_length]` — flag `body_copy` (16px / `#717171`) > 300
+  chars after HTML stripping (signals `messages_text` was dumped into
+  body_copy instead of being split into sections / cards / replies).
+- `[RULE:empty_links]` — flag `<a href="">` / `<a href="#">` /
+  `<a href="javascript:…">` and anchors with empty visible text. Strips
+  MSO conditional comments before scanning.
+- `[RULE:url_encoding]` — flag URLs with `&amp;amp;` (double-escaping).
+- `[RULE:sensitive_data]` — flag mock IDs (`aaaaa…<digits>` /
+  `bbbbb…<digits>`) and `localhost` / `127.0.0.1` in user-visible text.
+
+Phase 2 — count parity:
+- `[RULE:item_count]` — legacy renders ≥3 distinct item-like entity links
+  but semantic emits ≤1 card (catches `entities: [items.first]`
+  truncation).
+- `[RULE:card_count]` — body says "N items" / "N lessons" with a small
+  enumerable count (3–10) but semantic renders ≥2 fewer cards. Left-
+  boundary regex prevents matching counts inside titles
+  (e.g. "Sales Training 101 Lesson").
+
+Phase 3 — completeness:
+- `[RULE:reply_completeness]` — every reply card must populate author,
+  timestamp, AND comment body (extends `[RULE:reply_avatar]` which only
+  checks the avatar). Walks `<td class="card-reply">` blocks via TD-
+  depth scan.
+- `[RULE:card_meta]` — legacy mentions entity attribution (by author /
+  last updated / duration / due) but semantic cards have no `meta_data`
+  populated (no 14px `#888888` line under card title).
+- `[RULE:default_avatar]` — legacy renders the real user avatar
+  (HTTP/HTTPS image) but semantic falls back to the SVG default avatar
+  data URI. Catches builders calling `default_user_avatar_url` instead
+  of `get_user_avatar_url(reply_user)`.
+
+Phase 4 — presence parity (symmetric):
+- `[RULE:cta_presence]` — legacy renders a styled CTA button but
+  semantic emits no `section_action` (`class="section-cta-btn"` marker).
+- `[RULE:header_parity]` — legacy and semantic must agree on header
+  presence (both directions: missing header on either side is flagged).
+- `[RULE:footer_parity]` — same symmetry for footer presence
+  (manage prefs / unsubscribe / © line).
+
+Phase 5 — URL semantics:
+- `[RULE:card_url_type]` — semantic card URL points at a different
+  entity-type bucket than legacy URL for the same entity title
+  (e.g. legacy `/items/<id>`, semantic `/spots/<id>` — wrong url-builder
+  method).
+
+Wiring & scoping:
+- Threaded `category` through `check_migration_rules`. ALERT-only rules
+  (`item_count`, `card_count`, `card_meta`, `body_copy_length`,
+  `sensitive_data`, `duplicate_sections`) skip non-`immediate_*` and
+  `digest` categories where the conventions differ.
+- Header / footer / cta / default-avatar parity rules skip when
+  `extract_legacy_body(leg_html) is None` (other_emails / ops_emails
+  meta-only preview pages with no rendered legacy email).
+
+README updated with all 14 new rule descriptions in the migration-rule
+table.
+
+**Notes:**
+- Full 312-kind sweep result: pass 188 / fail 124 (up from 182 / 130 —
+  6 kinds moved from FAIL to PASS as previously-firing FPs went away).
+- 14 new rules → 2 surviving hits (1 real `[RULE:empty_links]` on
+  `invite`, 1 borderline `[RULE:card_count]` on
+  `restricted_template_updated__default`).
+- FP fixes during tuning: HTML strip before length measurement
+  (`body_copy_length`), left-boundary regex for count phrases
+  (`card_count`), small-count gating (`card_count`), category scoping
+  (alert-only for several rules), legacy meta-page detection (parity
+  rules).
+
+---
+
 ## 2026-05-08 - semantic_email.mjml.erb: fix entity card text column wrapping below thumbnail
 
 **Repository:** latest (nutella/web)
@@ -3231,31 +3323,5 @@ Applied a batch of PM-review copy fixes to Learning & Courses semantic emails. S
 - `lesson_reviewed` and `lesson_progress_reset` use `lesson.title` for interpolation; if `lesson` isn't supplied to the builder the body falls back to a generic phrasing (no broken `{lesson_name}` placeholder leaks into the rendered email).
 - `lessons_assigned` collapse uses `subs[:amount].presence || "1"` so the legacy `lesson` variation (which doesn't carry `num_items`) still renders grammatically.
 - All legacy `ALERT_CONFIG` entries in `alert_commands.rb` are intentionally untouched — semantic-only scope per the running design decision.
-
----
-## 2026-05-08 - Preheader correctness checks + entity-card layout regression fix
-
-**Repository:** nutella
-**Branch:** HS-182399/semantic-email-text-and-styling-fixes (template fix); script/README are local-only under web/scripts/notifications-migration/
-**Files Changed:**
-- nutella/web/scripts/notifications-migration/compare_email_previews.py
-- nutella/web/scripts/notifications-migration/README.md
-- nutella/web/common/email/semantic/templates/semantic_email.mjml.erb
-
-**Summary:**
-Closed out two semantic-email workstreams: (1) added two preheader-correctness rules to `compare_email_previews.py` that catch `derive_preheader_from_body` regressions in the renderer, and (2) fixed a long-standing box-model bug in `semantic_email.mjml.erb` that caused entity-card title/metadata/description to wrap below the thumbnail at desktop widths (most visible on `feedback_item`). After the disambiguation fix landed, a full sweep across 312 kinds reported zero `[PREHEADER CONTENT]` and zero `[PREHEADER DERIVATION]` violations — confirming the renderer is currently in spec and the new checks are calibrated to fire only on real regressions.
-
-**Changes Made:**
-- `compare_email_previews.py` — `[PREHEADER CONTENT]` rule (`_check_preheader_excludes_forbidden`): flags when the rendered semantic preheader contains text that `derive_preheader_from_body` is supposed to EXCLUDE (card `meta_data`, `section_action.button.text`, `item_action.button.text`). Two false-positive guards: forbidden strings must be multi-word (≥2 words AND ≥8 chars), and a forbidden string is skipped if it ALSO appears in the legitimately body-derived text — e.g. for `digital_room_ownership_transfer` the card meta_data "External Share" coincides with the section title "External Share Transferred to You", and the disambiguation correctly attributes the preheader instance to the legitimate side.
-- `compare_email_previews.py` — `[PREHEADER DERIVATION]` rule (`_check_preheader_matches_body_derivation`): re-derives the expected preheader from the rendered semantic HTML (strips header/footer/hidden-preheader/MSO-conditional/section-CTA/item-action/card-meta_data regions, reformats card replies to the renderer's "author: comment" format, then extracts visible text in document order and applies word-boundary truncation at 200 chars) and compares against the actual rendered preheader. Catches `override_preheader_with_body` not firing, field-order regressions, and truncation drift.
-- `compare_email_previews.py` — supporting helpers added: `_LEGACY_MESSAGE_PARAGRAPH_RE`, `_CARD_META_DATA_RE`, `_REPLY_TIMESTAMP_RE`, `_SECTION_CTA_BTN_RE`, `_ITEM_ACTION_BTN_RE`, `_HIDDEN_PREHEADER_BLOCK_RE`, `_EMAIL_HEADER_BLOCK_RE`, `_EMAIL_FOOTER_BLOCK_RE`, `_SECTION_CTA_BLOCK_RE`, `_ITEM_ACTION_TD_RE`, `_MSO_CONDITIONAL_RE`, `_CARD_REPLY_TD_OPEN_RE`, `_TD_TAG_SCAN_RE`, plus `_strip_html_fragment`, `_reformat_card_replies_for_preheader` (manual TD-depth counter for nested-table replies), `_extract_card_meta_data`, `_extract_section_action_button_texts`, `_extract_item_action_button_texts`, `_extract_body_derived_preheader_text`, `_truncate_preheader_python`. `compare_subject_preheader` signature now accepts `sem_html`; both call sites in `compare_kind` and `compare_digest` updated to pass it.
-- `compare_email_previews.py` — also addressed earlier this session: `[RULE:newlines]` rewritten to use a strict CSS-anchored extraction (only `<p>` tags with `font-size:16px;line-height:20px` from the legacy body, excluding header/footer/comment-box/card blocks) compared against semantic `body_copy` paragraph count; rule now fires only when legacy has ≥2 message paragraphs and semantic collapsed to ≤1. The `[NAMING]` rule was removed entirely. `[PREHEADER SAME AS SUBJECT]` was added as a hard-fail when the semantic preheader equals either the legacy or semantic subject (case-insensitive, whitespace-normalized, HTML-unescaped).
-- `README.md`: documented the `[RULE:newlines]` strict CSS extraction and the new `[PREHEADER CONTENT]` / `[PREHEADER DERIVATION]` rules.
-- `semantic_email.mjml.erb`: corrected `text_max_w` formula in the entity-card section from `[536 - preview_w.to_i - 16, 200].max` to `[504 - preview_w.to_i - 16, 200].max`. The 504 accounts for `mj-text padding="16px"` on both sides of the column (32px) that the previous formula missed; with a 155px thumbnail + 16px gap, the old math (155 + 16 + 365 = 536) overflowed the 504px content area, forcing flex children to wrap below the thumbnail. Added an inline comment explaining the corrected box-model math.
-
-**Notes:**
-- Verification: targeted smoke test across 11 kinds (`feedback_item`, `feedback_spot`, `share_item`, `bulk_items_feedback`, `gmail_pitch_send_failed`, `outlook_pitch_auth_failed`, `request_access_spot`, `support_request`, `pitch_ownership_transfer`, `digital_room_ownership_transfer`, `bulk_pitch_ownership_transfer`) returned 0 issues per kind. Full sweep across 312 kinds: 0 `[PREHEADER CONTENT]` hits, 0 `[PREHEADER DERIVATION]` hits.
-- The `feedback_item` MJML fix is the only repo-tracked change; the script + README are untracked local utilities under `web/scripts/notifications-migration/`.
-- Bugs fixed during implementation: `_strip_html_block` arity mismatch (renamed to `_strip_html_fragment`); `\b` anchor bug in `_EMAIL_HEADER_BLOCK_RE` / `_EMAIL_FOOTER_BLOCK_RE` / `_SECTION_CTA_BLOCK_RE` that left footer text leaking into the derived preheader for `request_access_spot` / `support_request`; reply formatting mismatch (regex couldn't match nested `<td class="card-reply">`, replaced with a manual TD-depth counter to produce the renderer's "author: comment" format).
 
 ---
