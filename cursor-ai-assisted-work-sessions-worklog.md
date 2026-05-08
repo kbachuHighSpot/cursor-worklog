@@ -6,6 +6,62 @@ Weekly summaries and YTD running summary are in [weekly-summary-worklog.md](week
 
 ---
 
+## 2026-05-08 - compare_email_previews.py: drop [NAMING] rule, add [PREHEADER SAME AS SUBJECT]
+
+**Repository:** latest
+**Branch:** (current local branch — uncommitted)
+**Files Changed:**
+- nutella/web/scripts/notifications-migration/compare_email_previews.py
+- nutella/web/scripts/notifications-migration/README.md
+
+**Summary:**
+Removed the obsolete `[NAMING]` rule from the comparison script and
+added a new `[PREHEADER SAME AS SUBJECT]` hard-fail check so semantic
+emails whose body-derived preheader equals their (or the legacy)
+subject get flagged. Inbox preview lines must add NEW information.
+
+**Changes Made:**
+- Removed `_check_variation_naming` helper function entirely.
+- Removed both call sites in `compare_kind` (the `if not leg_html`
+  branch is now a straightforward `legacy_missing` verdict).
+- Removed the `naming_issues / other_issues` split inside
+  `fail_reason_parts`; rule violations are now reported under a
+  single "rule violation" reason type.
+- Removed the `_` capture for the previously-needed `leg_marker`
+  return tuple element.
+- Stripped `[NAMING]` from the script's top docstring, the `--help`
+  epilog ("Preview entry checks" sub-section), and from
+  `README.md` (rule table row + the verdict-table reference).
+- Added `_normalize_for_preheader_compare(text)` helper:
+  HTML-unescape → lowercase → collapse whitespace runs → strip.
+- Extended `compare_subject_preheader` with a new failure case:
+  if the normalized semantic preheader equals the normalized
+  legacy OR semantic subject, emit
+  `[PREHEADER SAME AS SUBJECT] ... preheader="..." subject="..." ...`
+  and set `preheader_ok = False` (hard FAIL via `sp_issues`).
+- Updated docstring on `compare_subject_preheader`, `--help` epilog
+  ("Body-derived preheader rules" section), and `README.md` rule
+  row to describe all three preheader failure modes (missing /
+  length / same-as-subject) and the normalization scheme.
+
+**Notes:**
+- Per user choices: compare against EITHER legacy or semantic
+  subject; case-insensitive + whitespace-normalized + HTML-unescape;
+  hard FAIL severity (joins the existing
+  `[PREHEADER MISSING]` / `[PREHEADER LENGTH]` family).
+- 14 inline Python smoke tests covered: distinct prose passes,
+  empty preheader fails, > 200 chars fails, exact match against
+  semantic subject fails, exact match against legacy subject fails,
+  case-insensitive normalization fires, whitespace-collapse fires,
+  HTML-entity unescape fires, distinct content passes, empty
+  subjects don't false-positive, substring (not equal) passes,
+  `[SUBJECT MISMATCH]` still co-fires alongside same-as-subject,
+  `_check_variation_naming` no longer exists, `fail_reason_parts`
+  no longer references naming. All 14 passed.
+- Lints clean. `--help` output verified.
+
+---
+
 ## 2026-05-08 - SemanticEmailRenderer: trim card meta_data and button text from body-derived preheader
 
 **Repository:** latest
