@@ -6,6 +6,62 @@ Weekly summaries and YTD running summary are in [weekly-summary-worklog.md](week
 
 ---
 
+## 2026-05-08 - SemanticEmailRenderer: trim card meta_data and button text from body-derived preheader
+
+**Repository:** latest
+**Branch:** (current local branch — uncommitted)
+**Files Changed:**
+- nutella/web/common/email/semantic/core/semantic_email_renderer.rb
+- nutella/web/spec/unit/common/email/semantic_email_renderer_spec.rb
+
+**Summary:**
+Tightened the body-derived preheader to drop two categories of "chrome"
+text that were eating into the 200-char inbox-preview budget without
+adding information for the recipient.
+
+**Changes Made:**
+- `derive_preheader_from_body`: removed the per-section append of
+  `section_action.button.text`. Section CTAs duplicate the section
+  title's intent ("View Item", "Open Pitch", "Grant Access") and rarely
+  add new info.
+- `_card_text_parts`: removed the per-item append of `:meta_data` (the
+  gray "Posted by … • 2 days ago • 5 min read" attribution line). Kept
+  `primary_identifier.text` (card title), `:content` (card description),
+  and `:replies[]` (comment threads — these ARE the message content for
+  comment notifications).
+- Added explicit defensive notes that `item_action.button.text` is also
+  not included (no caller adds it today; the comment guards against
+  accidental regression by future contributors).
+- Updated the function docstrings on `override_preheader_with_body`,
+  `derive_preheader_from_body`, and `_card_text_parts` to enumerate
+  what is included vs. excluded with brief justifications.
+- Spec updates in `semantic_email_renderer_spec.rb`:
+  * Renamed and rewrote the "concatenates …" test: still asserts
+    section title / body_copy / group_title / card title / card content
+    are present, now also asserts `not_to include` for the meta_data
+    and the section CTA button text.
+  * Added a dedicated "excludes card meta_data when at least one card
+    is present" test using two cards with sentinel meta strings.
+  * Added a dedicated "excludes section_action button text" test using
+    a sentinel button label.
+  * Updated the string-keyed test from `to include("String meta")` to
+    `not_to include("String meta")` so it covers the same exclusion
+    in the string-key code path.
+  * Updated the `describe "body-derived preheader"` doc-comment block
+    at the top of the section to describe the new policy.
+
+**Notes:**
+- Per user's explicit choices: only `:meta_data` is excluded from card
+  fields (kept `content` and `replies`); `group_title` is kept as
+  section-level prose; both `section_action.button.text` and
+  `item_action.button.text` are excluded with a defensive guard for the
+  latter.
+- Lints clean. Spec was not run locally (sandboxing blocked rbenv);
+  every existing `to include` assertion that previously depended on
+  the dropped fields has been flipped to `not_to include`.
+
+---
+
 ## 2026-05-08 - compare_email_previews.py: add `[RULE:missing_card]` card-design enforcement
 
 **Repository:** latest
