@@ -6,6 +6,29 @@ Weekly summaries and YTD running summary are in [weekly-summary-worklog.md](week
 
 ---
 
+## 2026-05-08 - compare_email_previews.py: strict [RULE:newlines] — message-paragraph CSS extraction
+
+**Repository:** latest (nutella/web)
+**Branch:** kbachu/email-rendering
+**Files Changed:**
+- nutella/web/scripts/notifications-migration/compare_email_previews.py
+- nutella/web/scripts/notifications-migration/README.md
+
+**Summary:**
+Reworked the `[RULE:newlines]` check to strictly compare legacy `$alert.messages` paragraphs against semantic `body_copy` paragraphs, eliminating ~13 false positives across `immediate_feedback_share` and `immediate_send_failed` while still catching the 6 genuine cases where the semantic builder collapses a 2-message body into one.
+
+**Changes Made:**
+- Replaced the brittle "extract body region + table-block stripper + chrome-line filter" pipeline with a single CSS-anchored regex (`_LEGACY_MESSAGE_PARAGRAPH_RE`) that matches ONLY the alert-template's message `<p>` tags by their distinctive `font-size:16px;line-height:20px` style.
+- Added `_extract_legacy_message_paragraphs(leg_html)` — returns one text string per `$alert.messages` entry rendered in the legacy email; everything else (header time/greeting, comment box, per-item feedback cards, action button) is excluded automatically because each uses a different inline style.
+- Rewrote `_check_paragraph_breaks_preserved` to fire only when legacy emits ≥2 message paragraphs AND semantic `body_copy` collapsed to ≤1 paragraph (with ≥5 words). Dropped the secondary "lines" check — the `<p>` tag count IS the canonical paragraph-break count.
+- Removed now-unused helpers: `_LEGACY_CARD_BLOCK_OPEN_PATTERNS`, `_LEGACY_TIMESTAMP_LINE_RE`, `_TABLE_TAG_SCAN_RE`, `_strip_balanced_table_block`, `_strip_legacy_card_blocks`, `_drop_legacy_chrome_lines`, `_extract_legacy_body_text`, `_split_nonblank_lines` (~110 LOC removed).
+- Updated docstrings on the rule, the script's top-level docstring, the `--help` epilog, and the README rule table to describe the strict semantics.
+
+**Notes:**
+Verified end-to-end against `immediate_feedback_share` (6/6 kinds: 0 newline failures, was 6 before) and `immediate_send_failed` (19 kinds: 6 newline failures, all genuine 2-message collapses — `*_auth_failed` and `custom_smtp_*`). The CSS signature `font-size:16px;line-height:20px` comes verbatim from `web/common/email/semantic/preview/legacy_compare/legacy_templates/alerts_html.vm:78`; if anyone restyles message paragraphs the rule will silently stop firing — accepted trade-off for now since the template is stable and the strict semantics is what PM asked for.
+
+---
+
 ## 2026-05-08 - compare_email_previews.py: drop [NAMING] rule, add [PREHEADER SAME AS SUBJECT]
 
 **Repository:** latest
