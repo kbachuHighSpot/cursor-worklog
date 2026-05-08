@@ -6,6 +6,25 @@ Weekly summaries and YTD running summary are in [weekly-summary-worklog.md](week
 
 ---
 
+## 2026-05-08 - semantic_email.mjml.erb: fix entity card text column wrapping below thumbnail
+
+**Repository:** latest (nutella/web)
+**Branch:** kbachu/email-rendering
+**Files Changed:**
+- nutella/web/common/email/semantic/templates/semantic_email.mjml.erb
+
+**Summary:**
+Fixed a long-standing latent bug in the entity card's fluid hybrid layout where the title / metadata / description text column was wrapping BELOW the thumbnail image at the desktop 600px width (instead of sitting to the right of it). User reported as a regression for `feedback_item`; root cause traces back to the original commit `c04945fdc4e`.
+
+**Changes Made:**
+- Corrected the `text_max_w` formula in the entity-card section of the MJML template from `[536 - preview_w - 16, 200].max` to `[504 - preview_w - 16, 200].max`.
+- Added an inline comment explaining the box-model math so the next person doesn't repeat the mistake.
+
+**Notes:**
+The previous formula started from `536px` (the mj-column inner width after subtracting the outer mj-section padding) but FORGOT to subtract another 32px for the inner `<mj-text padding="16px">` wrapper around `card-content`. Real available width is `600 (mj-body) − 32 (mj-wrapper padding) − 32 (mj-section item-card padding) − 32 (mj-text card-content padding) = 504px`. With thumb max-width 155px + 16px gap + text max-width 365px = 536px, the 32px overflow forced the text inline-block onto the next line. Post-fix: `155 + 16 + 333 = 504px` — exactly fits side-by-side. Template is loaded once at boot via `COMPILED_TEMPLATE = ERB.new(File.read(...)).freeze` so a Rails server restart is required to see the fix in mailpit / preview.
+
+---
+
 ## 2026-05-08 - compare_email_previews.py: strict [RULE:newlines] — message-paragraph CSS extraction
 
 **Repository:** latest (nutella/web)
