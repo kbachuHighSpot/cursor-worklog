@@ -6,6 +6,59 @@ Weekly summaries and YTD running summary are in [weekly-summary-worklog.md](week
 
 ---
 
+## 2026-05-08 - compare_email_previews.py: add `[RULE:missing_card]` card-design enforcement
+
+**Repository:** latest
+**Branch:** (current local branch — uncommitted)
+**Files Changed:**
+- nutella/web/scripts/notifications-migration/compare_email_previews.py
+- nutella/web/scripts/notifications-migration/README.md
+
+**Summary:**
+Added a strict new migration rule, `[RULE:missing_card]`, that flags any
+kind where a legacy email links to an entity (item, spot, lesson, course,
+meeting, group, pitch, learning path, package, session, etc.) but the
+semantic email does not render that entity as a card. Stricter than the
+existing `[ENTITY TITLE]` check, which accepts plain-text fallbacks.
+
+**Changes Made:**
+- Refactored the in-line "real legacy entity link" filter out of
+  `compare_entity_links` into a shared `_filter_real_legacy_entities`
+  helper so the new check reuses identical filtering (boilerplate,
+  emails, raw URLs, CTA verbs, person names from subject, dollar
+  amounts, digit-leading anchors all dropped).
+- Added `MISSING_CARD_EXEMPT_KINDS = set()` (empty by default) and
+  `_check_legacy_entities_have_semantic_cards(kind, leg_links,
+  sem_card_links, subject, rule_issues)`. Emits a single
+  `[RULE:missing_card]` hard-fail issue per kind listing up to 5
+  missing entities, with `(+N more)` suffix for longer lists.
+  Dedupes repeated titles. Case-insensitive title match.
+- Wired the check into both `compare_kind` and `compare_digest`,
+  immediately after `compare_entity_links`, so the issue lands in
+  `rule_issues` → `hard_rule_issues` → `verdict = "fail"`.
+- Added a `missing_card_gap` boolean to the per-kind result dict.
+- Added a `Missing cards: N` segment to the one-line console totals
+  (only shown when ≥1 kind is affected) and a `❌ [RULE:missing_card]`
+  row to the Markdown summary table.
+- Documented the new rule in the script's top docstring, `--help`
+  epilog, and README.md (rules table + console summary section +
+  Markdown report section).
+
+**Notes:**
+- 11 inline Python smoke tests covered: pass when card present,
+  fail when no card, fail when card title differs, exempt-kind
+  silence, boilerplate filtering, person-name filtering, partial
+  card coverage with multiple entities, dedup of repeated titles,
+  case-insensitive matching, no-entities silence, `(+N more)`
+  truncation. All passed.
+- Per the user's explicit choices: strict enforcement (plain text
+  / inline link / "the following X:" all FAIL), hard FAIL severity,
+  scope = all entity types.
+- `MISSING_CARD_EXEMPT_KINDS` starts empty intentionally — kinds
+  must be added one-at-a-time as PM-signed-off exceptions surface.
+
+---
+
 ## 2026-05-07 - Jira: close 26.4.0 work and split CS1 epic into beta follow-up
 
 **Repository:** N/A (Jira via MCP)
