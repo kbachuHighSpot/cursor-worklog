@@ -3233,3 +3233,29 @@ Applied a batch of PM-review copy fixes to Learning & Courses semantic emails. S
 - All legacy `ALERT_CONFIG` entries in `alert_commands.rb` are intentionally untouched — semantic-only scope per the running design decision.
 
 ---
+## 2026-05-08 - Preheader correctness checks + entity-card layout regression fix
+
+**Repository:** nutella
+**Branch:** HS-182399/semantic-email-text-and-styling-fixes (template fix); script/README are local-only under web/scripts/notifications-migration/
+**Files Changed:**
+- nutella/web/scripts/notifications-migration/compare_email_previews.py
+- nutella/web/scripts/notifications-migration/README.md
+- nutella/web/common/email/semantic/templates/semantic_email.mjml.erb
+
+**Summary:**
+Closed out two semantic-email workstreams: (1) added two preheader-correctness rules to `compare_email_previews.py` that catch `derive_preheader_from_body` regressions in the renderer, and (2) fixed a long-standing box-model bug in `semantic_email.mjml.erb` that caused entity-card title/metadata/description to wrap below the thumbnail at desktop widths (most visible on `feedback_item`). After the disambiguation fix landed, a full sweep across 312 kinds reported zero `[PREHEADER CONTENT]` and zero `[PREHEADER DERIVATION]` violations — confirming the renderer is currently in spec and the new checks are calibrated to fire only on real regressions.
+
+**Changes Made:**
+- `compare_email_previews.py` — `[PREHEADER CONTENT]` rule (`_check_preheader_excludes_forbidden`): flags when the rendered semantic preheader contains text that `derive_preheader_from_body` is supposed to EXCLUDE (card `meta_data`, `section_action.button.text`, `item_action.button.text`). Two false-positive guards: forbidden strings must be multi-word (≥2 words AND ≥8 chars), and a forbidden string is skipped if it ALSO appears in the legitimately body-derived text — e.g. for `digital_room_ownership_transfer` the card meta_data "External Share" coincides with the section title "External Share Transferred to You", and the disambiguation correctly attributes the preheader instance to the legitimate side.
+- `compare_email_previews.py` — `[PREHEADER DERIVATION]` rule (`_check_preheader_matches_body_derivation`): re-derives the expected preheader from the rendered semantic HTML (strips header/footer/hidden-preheader/MSO-conditional/section-CTA/item-action/card-meta_data regions, reformats card replies to the renderer's "author: comment" format, then extracts visible text in document order and applies word-boundary truncation at 200 chars) and compares against the actual rendered preheader. Catches `override_preheader_with_body` not firing, field-order regressions, and truncation drift.
+- `compare_email_previews.py` — supporting helpers added: `_LEGACY_MESSAGE_PARAGRAPH_RE`, `_CARD_META_DATA_RE`, `_REPLY_TIMESTAMP_RE`, `_SECTION_CTA_BTN_RE`, `_ITEM_ACTION_BTN_RE`, `_HIDDEN_PREHEADER_BLOCK_RE`, `_EMAIL_HEADER_BLOCK_RE`, `_EMAIL_FOOTER_BLOCK_RE`, `_SECTION_CTA_BLOCK_RE`, `_ITEM_ACTION_TD_RE`, `_MSO_CONDITIONAL_RE`, `_CARD_REPLY_TD_OPEN_RE`, `_TD_TAG_SCAN_RE`, plus `_strip_html_fragment`, `_reformat_card_replies_for_preheader` (manual TD-depth counter for nested-table replies), `_extract_card_meta_data`, `_extract_section_action_button_texts`, `_extract_item_action_button_texts`, `_extract_body_derived_preheader_text`, `_truncate_preheader_python`. `compare_subject_preheader` signature now accepts `sem_html`; both call sites in `compare_kind` and `compare_digest` updated to pass it.
+- `compare_email_previews.py` — also addressed earlier this session: `[RULE:newlines]` rewritten to use a strict CSS-anchored extraction (only `<p>` tags with `font-size:16px;line-height:20px` from the legacy body, excluding header/footer/comment-box/card blocks) compared against semantic `body_copy` paragraph count; rule now fires only when legacy has ≥2 message paragraphs and semantic collapsed to ≤1. The `[NAMING]` rule was removed entirely. `[PREHEADER SAME AS SUBJECT]` was added as a hard-fail when the semantic preheader equals either the legacy or semantic subject (case-insensitive, whitespace-normalized, HTML-unescaped).
+- `README.md`: documented the `[RULE:newlines]` strict CSS extraction and the new `[PREHEADER CONTENT]` / `[PREHEADER DERIVATION]` rules.
+- `semantic_email.mjml.erb`: corrected `text_max_w` formula in the entity-card section from `[536 - preview_w.to_i - 16, 200].max` to `[504 - preview_w.to_i - 16, 200].max`. The 504 accounts for `mj-text padding="16px"` on both sides of the column (32px) that the previous formula missed; with a 155px thumbnail + 16px gap, the old math (155 + 16 + 365 = 536) overflowed the 504px content area, forcing flex children to wrap below the thumbnail. Added an inline comment explaining the corrected box-model math.
+
+**Notes:**
+- Verification: targeted smoke test across 11 kinds (`feedback_item`, `feedback_spot`, `share_item`, `bulk_items_feedback`, `gmail_pitch_send_failed`, `outlook_pitch_auth_failed`, `request_access_spot`, `support_request`, `pitch_ownership_transfer`, `digital_room_ownership_transfer`, `bulk_pitch_ownership_transfer`) returned 0 issues per kind. Full sweep across 312 kinds: 0 `[PREHEADER CONTENT]` hits, 0 `[PREHEADER DERIVATION]` hits.
+- The `feedback_item` MJML fix is the only repo-tracked change; the script + README are untracked local utilities under `web/scripts/notifications-migration/`.
+- Bugs fixed during implementation: `_strip_html_block` arity mismatch (renamed to `_strip_html_fragment`); `\b` anchor bug in `_EMAIL_HEADER_BLOCK_RE` / `_EMAIL_FOOTER_BLOCK_RE` / `_SECTION_CTA_BLOCK_RE` that left footer text leaking into the derived preheader for `request_access_spot` / `support_request`; reply formatting mismatch (regex couldn't match nested `<td class="card-reply">`, replaced with a manual TD-depth counter to produce the renderer's "author: comment" format).
+
+---
