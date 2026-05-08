@@ -6,6 +6,68 @@ Weekly summaries and YTD running summary are in [weekly-summary-worklog.md](week
 
 ---
 
+## 2026-05-08 - compare_email_previews.py: collapse run summary into single sectioned block with indented sub-rows
+
+**Repository:** latest (nutella/web)
+**Branch:** kbachu/email-rendering
+**Files Changed:**
+- nutella/web/scripts/notifications-migration/compare_email_previews.py
+- nutella/web/scripts/notifications-migration/README.md
+
+**Summary:**
+Restructured the pretty-printed end-of-run summary into a single
+`─── Run summary ──` section. Backlog drilldowns and informational
+warnings, which previously lived in their own separate sections,
+now render as indented sub-rows under their parent verdict, making
+the hierarchy obvious at a glance. Renamed `Missing:` →
+`Preview Missing:` for clarity (it has always been about preview
+fetch failures, not generic missing data).
+
+**Changes Made:**
+
+`_format_run_summary` rewrite:
+- Dropped the separate `─── Hard-fail backlogs ──` and
+  `─── Informational warnings ──` sections; everything now lives
+  under `─── Run summary ──`.
+- `[RULE:missing_card]` rendered as a 6-space-indented sub-row
+  directly under the `Fail:` line (only when count > 0).
+- New `Warnings:` parent row with `WARN:tracking_tag` and
+  `WARN:semantic_extra` as indented sub-rows. The `Warnings:` count
+  is unique kinds with ≥1 warning (NOT the sum of warning rows —
+  using the sum would double-count kinds with both warnings and
+  could exceed `Total`).
+- `Missing:` → `Preview Missing:` at the parent level; sub-detail
+  `(semantic: A, legacy: B, both: C)` preserved.
+- Two distinct label-width tiers: parent labels padded to fit
+  `Preview Missing:` (17 chars), sub-row labels padded to fit
+  `[RULE:missing_card]` / `WARN:semantic_extra` (21 chars). Counts
+  share a single right-aligned column per indent level so numbers
+  line up vertically within their tier.
+- Replaced helper `_row` with `_parent` / `_sub` to encode the
+  hierarchy in code.
+
+README:
+- Replaced the three-section summary example and explanatory prose
+  with the new single-section example.
+- Documented the unique-kind-count semantics for `Warnings: N`.
+- Documented `Preview Missing: N` as the roll-up of the three
+  `*_preview_missing` verdicts.
+- Pointer for adding new backlog drilldowns updated from
+  `backlog_rows` to `_sub(...)` calls in `_format_run_summary`.
+
+**Notes:**
+- Verified visually by running on `--category immediate_workflow
+  --category immediate_feedback_share --quiet`: 10 kinds, 6 pass,
+  4 fail (all 4 with `[RULE:missing_card]`), 10 warnings (all 10
+  with both `tracking_tag` + `semantic_extra`). Output rendered
+  cleanly with proper hierarchy and aligned counts.
+- Snapshot mode counts (`Snapshot update:` / `Snapshot check:`)
+  remain a separate block below the run summary — left unchanged
+  because snapshot drift output is multi-line per drifted kind and
+  would unbalance the columns.
+
+---
+
 ## 2026-05-08 - compare_email_previews.py: add snapshot regression catalogue
 
 **Repository:** latest (nutella/web)
