@@ -6,6 +6,117 @@ Weekly summaries and YTD running summary are in [weekly-summary-worklog.md](week
 
 ---
 
+## 2026-05-08 - compare_email_previews.py: add snapshot regression catalogue
+
+**Repository:** latest (nutella/web)
+**Branch:** kbachu/email-rendering
+**Files Changed:**
+- nutella/web/scripts/notifications-migration/compare_email_previews.py
+- nutella/web/scripts/notifications-migration/README.md
+- nutella/web/scripts/notifications-migration/snapshots/ (NEW — 186 baseline JSON files)
+
+**Summary:**
+Added a snapshot-based regression tripwire to `compare_email_previews.py`
+to catch the most common regression class the rule checks miss:
+"I edited builder X and silently broke kind Y in some way no rule
+encodes." Per-kind known-good snapshots are stored as JSON
+catalogue files under `snapshots/<category>/<kind>.json`;
+`--snapshot-check` re-renders every kind, diffs against stored,
+and exits non-zero on any drift. Initial baseline captures the 186
+currently-passing kinds.
+
+**Changes Made:**
+
+Snapshot module:
+- `_extract_snapshot_data(category, kind, sem_html, result)` — pulls
+  structured fields (subject, preheader, section_titles, body_copy,
+  card_titles, card_urls, cta_text, cta_urls, reply_authors) plus
+  `html_normalized_sha256` tripwire.
+- `_normalize_volatile_text(s)` / `_normalize_html_for_snapshot(html)` —
+  strip volatile substrings (tracking params, relative timestamps
+  like "2 minutes ago" / "Today at 3:41 PM", absolute live
+  timestamps like "May 8, 2026 at 9:23 PM", ISO-8601 timestamps,
+  MSO Outlook conditionals, MJML version comments) before storing
+  text fields and computing the HTML hash. Mock-data text
+  (`Alice Smith`, deterministic `7:57pm UTC` digest timestamps) is
+  NOT normalized — those are stable across reruns.
+- `_extract_section_cta_urls(sem_html)` and `_extract_reply_authors
+  (sem_html)` helpers anchored on the same compiled-MJML markers as
+  the rule checks so the snapshot stays in sync with rule data.
+- `_diff_snapshot(stored, current)` — returns list of (field,
+  stored, current) drift tuples; skips bookkeeping fields.
+- `_format_drift_line(field, stored, current)` — truncates around
+  the FIRST point of divergence (not the start) so the actual
+  change is visible when long strings differ deep in the value.
+- `_load_snapshot` / `_write_snapshot` — JSON file I/O;
+  `_write_snapshot` is sort_keys + indent=2 + trailing newline for
+  reviewer-friendly diffs in PRs.
+
+CLI flags:
+- `--snapshot-update` — write/refresh snapshots for kinds whose
+  verdict is `pass_same` / `pass_structured`. Failing kinds are
+  skipped (no bad-state baseline).
+- `--snapshot-check` — diff current renders against stored
+  snapshots; hard-fails on drift.
+- `--snapshot-dir PATH` — override catalogue location (default:
+  `snapshots/` next to the script).
+- Mutually-exclusive validation between update + check.
+
+Wiring:
+- Snapshot extraction runs after each `compare_kind` /
+  `compare_digest` returns, with a one-time semantic HTML re-fetch
+  per kind (only when snapshot mode is active — zero cost
+  otherwise).
+- New summary section appended after the existing pass/fail
+  summary: "Snapshot update: wrote N, skipped M failing" or
+  "Snapshot check: N ok, M drifted, K no-snapshot" with per-kind
+  drift detail lines.
+- Per-kind progress line tags drifted kinds inline with
+  `[SNAPSHOT DRIFT × N]`.
+- Exit code: existing `total_fail > 0` / `semantic_missing > 0`
+  paths still exit 1; new `--snapshot-check` path also exits 1 on
+  any drift count > 0 (CI-gate friendly).
+
+Baseline catalogue:
+- 186 snapshot JSON files committed under `snapshots/<category>/`
+  covering all currently-passing kinds (verdict `pass_same` or
+  `pass_structured`). Each file is ~3-5KB, sort_keys + indent=2,
+  designed for human review in PR diffs.
+
+Verified:
+- `--snapshot-update` writes 186 files, skips 111 failing kinds.
+- `--snapshot-check` immediately after returns 0 drift / exit 0.
+- Manually mutated `feedback_item.json` body_copy → re-run
+  `--snapshot-check` correctly detected drift, printed precise
+  before-and-after diff, exited 1.
+
+Documentation:
+- New "Regression catalogue" section in README covering: how it
+  works, snapshot JSON shape, normalization rules (what gets
+  stripped vs kept), workflow (initial / pre-commit / post-PR),
+  drift output format, when NOT to update.
+- CLI reference table updated with the 3 new flags.
+- `Files` table includes `snapshots/` directory.
+- CI / scripted runs section updated to show
+  `--snapshot-check` in the recommended invocation.
+- Top docstring of `compare_email_previews.py` includes a new
+  "Regression catalogue" section.
+
+**Notes:**
+- The snapshot is intentionally STRUCTURED data + HTML hash, not
+  raw HTML. Structured data catches copy / CTA / URL changes with
+  reviewer-friendly diffs; the hash catches layout-only changes
+  (e.g. the `feedback_item` thumbnail box-model bug from earlier
+  this week would have been caught by the hash flipping).
+- Failing kinds are intentionally never snapshotted — a kind only
+  enters the catalogue once it passes, then its rendered output is
+  locked. This means snapshot coverage grows naturally as kinds
+  get migrated.
+- For the 111 currently-failing kinds, `--snapshot-check` reports
+  them as `no-snapshot` (informational, doesn't fail the run).
+
+---
+
 ## 2026-05-08 - compare_email_previews.py: add 14 new migration rule checks
 
 **Repository:** latest (nutella/web)
