@@ -6,6 +6,57 @@ Weekly summaries and YTD running summary are in [weekly-summary-worklog.md](week
 
 ---
 
+## 2026-05-08 - compare_email_previews.py: --reason-type now also gates the per-kind verbose log
+
+**Repository:** latest (nutella/web)
+**Branch:** kbachu/email-rendering
+**Files Changed:**
+- nutella/web/scripts/notifications-migration/compare_email_previews.py
+- nutella/web/scripts/notifications-migration/README.md
+
+**Summary:**
+Extended `--reason-type` to also suppress the per-kind progress log
+(single-line + verbose extras) for non-matching kinds, not just the
+summary table. Drilling into one backlog (e.g. `--reason-type
+"content lost"`) no longer prints unrelated `Similarity / Body copy
+/ Card titles` blocks for the other ~300 kinds.
+
+**Changes Made:**
+- Added `_matches_reason_type_filter(r, args)` module-level helper
+  used in two places to guarantee the per-kind log and the table
+  view stay consistent.
+- Refactored both per-kind comparison loops (single-kind and digest)
+  to:
+  - Skip printing the `[i/total] cat/kind ...` partial-line prefix
+    during work when `--reason-type` is set (we only know if the
+    kind matches after `compare_kind` returns).
+  - For matching kinds: emit the full `[i/total] cat/kind ...
+    verdict — reason` line in one shot, plus the verbose block when
+    `-v` is set.
+  - For non-matching kinds: zero per-kind output. Comparison still
+    runs (so summary, snapshot mode, Markdown report, and CSV
+    reflect the full corpus).
+  - Heartbeat line every 50 kinds (`... compared N/Total; M
+    matching --reason-type so far`) so long sweeps don't look hung
+    when matches are sparse.
+  - Final tally (`... done: M/Total kinds matched ...`) prints
+    before the summary table.
+- Refactored the duplicate filter-predicate in `main()` to call the
+  new shared helper instead of an inline closure.
+- Updated README's "Drilling into a single backlog" section and the
+  `--reason-type` row in the CLI flags table to document the
+  per-kind log gating, the heartbeat, and the silent comparison of
+  non-matching kinds.
+
+**Notes:**
+Tee-friendly: heartbeat lines use plain `\n` (no `\r` carriage
+return) so piping to `tee logs/all.out` keeps the log file readable.
+Smoke-tested the helper on synthetic results; predicate correctly
+drops clean passes, warning rows, and other failure types when
+`--reason-type "content lost"` is supplied.
+
+---
+
 ## 2026-05-08 - compare_email_previews.py: auto-discover all reason types in Backlogs section
 
 **Repository:** latest (nutella/web)
