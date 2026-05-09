@@ -6,6 +6,129 @@ Weekly summaries and YTD running summary are in [weekly-summary-worklog.md](week
 
 ---
 
+## 2026-05-09 - compare_email_previews.py README: backlog-row troubleshooting playbook
+
+**Repository:** latest (nutella/web)
+**Branch:** kbachu/email-rendering
+**Files Changed:**
+- nutella/web/scripts/notifications-migration/README.md
+
+**Summary:**
+Added a new "Work a backlog row from the run summary" subsection
+under Common workflows that walks the reader from a Run-summary
+backlog row (e.g. `[RULE:missing_card] 52 (all 52 in Fail)`) through
+a 4-step drill-in → diagnose → fix → verify loop, with a tag-by-tag
+table mapping every reason tag to its typical fix location and a
+worked example documenting the recent HS-182399 mock_data drain
+(8 mock_data hits → 0). Plus a forward-pointer from the existing
+Backlogs subsection in the Output chapter so readers landing on the
+backlog terminology page get routed directly to the playbook.
+
+**Changes Made:**
+- New `### Work a backlog row from the run summary` subsection
+  under `## Common workflows`, structured as:
+  - The Run-summary backlog excerpt verbatim (so readers see the
+    same output they're staring at).
+  - Universal 4-step loop: drill in with `--reason-type` → narrow to
+    a single kind with `-v --kind` → cross-reference Migration-rule
+    checks for fix-pattern guidance → fix → verify per-kind →
+    re-sweep + diff CSV for regression scan.
+  - `Tag → typical fix location` table covering every reason tag
+    surfaced in the example output: `[FAIL:content_lost]`,
+    `[RULE:missing_card]`, `[RULE:newlines]`,
+    `[RULE:inlined_card_title]`, `[RULE:card_count]`,
+    `[RULE:cta_presence]`, `[FAIL:cta_url]`, `[FAIL:entity_title]`,
+    `[FAIL:mock_data]`, `[FAIL:structure]`, `[RULE:custom_smtp]`,
+    `[RULE:empty_links]`, `WARN:tracking_tag`, `WARN:semantic_extra`,
+    plus the bullet-row variants (`[LEGACY CONTENT]`, `[CTA URL]`,
+    `[ENTITY TITLE]`).
+  - Each row names the actual root-cause location and the fix
+    pattern, with line-number pointers into
+    `compare_email_previews.py` for `EXPECTED_MOCK_ENTITIES`
+    (~2677), `_HEADLINE_EVENT_RE` (~3144), and
+    `BACKLOG_DESCRIPTIONS` (~3690), and the file pointer for
+    `LegacyEmailPreview#inject_kind_specific_data!` (~980 in
+    `legacy_email_preview.rb`).
+  - Worked example documenting the HS-182399 mock_data drain
+    end-to-end: 8 hits split into three buckets (allowlist gap,
+    heuristic FP, real parity gap), with the per-kind verify +
+    full-sweep regression check and the lesson learned about
+    `lesson_submitted` regressing `digest_lessons_passwords`
+    (rule-of-thumb: prefer script allowlist over legacy-mock
+    override when the override would affect siblings).
+- Forward-pointer from the existing `#### Backlogs` subsection in
+  the Output chapter so the terminology page → playbook link is
+  one hop.
+
+**Notes:**
+Companion documentation for the recent mock_data drain and the
+ongoing HS-182399 follow-ups. The next person to drain a backlog
+row (e.g. `[RULE:newlines]` 35) should be able to follow the
+playbook end-to-end without prior context.
+
+---
+
+## 2026-05-09 - Mock data parity: drained [FAIL:mock_data] / [MOCK DATA MISMATCH] backlog to zero
+
+**Repository:** latest (nutella/web)
+**Branch:** kbachu/email-rendering
+**Files Changed:**
+- nutella/web/scripts/notifications-migration/compare_email_previews.py
+- nutella/web/common/email/semantic/preview/legacy_compare/legacy_email_preview.rb
+
+**Summary:**
+Investigated and resolved 8 mock-data related failures
+(`[FAIL:mock_data]` × 7, `[MOCK DATA MISMATCH]` × 1) reported by
+`compare_email_previews.py`. Categorized into 3 root causes:
+allowlist gaps in `EXPECTED_MOCK_ENTITIES`, a script heuristic
+false positive on legacy headline-event hyperlinks, and one real
+legacy-mock parity gap for `course_in_learning_path_*`. Net
+backlog drop: -1 `[FAIL]` (124 → 123) plus 8 noise rows eliminated;
+two `[RULE:missing_card]` rows surfaced for
+`course_in_learning_path_*` (judged legitimate builder findings).
+
+**Changes Made:**
+- `compare_email_previews.py`:
+  - Extended `EXPECTED_MOCK_ENTITIES` with: "module 3: closing
+    techniques", "sales training 101 lp", "sales bootcamp",
+    "advanced selling skills" — these are legitimate semantic mock
+    titles that legacy renders generically.
+  - Added `_HEADLINE_EVENT_RE` regex + `_is_headline_event_phrase`
+    helper to filter boilerplate "Email titled '...' was opened"
+    phrases from the entity-name extraction heuristic. Legacy
+    `pitch_message_opened_html.vm` wraps the entire H2 headline
+    in `<a>`, which the prior heuristic mis-identified as an
+    entity name.
+  - Modified `check_mock_data_consistency` so `leg_only_entities`
+    and `sem_only_entities` also filter `EXPECTED_MOCK_ENTITIES`
+    before flagging `[MOCK DATA MISMATCH]` (the prior code only
+    filtered the matched-entities set).
+- `legacy_email_preview.rb#inject_kind_specific_data!`:
+  - Per-kind injection for `course_in_learning_path_ended` and
+    `course_in_learning_path_ending_soon` to set
+    `data["item"]["title"]` to "Sales Training 101 LP" — matches
+    the semantic mock title and gives the kinds subject parity.
+
+**Notes:**
+- An initial attempt to also override `lesson_submitted` /
+  `lesson_submitted_new` mock titles in `legacy_email_preview.rb`
+  was rolled back because it regressed `digest_lessons_passwords`
+  (which shares the same mock data and expected the generic title).
+  The allowlist-only approach drained the `[MOCK DATA]` warnings
+  without the regression.
+- The `course_in_learning_path_*` legacy mock override surfaced two
+  new `[RULE:missing_card]` rows for those kinds — these are real
+  semantic builder gaps (the LearningBuilder isn't emitting a
+  `primary_identifier` card for the learning path), not regressions
+  from the mock change. Deferred to the broader
+  `[RULE:missing_card]` sweep.
+- The semantic builder gap for `session_updated_learner` (missing
+  `training_event` card) was identified during the mock_data
+  investigation and explicitly deferred — substantial builder
+  enhancement, not a mock-data fix.
+
+---
+
 ## 2026-05-08 - compare_email_previews.py: --reason-type now also gates the per-kind verbose log
 
 **Repository:** latest (nutella/web)
@@ -4094,38 +4217,5 @@ Applied a batch of PM-review copy fixes to Learning & Courses semantic emails. S
 - `lesson_reviewed` and `lesson_progress_reset` use `lesson.title` for interpolation; if `lesson` isn't supplied to the builder the body falls back to a generic phrasing (no broken `{lesson_name}` placeholder leaks into the rendered email).
 - `lessons_assigned` collapse uses `subs[:amount].presence || "1"` so the legacy `lesson` variation (which doesn't carry `num_items`) still renders grammatically.
 - All legacy `ALERT_CONFIG` entries in `alert_commands.rb` are intentionally untouched — semantic-only scope per the running design decision.
-
----
-
-## 2026-05-09 - admin_message preview override removal + Tier 2 builder rescue removals
-
-**Repository:** latest (nutella)
-**Branch:** HS-182399/semantic-email-text-and-styling-fixes
-**Files Changed:**
-- nutella/web/common/email/semantic/builders/alert/immediate/generic_builder.rb
-- nutella/web/common/email/semantic/builders/base.rb
-- nutella/web/common/email/semantic/preview/mock_data.rb
-- nutella/web/common/email/semantic/preview/semantic_email_preview.rb
-- nutella/web/common/email/semantic/preview/legacy_compare/legacy_email_preview.rb
-
-**Summary:**
-Closed the two follow-ups from the prior preview-audit batch: (1) removed the `admin_message` HS-182399 preview override and replaced it with production-shaped mock data + a real `AdminMessage` entity in EntityCache, and (2) per the user's "just fail" directive, converted four Tier 2 swallow-to-default rescues in the production builder helper layer (`call_lambda_safely`, `substitute_template_tags`, `lookup_data_field`, `flatten_template_parts` lambda call) to log + re-raise. `compare_email_previews.py` shows admin_message moving from Warn → Pass; total counts otherwise identical (Pass 19, Warn 169, Fail 124, Preview Missing 0).
-
-**Changes Made:**
-- `generic_builder.rb`: deleted `SPECIAL_BODY_TEXT[:admin_message]` (dead code: called undefined `AdminMessage.find_by_id` and `#body`), and removed the corresponding `if kind_sym == :admin_message` branch in `build_email_data`. Body comes from `extract_messages_text` reading `data["admin_message"]["long_text"]` populated by `AlertPresenter#admin_message_to_output`.
-- `mock_data.rb`: added `MOCK_IDS[:admin_message]`, `DEFAULTS` for admin_message subject/preheader/short_text/long_text (mirroring legacy mock text), and a `mock_admin_message` constructor that returns a real `AdminMessage` (not OpenStruct) so AlertPresenter can call `short_text` / `long_text` / `subject` / `preheader` / `url` directly.
-- `semantic_email_preview.rb`:
-  - `prepopulate_entity_cache`: seeded `mock_admin_message` under both bare-id and `"alert_<id>"` keys for `EntityFetch.entity` resolution.
-  - `mock_alert` `case kind_sym`: added `when :admin_message` setting production-shape `data["to"]` and `data["admin_message"]` (`{type: ADMIN_MESSAGE_ENTITY, id: ...}`), plus `data.delete("custom_subject")` to strip the global mock pollution that was tripping `AlertPresenter#has_custom_subject?` → `format_field(:custom_subject)` → `raise "missing custom_subject for alert admin_message"` (root cause of the initial `subject is required` validator failure once the override was removed).
-  - `build_immediate_single_email`: deleted the `when "admin_message"` override block and replaced with a NOTE comment pointing at the production code path.
-- `legacy_email_preview.rb`: changed `mock_alert_data["admin_message"]["url"]` from the mock-only `/admin/messages/1` to `/notifications/mock-alert-admin_message/action`, matching the path that production `AlertPresenter#admin_message_to_output` generates (`Highspot.url(:alerts, :action, ...)`). Eliminates the spurious `[FAIL:cta_url]` from compare.
-- `base.rb` (Tier 2 rescue removals): converted four helper rescues (`call_lambda_safely`, `substitute_template_tags`, `lookup_data_field`, lambda call inside `flatten_template_parts`) from silent default-return to `EventLogger.error(... backtrace ...)` + `raise`. Production behavior change: any helper exception now surfaces (caught upstream by `extract_config_text`'s own rescue) rather than producing degraded text. Verified zero new helper-error log entries during full compare run, indicating these rescues were unused dead error-handling code.
-
-**Notes:**
-- Diagnostic discovery for the `subject is required` failure: temporarily wrapped `for_subject` with EventLogger.error logging keyed on `kind == "admin_message"` and read `nutella/web/server.out`, which surfaced `RuntimeError: missing custom_subject for alert admin_message`. Root caused to `LegacyEmailPreview.mock_alert_data["custom_subject"]` global pollution (production payload only carries `:custom_subject` for `share_*` kinds; other kinds get away with it because their `data_to_output` fails for unrelated reasons and `has_custom_subject?` returns false). The diagnostic was removed after the fix landed.
-- `AdminMessage.url` is set to `"#{base_url}/admin/messages/<id>"` in the mock so the non-empty branch in `admin_message_to_output` fires and the presenter generates the tracked alert-action URL. The literal mock value is overwritten by the presenter; only its non-empty-ness matters.
-- The production builder bug previously documented (`AdminMessage.find_by_id` and `#body` are undefined) is now resolved by deletion — the lambda was always returning nil so removing it changes nothing in production behavior.
-- Tier 2 conversions are conservative: only the four small swallow-to-default helper rescues. Larger orchestration rescues in `extract_presenter_text` / `extract_config_text` / `extract_messages_text` / `extract_messages_html` were left intact since they form the documented preview/production fallback chain.
-- No regressions: full `compare_email_previews.py` run shows identical Pass/Warn/Fail/Preview Missing counts before and after, with admin_message moving from Warn → Pass (one of the 19 passes).
 
 ---
