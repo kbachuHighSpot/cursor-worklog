@@ -6,6 +6,55 @@ Weekly summaries and YTD running summary are in [weekly-summary-worklog.md](week
 
 ---
 
+## 2026-05-08 - compare_email_previews.py: add lenient success rate (warnings count as pass)
+
+**Repository:** latest (nutella/web)
+**Branch:** kbachu/email-rendering
+**Files Changed:**
+- nutella/web/scripts/notifications-migration/compare_email_previews.py
+- nutella/web/scripts/notifications-migration/README.md
+
+**Summary:**
+Added a second `Success rate` row right below the existing one,
+this time with warnings counting as pass — gives the
+"content-parity success" framing alongside the existing strict
+"fully done" framing. Both rates report back-to-back so the
+operator can see both numbers at a glance and watch the strict
+rate climb toward the lenient rate as the warning backlog drains.
+
+**Changes Made:**
+
+`_format_run_summary`:
+- Existing single `Success rate:` row now expands to two rows:
+  `strict  — Pass / Total (warnings count as fail)` and
+  `lenient — (Pass + Warn) / Total (warnings count as pass)`.
+- Both rates use the same `Success rate:` label with the
+  strict / lenient qualifier in the description column. Trailing
+  space after "strict" so the em-dashes line up vertically across
+  the two rows.
+- Updated the comment to document both formulas, what each tells
+  you, and when each is useful (strict for backlog burn-down
+  tracking, lenient for early-migration content-parity progress).
+
+README:
+- Replaced the single Success rate explanation with a two-bullet
+  list covering both rates.
+- Added a closing line: when the strict rate climbs to meet the
+  lenient rate, the warn bucket is empty and the migration is
+  fully done.
+- Updated the example block to show both rows
+  (6.7% strict / 60.3% lenient on the headline 312-kind run).
+
+**Notes:**
+- Verified on `--type direct` (63 kinds): strict
+  `9 / 63 = 14.3%`, lenient `(9 + 44) / 63 = 53 / 63 = 84.1%`.
+  The 70-point gap reflects the size of the warn bucket relative
+  to clean passes (44 warn / 9 pass).
+- Both rates expressed as % of Total so Fail and Preview Missing
+  count against both — they're never partial-credit.
+
+---
+
 ## 2026-05-08 - compare_email_previews.py: add Success rate to Run summary; warnings count as fail
 
 **Repository:** latest (nutella/web)
