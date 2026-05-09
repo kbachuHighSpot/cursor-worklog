@@ -6,6 +6,55 @@ Weekly summaries and YTD running summary are in [weekly-summary-worklog.md](week
 
 ---
 
+## 2026-05-08 - compare_email_previews.py: auto-discover all reason types in Backlogs section
+
+**Repository:** latest (nutella/web)
+**Branch:** kbachu/email-rendering
+**Files Changed:**
+- nutella/web/scripts/notifications-migration/compare_email_previews.py
+- nutella/web/scripts/notifications-migration/README.md
+
+**Summary:**
+Replaced the hardcoded 3-row Backlogs section in `_format_run_summary`
+with auto-discovery from `fail_reason_parts`, so every `[RULE:*]` /
+`[FAIL:*]` / `WARN:*` reason that fires anywhere in the corpus surfaces
+as its own backlog row with severity icon, count, and per-verdict
+breakdown. New `[RULE:*]` checks now appear in the summary
+automatically without requiring code changes.
+
+**Changes Made:**
+- Added `BACKLOG_DESCRIPTIONS` dict at module scope mapping every
+  known tag (`[RULE:newlines]`, `[RULE:missing_card]`,
+  `[FAIL:subject]`, `[FAIL:mock_data]`, `WARN:tracking_tag`, …) to a
+  one-line human description.
+- Refactored `_format_run_summary` to walk every result's
+  `fail_reason_parts` output and aggregate counts per (tag, verdict
+  bucket); the catch-all `rule` reason type is exploded into
+  individual `[RULE:*]` tags via `_rule_tags`.
+- Categorical hard-fail reasons (`subject`, `entity title`,
+  `mock data`, `content lost`, `structure`, …) are wrapped as
+  `[FAIL:xxx]` for visual consistency with `[RULE:*]`.
+- `_backlog_icon` now returns ❌ for both `[RULE:*]` and `[FAIL:*]`
+  (hard-fails) and ⚠️ for `WARN:*`.
+- `BACKLOG_LABEL_W` is now computed dynamically from the actual tags
+  present (min 21 chars) so longer tags like `[RULE:reply_completeness]`
+  don't break alignment.
+- Removed stale references to `missing_card_gaps` / `tracking_gaps` /
+  `sem_extra` from `max_count` (use the auto-discovered backlog list
+  instead).
+- Updated README's "Backlogs" section to document the auto-discovery
+  behavior, the three tag forms (`[RULE:*]` / `[FAIL:*]` / `WARN:*`),
+  the sort order, and how to drill into any backlog via
+  `--reason-type`.
+
+**Notes:**
+Smoke-tested with a synthetic results list covering all 11 categorical
+fail reasons + 4 distinct rule violations + warn-only kinds + clean
+passes; backlog rows render with correct icons, counts, breakdowns,
+and column alignment.
+
+---
+
 ## 2026-05-08 - compare_email_previews.py: improve Backlogs section wording and add severity icons
 
 **Repository:** latest (nutella/web)
