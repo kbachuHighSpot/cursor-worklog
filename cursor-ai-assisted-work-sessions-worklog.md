@@ -6,6 +6,130 @@ Weekly summaries and YTD running summary are in [weekly-summary-worklog.md](week
 
 ---
 
+## 2026-05-08 - compare_email_previews.py: introduce warn_same / warn_structured verdict bucket
+
+**Repository:** latest (nutella/web)
+**Branch:** kbachu/email-rendering
+**Files Changed:**
+- nutella/web/scripts/notifications-migration/compare_email_previews.py
+- nutella/web/scripts/notifications-migration/README.md
+
+**Summary:**
+Added `warn_same` and `warn_structured` verdicts so that passing
+kinds carrying at least one always-on informational warning
+(`WARN:tracking_tag` / `WARN:semantic_extra`) render as their own
+verdict bucket instead of being indistinguishable from clean
+passes. The Status column now shows `⚠️ warn (...)` for these
+kinds, the Run summary breaks them out as a top-level `Warn:` row
+between `Pass:` and `Fail:`, and the invariant `Pass + Warn + Fail +
+Preview Missing == Total` holds exactly.
+
+This addresses the visibility gap where ~285 HS-183419-affected
+kinds and ~157 semantic-extra kinds would all show as `✅ pass` in
+the Status column, even though they're actionable backlog items.
+
+**Changes Made:**
+
+Verdict enum and helpers:
+- `VERDICT_ICONS` and `VERDICT_LABELS` extended with `warn_same`
+  and `warn_structured` entries (⚠️ icon, "warn (content match +
+  same structure)" / "warn (content match + structured)" labels).
+- Added `PASS_VERDICTS`, `WARN_VERDICTS`, `PROBLEM_VERDICTS`
+  frozensets at module level so verdict membership checks are
+  centralized rather than scattered.
+- New `_result_has_warning(r)` helper — single source of truth for
+  "what counts as a warning" (currently `tracking_tag_gap` or
+  `semantic_content_missing_in_legacy`). Adding a new always-on
+  warning later is a one-line change here rather than touching six
+  call sites.
+- New `_demote_pass_to_warn(verdict, result)` helper. Called at the
+  very end of `compare_kind` and `compare_digest`, after the
+  warning fields are populated on the result. If verdict is
+  `pass_same` or `pass_structured` AND `_result_has_warning(result)`
+  is true, demote to the matching `warn_*` bucket. Otherwise return
+  unchanged. Failing kinds that ALSO have warnings stay `fail`
+  (their warnings still surface in the `Reason type` column).
+
+Summary layout:
+- `_format_run_summary` reworked to insert `Warn:` as a top-level
+  row between `Pass:` and `Fail:`, with `(X same + Y structured)`
+  sub-detail mirroring the Pass row. `WARN:tracking_tag` and
+  `WARN:semantic_extra` sub-rows moved under `Warn:`.
+- Pass count now strictly counts clean passes (no warnings); Warn
+  count is the demoted bucket. `WARN:*` inventory counts span the
+  full result set (including failures that also have warnings) so
+  the per-warning numbers reflect the complete backlog.
+
+Snapshot eligibility:
+- `_is_passing_verdict(r)` updated to accept `warn_*` in addition
+  to `pass_*`. The warning doesn't change rendered content (it's
+  an inventory item — missing tracking params or extra body copy),
+  so the snapshot is byte-identical to the pre-demotion `pass_*`
+  snapshot. Excluding `warn_*` would leave a perpetual
+  `no-snapshot` row for every HS-183419-affected kind, defeating
+  the catalogue.
+
+`--failed-only` simplification:
+- Removed the temporary `_has_warning` predicate added in the
+  previous session. Now that `warn_*` is a real verdict, the
+  filter just becomes `verdict in PROBLEM_VERDICTS | WARN_VERDICTS`
+  and clean `pass_*` rows are excluded by virtue of not being in
+  either set. README and argparse help updated to reflect the new
+  semantics.
+
+Exit code:
+- Confirmed `warn_*` does NOT contribute to the exit code (only
+  `total_fail` and `semantic_preview_missing` do). Warnings stay
+  informational; CI doesn't break on a warning-only kind.
+
+Markdown report:
+- Summary table gains a `⚠️ Warn` row (rendered when the warn
+  bucket is non-empty) with the same `(X same + Y structured)`
+  breakdown as Pass. `Missing` row renamed to `Preview Missing` for
+  consistency with the console summary.
+
+CSV:
+- Verdict column passes through the new `warn_same` /
+  `warn_structured` values automatically (no special-casing needed
+  — the column was already verdict-pass-through). Docstring updated
+  to list the new enum values.
+
+README:
+- Verdict table rewritten with `warn_same` / `warn_structured`
+  rows and full demotion-rule explanation (`Pass + Warn + Fail +
+  Preview Missing == Total` invariant, snapshot eligibility
+  rationale, why failures-with-warnings stay `fail`).
+- Run summary example updated to show the new `Warn:` row layout
+  with realistic counts (e.g. Pass: 21, Warn: 167, Fail: 124).
+- CSV section updated with the new verdict enum values and a new
+  filter recipe (`verdict IN (warn_same, warn_structured)` for the
+  full warn backlog).
+- `--failed-only` and `--snapshot-update` CLI table descriptions
+  updated to describe the new `warn_*` membership rules.
+
+**Notes:**
+- Verified on `--type direct` (63 kinds): `Pass: 9 | Warn: 44 |
+  Fail: 10 | Preview Missing: 0` → 9+44+10+0 = 63 (invariant
+  holds). `WARN:tracking_tag: 48` correctly exceeds `Warn: 44`
+  because some failures also carry the warning (counted in the
+  inventory but kept out of the warn bucket).
+- Verified on `marketplace_emails` (5 kinds): clean passes
+  (`marketplace_spot_request_denied`, `marketplace_spot_installed`)
+  stayed `✅ pass`; passes with HS-183419 gap
+  (`marketplace_spot_request`, `_reminder`) demoted to `⚠️ warn`;
+  `marketplace_spot_request_approved` (real failure with warning)
+  stayed `❌ FAIL`.
+- Snapshot check on `marketplace_spot_request` (now `warn_same`,
+  previously `pass_same`) reported `1 ok, 0 drifted` — confirms
+  snapshots are verdict-independent and the demotion didn't break
+  the catalogue.
+- A drift on `meeting_emails/*_meeting_recap` surfaced during the
+  full sweep, but it's a pre-existing date-rollover issue
+  ("Friday, May 8" vs "Saturday, May 9") in volatile-text
+  normalization — unrelated to this refactor.
+
+---
+
 ## 2026-05-08 - compare_email_previews.py: --failed-only now includes passing kinds with warnings
 
 **Repository:** latest (nutella/web)
