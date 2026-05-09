@@ -6,6 +6,61 @@ Weekly summaries and YTD running summary are in [weekly-summary-worklog.md](week
 
 ---
 
+## 2026-05-08 - compare_email_previews.py: add Success rate to Run summary; warnings count as fail
+
+**Repository:** latest (nutella/web)
+**Branch:** kbachu/email-rendering
+**Files Changed:**
+- nutella/web/scripts/notifications-migration/compare_email_previews.py
+- nutella/web/scripts/notifications-migration/README.md
+
+**Summary:**
+Added a single `Success rate: N.N%` row at the bottom of the
+Run summary verdict roll-ups. Computed as `Pass / Total` with
+Warn, Fail, and Preview Missing all counting against success —
+warnings still need human follow-up (HS-183419 plumbing,
+semantic-extra audit) before a kind can be called "done", so they
+don't get partial credit. As the warning backlog drains and kinds
+promote from `warn_*` back to `pass_*`, the success rate climbs;
+this gives a single headline migration-progress number.
+
+Discovered during implementation that a previous session had left
+behind a stale two-row block ("Success rate" using `(Pass + Warn) /
+Total` plus "Clean rate" using `Pass / Total`). Removed both and
+consolidated to the single line per the user's current intent.
+
+**Changes Made:**
+
+`_format_run_summary`:
+- New row at the bottom of the verdict roll-up section:
+  `Success rate: N.N%` rendered with `pct_w = max(count_w, 6)`
+  right-justification so the percentage's ones-digit lines up
+  vertically with the integer counts above it.
+- Inline detail text spells out the formula and the policy:
+  "Pass / Total — Warn, Fail, Preview Missing all count as fail".
+- Guarded by `if total:` so a zero-result run doesn't divide by
+  zero.
+- Removed the previous stale two-row "Success rate" / "Clean rate"
+  block (was using a different formula and no longer matched the
+  intent).
+
+README:
+- Updated the Run summary example block to include the new row.
+- Added a paragraph to the `#### Verdict roll-ups` subsection
+  documenting Success rate, the warnings-count-as-fail policy, and
+  the burn-down narrative (warn → pass promotion as backlog drains).
+
+**Notes:**
+- Verified on `--category marketplace_emails` (5 kinds): `Success
+  rate: 40.0%` matches `2 Pass / 5 Total = 0.40`.
+- Verified on `--type direct` (63 kinds): `Success rate: 14.3%`
+  matches `9 Pass / 63 Total = 0.1428...`.
+- Single-line consolidation matches the user's "consider warnings
+  as fail" instruction; the previous two-row Success+Clean
+  presentation was over-engineered for the actual ask.
+
+---
+
 ## 2026-05-08 - compare_email_previews.py: split run summary into two sections (verdicts + cross-cutting backlogs)
 
 **Repository:** latest (nutella/web)
