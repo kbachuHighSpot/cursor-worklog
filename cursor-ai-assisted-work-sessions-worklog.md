@@ -6,6 +6,59 @@ Weekly summaries and YTD running summary are in [weekly-summary-worklog.md](week
 
 ---
 
+## 2026-05-09 - compare_email_previews.py: --reason-type now matches backlog tags verbatim
+
+**Repository:** latest (nutella/web)
+**Branch:** kbachu/email-rendering
+**Files Changed:**
+- nutella/web/scripts/notifications-migration/compare_email_previews.py
+
+**Summary:**
+Fixed a real bug where `--reason-type "[RULE:missing_card]"` (and
+every other bracketed tag) matched 0 kinds even though the backlog
+summary listed 52 such kinds. Root cause: the filter compared
+against the bare `Reason type` column from `fail_reason_parts`
+(`"rule"`, `"subject"`, `"entity URL"`, …) but the backlog summary
+expanded those into bracketed tags (`[RULE:missing_card]`,
+`[FAIL:subject]`, `[FAIL:entity_url]`) — the two never saw the same
+string, so copy-pasting a tag from the backlog (which the README
+tells operators to do) produced no matches. Only `WARN:*` worked
+because both sides passed it through unchanged.
+
+**Changes Made:**
+- Extracted the per-result tag-expansion logic from
+  `_format_run_summary` into a new module-level helper
+  `_expanded_reason_tags(r)` returning the set of bracketed backlog
+  tags for a result (`[RULE:*]` from `_rule_tags(rule_issues)`,
+  `[FAIL:xxx]` from snake-cased categorical labels, `WARN:*`
+  passed through). Plus two small module-level constants
+  (`_PRESERVED_PSEUDO_REASON_TYPES`, `_categorical_reason_to_tag`)
+  it depends on.
+- Updated `_matches_reason_type_filter` to match against BOTH the
+  bare `rtype` (back-compat: `--reason-type rule` /
+  `--reason-type subject` keep working as substring matches) AND
+  the expanded backlog tag set (so `--reason-type
+  "[RULE:missing_card]"` and `--reason-type "[FAIL:subject]"` match
+  the same kinds counted in their backlog rows).
+- Refactored `_format_run_summary`'s backlog-counting loop to call
+  `_expanded_reason_tags` instead of inlining the expansion. Single
+  source of truth for "which backlog tags does this result
+  contribute to".
+- Smoke-tested with 8 cases covering bracketed tags, bare tags,
+  WARN tags, and clean passes — every backlog tag is now matchable
+  by copy-pasting it verbatim into `--reason-type`.
+
+**Notes:**
+The README's "Workflow: drain a backlog row" section was already
+written assuming this behavior worked ("copy the tag verbatim from
+the backlog row"); this change makes the docs match the code.
+The `WARN:tracking_tag` case kept working before by accident
+because `_format_run_summary` happened to pass `WARN:*` through
+unchanged on both sides — the new shared helper makes that
+consistency explicit instead of coincidental.
+
+---
+
 ## 2026-05-09 - compare_email_previews.py README: backlog-row troubleshooting playbook
 
 **Repository:** latest (nutella/web)
