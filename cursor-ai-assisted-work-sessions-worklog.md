@@ -6,6 +6,93 @@ Weekly summaries and YTD running summary are in [weekly-summary-worklog.md](week
 
 ---
 
+## 2026-05-08 - compare_email_previews.py: hide tick columns by default, add --show-checks and --reason-type filter
+
+**Repository:** latest (nutella/web)
+**Branch:** kbachu/email-rendering
+**Files Changed:**
+- nutella/web/scripts/notifications-migration/compare_email_previews.py
+- nutella/web/scripts/notifications-migration/README.md
+
+**Summary:**
+Dropped the six per-cell tick columns (`Content`, `LegInSem`,
+`SemInLeg`, `Subject`, `Prehedr`, `Track`) from the default
+console summary table — they pushed the row width to ~240 chars,
+forcing horizontal scroll or piping to a file for every run. The
+default table is now `Kind | Category | Status | Reason type |
+Reason details` (~150 chars), which fits a normal terminal.
+
+Added two new flags to provide opt-in deep dives:
+- `--show-checks` restores the tick columns when the per-check
+  decisions actually matter (debugging one kind, auditing a fix).
+- `--reason-type TYPE` filters the table to rows whose `Reason
+  type` contains `TYPE` (case-insensitive substring, repeatable),
+  letting the operator process one backlog at a time without
+  scrolling through unrelated rows.
+
+The Run summary still reflects the full result set regardless of
+either flag, so totals stay honest.
+
+**Changes Made:**
+
+`format_summary_table`:
+- Added `show_checks=False` parameter. The 6-column tick block
+  between `Category` and `Status` only renders when
+  `show_checks=True`.
+- Refactored `_row` helper to conditionally splice in the tick
+  cells. Tick header / data construction is short-circuited when
+  `show_checks=False` (no wasted work building tick dicts).
+- Updated docstring with both layouts (default narrow vs.
+  `--show-checks` wide) and the rationale for the change.
+
+CLI flags:
+- `--show-checks` (store_true) — restores the tick columns. Help
+  text emphasizes the use case ("debugging a single kind or
+  auditing per-check decisions").
+- `--reason-type TYPE` (action="append") — repeatable, case-
+  insensitive substring match against the per-row `Reason type`
+  column. Multiple `--reason-type` flags are OR-joined (any match
+  keeps the row). Pairs with `--failed-only`.
+
+Display pipeline:
+- After `--failed-only` filtering, an additional pass applies
+  `--reason-type` filtering by recomputing `fail_reason_parts(r)`
+  per row and substring-matching against the lowercased reason
+  type.
+- `format_summary_table(display_results, show_checks=args.show_checks)`
+  passes the new flag through.
+
+README:
+- Replaced the "Console summary (always)" section's column-list
+  description with the new default-narrow layout. Added two new
+  subsections:
+  - `#### Drilling into a single backlog (--reason-type TYPE)` —
+    full description with 4 example invocations (HS-183419 only,
+    `[RULE:newlines]`, subject mismatches, OR-joined multi-type).
+  - `#### Per-cell tick columns (--show-checks)` — table mapping
+    each tick column to its ✅/❌/⚠️ semantics, plus 2 example
+    invocations (single-kind debug, combined with `--reason-type`).
+- Added `--show-checks` and `--reason-type TYPE` rows to the CLI
+  reference options table.
+
+**Notes:**
+- Verified default narrow output on `marketplace_emails`: 5 rows
+  fit comfortably without horizontal scroll.
+- Verified `--show-checks` on the same set produces the previous
+  ~240-char wide layout unchanged.
+- Verified `--reason-type WARN:tracking_tag` on `--type direct`
+  filters from 63 rows down to the 19 rows in the HS-183419
+  backlog (44 warn-bucket + 7 fail rows that also carry the
+  warning − some warn rows that have ONLY semantic_extra). Run
+  summary still reports the full `Total: 63 | Pass: 9 | Warn: 44
+  | Fail: 10` so the totals stay honest.
+- Existing `--verbose --kind X` flag covers the "show me
+  everything for one kind" use case (extracted body, section
+  titles, card titles, link inventories, full per-rule diagnostic
+  output) — no new flag needed for that.
+
+---
+
 ## 2026-05-08 - compare_email_previews.py: introduce warn_same / warn_structured verdict bucket
 
 **Repository:** latest (nutella/web)
