@@ -4096,3 +4096,36 @@ Applied a batch of PM-review copy fixes to Learning & Courses semantic emails. S
 - All legacy `ALERT_CONFIG` entries in `alert_commands.rb` are intentionally untouched — semantic-only scope per the running design decision.
 
 ---
+
+## 2026-05-09 - admin_message preview override removal + Tier 2 builder rescue removals
+
+**Repository:** latest (nutella)
+**Branch:** HS-182399/semantic-email-text-and-styling-fixes
+**Files Changed:**
+- nutella/web/common/email/semantic/builders/alert/immediate/generic_builder.rb
+- nutella/web/common/email/semantic/builders/base.rb
+- nutella/web/common/email/semantic/preview/mock_data.rb
+- nutella/web/common/email/semantic/preview/semantic_email_preview.rb
+- nutella/web/common/email/semantic/preview/legacy_compare/legacy_email_preview.rb
+
+**Summary:**
+Closed the two follow-ups from the prior preview-audit batch: (1) removed the `admin_message` HS-182399 preview override and replaced it with production-shaped mock data + a real `AdminMessage` entity in EntityCache, and (2) per the user's "just fail" directive, converted four Tier 2 swallow-to-default rescues in the production builder helper layer (`call_lambda_safely`, `substitute_template_tags`, `lookup_data_field`, `flatten_template_parts` lambda call) to log + re-raise. `compare_email_previews.py` shows admin_message moving from Warn → Pass; total counts otherwise identical (Pass 19, Warn 169, Fail 124, Preview Missing 0).
+
+**Changes Made:**
+- `generic_builder.rb`: deleted `SPECIAL_BODY_TEXT[:admin_message]` (dead code: called undefined `AdminMessage.find_by_id` and `#body`), and removed the corresponding `if kind_sym == :admin_message` branch in `build_email_data`. Body comes from `extract_messages_text` reading `data["admin_message"]["long_text"]` populated by `AlertPresenter#admin_message_to_output`.
+- `mock_data.rb`: added `MOCK_IDS[:admin_message]`, `DEFAULTS` for admin_message subject/preheader/short_text/long_text (mirroring legacy mock text), and a `mock_admin_message` constructor that returns a real `AdminMessage` (not OpenStruct) so AlertPresenter can call `short_text` / `long_text` / `subject` / `preheader` / `url` directly.
+- `semantic_email_preview.rb`:
+  - `prepopulate_entity_cache`: seeded `mock_admin_message` under both bare-id and `"alert_<id>"` keys for `EntityFetch.entity` resolution.
+  - `mock_alert` `case kind_sym`: added `when :admin_message` setting production-shape `data["to"]` and `data["admin_message"]` (`{type: ADMIN_MESSAGE_ENTITY, id: ...}`), plus `data.delete("custom_subject")` to strip the global mock pollution that was tripping `AlertPresenter#has_custom_subject?` → `format_field(:custom_subject)` → `raise "missing custom_subject for alert admin_message"` (root cause of the initial `subject is required` validator failure once the override was removed).
+  - `build_immediate_single_email`: deleted the `when "admin_message"` override block and replaced with a NOTE comment pointing at the production code path.
+- `legacy_email_preview.rb`: changed `mock_alert_data["admin_message"]["url"]` from the mock-only `/admin/messages/1` to `/notifications/mock-alert-admin_message/action`, matching the path that production `AlertPresenter#admin_message_to_output` generates (`Highspot.url(:alerts, :action, ...)`). Eliminates the spurious `[FAIL:cta_url]` from compare.
+- `base.rb` (Tier 2 rescue removals): converted four helper rescues (`call_lambda_safely`, `substitute_template_tags`, `lookup_data_field`, lambda call inside `flatten_template_parts`) from silent default-return to `EventLogger.error(... backtrace ...)` + `raise`. Production behavior change: any helper exception now surfaces (caught upstream by `extract_config_text`'s own rescue) rather than producing degraded text. Verified zero new helper-error log entries during full compare run, indicating these rescues were unused dead error-handling code.
+
+**Notes:**
+- Diagnostic discovery for the `subject is required` failure: temporarily wrapped `for_subject` with EventLogger.error logging keyed on `kind == "admin_message"` and read `nutella/web/server.out`, which surfaced `RuntimeError: missing custom_subject for alert admin_message`. Root caused to `LegacyEmailPreview.mock_alert_data["custom_subject"]` global pollution (production payload only carries `:custom_subject` for `share_*` kinds; other kinds get away with it because their `data_to_output` fails for unrelated reasons and `has_custom_subject?` returns false). The diagnostic was removed after the fix landed.
+- `AdminMessage.url` is set to `"#{base_url}/admin/messages/<id>"` in the mock so the non-empty branch in `admin_message_to_output` fires and the presenter generates the tracked alert-action URL. The literal mock value is overwritten by the presenter; only its non-empty-ness matters.
+- The production builder bug previously documented (`AdminMessage.find_by_id` and `#body` are undefined) is now resolved by deletion — the lambda was always returning nil so removing it changes nothing in production behavior.
+- Tier 2 conversions are conservative: only the four small swallow-to-default helper rescues. Larger orchestration rescues in `extract_presenter_text` / `extract_config_text` / `extract_messages_text` / `extract_messages_html` were left intact since they form the documented preview/production fallback chain.
+- No regressions: full `compare_email_previews.py` run shows identical Pass/Warn/Fail/Preview Missing counts before and after, with admin_message moving from Warn → Pass (one of the 19 passes).
+
+---
