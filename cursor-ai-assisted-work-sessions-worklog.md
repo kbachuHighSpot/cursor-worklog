@@ -6,6 +6,71 @@ Weekly summaries and YTD running summary are in [weekly-summary-worklog.md](week
 
 ---
 
+## 2026-05-08 - compare_email_previews.py: improve Backlogs section wording and add severity icons
+
+**Repository:** latest (nutella/web)
+**Branch:** kbachu/email-rendering
+**Files Changed:**
+- nutella/web/scripts/notifications-migration/compare_email_previews.py
+- nutella/web/scripts/notifications-migration/README.md
+
+**Summary:**
+Polished the `Backlogs` section of the Run summary for clarity.
+Section header is more descriptive; each row carries a severity
+icon (❌ for hard-fail backlogs, ⚠️ for informational warnings);
+per-verdict breakdowns now read as English ("163 in Warn, 122 in
+Fail") instead of math notation ("163 Warn + 122 Fail"); and the
+description column is left-padded so it aligns across rows even
+when one row has a short breakdown and another has a long one.
+
+**Changes Made:**
+
+`_format_run_summary`:
+- Section header rewritten from "Backlogs (cross-cutting; rows
+  overlap with verdicts above)" to "Backlogs by issue (a kind may
+  appear in multiple rows; all also counted in a verdict above)"
+  — more accessible; "by issue" frames what each row represents
+  (an issue inventory), and the parenthetical explains the
+  overlap rule in plain English.
+- New `_backlog_icon(label)` helper picks ❌ / ⚠️ / • based on
+  the label prefix (`[RULE:` → ❌ hard-fail, `WARN:` → ⚠️
+  informational). Derived from prefix so a new `[RULE:*]` backlog
+  automatically gets the right severity.
+- `_verdict_breakdown(d)` now produces `(all N in Fail)` /
+  `(N in Warn, N in Fail)` instead of `(all N Fail)` /
+  `(N Warn + N Fail)`. Reads as English; "in" makes the
+  membership relationship explicit ("these N are in the Warn
+  bucket"); comma separator more natural than `+` for prose.
+- Pre-compute breakdown strings before rendering so we can
+  measure max width and pad the breakdown column with `_pad` to
+  a uniform visual width — keeps the description column aligned
+  across rows.
+- Renderer prepends the icon: `  ❌ [RULE:missing_card]` /
+  `  ⚠️ WARN:tracking_tag`.
+
+README:
+- Updated the Run summary example block to show the new layout
+  with icons and English-prose breakdowns.
+- Rewrote `#### Backlogs` subsection: leads with "one row per
+  issue, count = number of kinds with that issue" to head off the
+  "is this counts of kinds or counts of issues?" question;
+  documents the ❌/⚠️ icon convention; gives an English
+  translation of `(all N in Fail)` / `(N in Warn, N in Fail)`
+  shapes; and updates the Today's backlogs list to lead each
+  bullet with the appropriate severity icon.
+
+**Notes:**
+- Verified on `--type direct` (63 kinds): output renders cleanly
+  with all three rows aligned, icons visible, and breakdowns
+  legible:
+  `❌ [RULE:missing_card]     7   (all 7 in Fail)            ...`
+  `⚠️ WARN:tracking_tag      48   (38 in Warn, 10 in Fail)   ...`
+  `⚠️ WARN:semantic_extra    18   (15 in Warn, 3 in Fail)    ...`
+- Severity icons match conventions used elsewhere in the script
+  (verdict icons in `VERDICT_ICONS`, table tick markers).
+
+---
+
 ## 2026-05-08 - compare_email_previews.py: add lenient success rate (warnings count as pass)
 
 **Repository:** latest (nutella/web)
