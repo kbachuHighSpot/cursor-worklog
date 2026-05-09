@@ -6,6 +6,48 @@ Weekly summaries and YTD running summary are in [weekly-summary-worklog.md](week
 
 ---
 
+## 2026-05-08 - compare_email_previews.py: --failed-only now includes passing kinds with warnings
+
+**Repository:** latest (nutella/web)
+**Branch:** kbachu/email-rendering
+**Files Changed:**
+- nutella/web/scripts/notifications-migration/compare_email_previews.py
+- nutella/web/scripts/notifications-migration/README.md
+
+**Summary:**
+Widened `--failed-only` from "show fails + preview-misses" to
+"show anything actionable", so passing kinds tagged with
+`WARN:tracking_tag` (HS-183419) or `WARN:semantic_extra` now
+surface in the wrapper output (`compare.sh` uses `--failed-only`
+by default). Previously, a passing kind whose only issue was a
+warning was filtered out of the table even though the warning is
+the actionable signal for the HS-183419 backlog and the
+semantic-extra audit.
+
+**Changes Made:**
+- `--failed-only` filter now keeps a row if `verdict ∈
+  PROBLEM_VERDICTS` OR `_has_warning(r)` is true, where
+  `_has_warning` returns true on `tracking_tag_gap` or
+  `semantic_content_missing_in_legacy`.
+- Updated argparse help for `--failed-only` to document the new
+  semantics ("failures, preview-fetch misses, AND passing kinds
+  with at least one warning").
+- README option table entry for `--failed-only` rewritten to match,
+  and to note that the Run summary still reflects the full result
+  set regardless of the display filter.
+
+**Notes:**
+- Verified on `--category marketplace_emails --failed-only --quiet`:
+  3 rows shown (1 fail + 2 passing-with-WARN:tracking_tag), where
+  previously only the 1 fail would have been displayed. Run summary
+  still shows `Total: 5 | Pass: 4 | Fail: 1 | Warnings: 3`,
+  confirming the Run summary is unaffected by the display filter.
+- No verdict-enum, snapshot, CSV, or summary-section changes — the
+  underlying verdict bucket for these rows is still `pass_same` /
+  `pass_structured`, just no longer hidden under `--failed-only`.
+
+---
+
 ## 2026-05-08 - compare_email_previews.py: collapse run summary into single sectioned block with indented sub-rows
 
 **Repository:** latest (nutella/web)
