@@ -6,6 +6,82 @@ Weekly summaries and YTD running summary are in [weekly-summary-worklog.md](week
 
 ---
 
+## 2026-05-08 - compare_email_previews.py: split run summary into two sections (verdicts + cross-cutting backlogs)
+
+**Repository:** latest (nutella/web)
+**Branch:** kbachu/email-rendering
+**Files Changed:**
+- nutella/web/scripts/notifications-migration/compare_email_previews.py
+- nutella/web/scripts/notifications-migration/README.md
+
+**Summary:**
+Split the Run summary into two clearly-separated sections to fix
+the parent/child math confusion that came from indenting backlog
+rows underneath their parent verdict. Verdict roll-ups are now
+mutually exclusive (Pass + Warn + Fail + Preview Missing = Total)
+and the cross-cutting backlogs (`[RULE:missing_card]`,
+`WARN:tracking_tag`, `WARN:semantic_extra`) live in their own
+"Backlogs" section with per-row `(N Warn + N Fail …)` annotations
+that spell out which verdicts each backlog spans.
+
+The previous indented layout made readers expect parent-child math
+(sub-counts ≤ parent), but that was only true for
+`[RULE:missing_card]` (strict subset of Fail) and not at all true
+for the WARN:* rows (cross-cutting). E.g. `Warn: 167` with
+indented `WARN:tracking_tag: 285` looked broken — 285 > 167
+because 118 of the 285 HS-183419-affected kinds are failing for
+some other reason and counted in `Fail` instead.
+
+**Changes Made:**
+
+`_format_run_summary`:
+- Verdict roll-ups (Total / Pass / Warn / Fail / Preview Missing)
+  unchanged in the first section; sum still equals Total exactly.
+- New `─── Backlogs (cross-cutting; rows overlap with verdicts
+  above) ───` section below the verdicts, only rendered when at
+  least one backlog row is non-zero.
+- New `_per_verdict(predicate)` helper computes a
+  `{Pass, Warn, Fail, Miss}` count dict for any predicate.
+- New `_verdict_breakdown(d)` helper renders the dict into a
+  compact annotation: `(all N <Verdict>)` when only one bucket
+  contributes, `(N Warn + N Fail)` when multiple do.
+- Backlog rows render as
+  `  LABEL  COUNT   (N Warn + N Fail)   description` so the count,
+  per-verdict breakdown, and human description are all on one
+  line.
+- Renamed internal helpers `_parent` / `_sub` → `_verdict_row`
+  (single helper now; sub-rows are gone), `PARENT_LABEL_W` /
+  `SUB_LABEL_W` → `VERDICT_LABEL_W` / `BACKLOG_LABEL_W` to match
+  the new mental model.
+- Updated docstring to spell out the two sections, the
+  mutually-exclusive vs. cross-cutting distinction, and the
+  rationale for the split.
+
+README:
+- Replaced the old indented Run summary example with the new
+  two-section example using realistic numbers.
+- Replaced the prose explanation with `#### Verdict roll-ups` and
+  `#### Backlogs` subsections that explicitly call out the
+  mutually-exclusive vs. cross-cutting distinction, document the
+  per-row `(N Warn + N Fail)` annotations, and explain the two
+  shapes (`(all N Fail)` for strict subsets vs. multi-verdict
+  sums).
+- Pointer for adding new backlogs updated to `backlogs.append(...)`
+  in `_format_run_summary`.
+
+**Notes:**
+- Verified on `--type direct` (63 kinds): Verdicts `Pass: 9 |
+  Warn: 44 | Fail: 10 | Preview Missing: 0` sum to 63. Backlogs
+  show `[RULE:missing_card]: 7 (all 7 Fail)`,
+  `WARN:tracking_tag: 48 (38 Warn + 10 Fail)`,
+  `WARN:semantic_extra: 18 (15 Warn + 3 Fail)`. All per-verdict
+  breakdowns sum to their backlog total (38+10=48, 15+3=18).
+- `if backlogs:` guard ensures the section is hidden entirely
+  when no backlog rows fire, so a fully clean run collapses to
+  just the four verdict rows.
+
+---
+
 ## 2026-05-08 - compare_email_previews.py: hide tick columns by default, add --show-checks and --reason-type filter
 
 **Repository:** latest (nutella/web)
