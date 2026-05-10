@@ -6,6 +6,88 @@ Weekly summaries and YTD running summary are in [weekly-summary-worklog.md](week
 
 ---
 
+## 2026-05-09 - Phase 2: production-shape mock data unlocks 5 missing_card kinds
+
+**Repository:** latest (nutella/web)
+**Branch:** HS-182399/semantic-email-text-and-styling-fixes
+**Files Changed:**
+- nutella/web/common/email/semantic/preview/mock_data.rb
+- nutella/web/common/email/semantic/preview/semantic_email_preview.rb
+- nutella/.cursor/rules/semantic-email-previews.mdc
+
+**Summary:**
+Continued Phase 2 of the `[RULE:missing_card]` backlog drain (after Phase 1
+script-only fixes). Established and rolled out the **production-shape
+`{type, id}` mock-data override** pattern: legacy mock dicts carry
+denormalized `{title, url, ...}` fields without `type`/`id`, so
+`AlertPresenter#data_value_to_output` returns them as-is and the registered
+builder lambda's `fetch_spot(data)` / `fetch_item(data)` (via
+`Hspt::EntityCache` lookup on `ref[:id]`) returns nil — silently dropping
+entity cards from the rendered semantic email even though the legacy
+template links them.
+
+The fix is per-kind in `semantic_email_preview.rb#mock_alert`:
+`data["spot"] = data["spot"].merge("type" => Constants::SPOT_ENTITY, "id" => spot_obj.id)`
+(same pattern for items). With both `type` and `id` present,
+`AlertPresenter#spot_to_output` recomputes URLs from the cached entity AND
+`fetch_spot(data)` resolves the entity so the spot card renders.
+
+**Net impact (full sweep, 312 kinds):**
+- `[RULE:missing_card]`: 43 → 38 (−5 kinds resolved)
+- `[FAIL:entity_title]`: 1 → 0 (−1)
+- `[RULE:inlined_card_title]`: 11 → 18 (+7 — converting "no card" to
+  "card present + body still inlines title", a smaller follow-up class)
+- Pass/Warn/Fail: 19 / 176 / 117 (vs 19 / 177 / 116 baseline)
+
+**Kinds unlocked by Phase 2:**
+- `items_published`, `items_unpublished` (spot, sibling kinds)
+- `no_valid_content_approval_reviewers`,
+  `no_valid_content_approval_reviewers_in_group`,
+  `no_valid_content_approval_reviewers_step_awareness` (spot)
+- `item_expiring`, `item_expired` (item + spot — both linked in body)
+- `smart_feedback_failure` (item-only)
+
+**Changes Made:**
+- `mock_spot`: added `version: 0`, `mirroring: nil`, and
+  `is_mirroring_consumer?` singleton method so `AlertPresenter#spot_to_output`
+  doesn't `NoMethodError` through `ThumbnailPresenter` /
+  `Spot#mirroring`/`is_mirroring_consumer?` calls.
+- `mock_spot.get_thumbnail` now returns a path-based URL
+  (`/spots/<id>/thumbnail.png`) instead of a `data:` URI. Same fix as the
+  HS-182399 `mock_user.image_small.url` case study (data URIs crash
+  `UrlPresenter#initialize` on `parsed_url.path.split("/")`).
+- `mock_item.get_thumbnail` / `get_presented_thumbnail` likewise use a
+  path-based URL.
+- `semantic_email_preview.rb#mock_alert` gained 3 new `case` branches that
+  inject the production-shape `{type, id}` ref onto `data["spot"]` and/or
+  `data["item"]` for the kinds listed above.
+
+**Notes:**
+- Critical lesson: `AlertPresenter#data_value_to_output` (line 446-448)
+  short-circuits `return value if id.nil?`. With `id` present but `type`
+  missing, the `case value["type"]` falls through with no match and the key
+  becomes `nil` in the output — silently dropping the CTA. Always pass
+  BOTH `type` AND `id` together.
+- Critical lesson: `data_to_output`'s `rescue` (line 502-507) catches every
+  `*_to_output` exception and returns `{}`, wiping the ENTIRE output (CTA
+  URL, body interpolation, ...). The only diagnostic surface is
+  `EventLogger.error("Failed to load #{entity_type} entity ...")` in the
+  dev server log at `~/Codebase/latest/nutella/web/server.out` — added a
+  "Debugging Preview Failures" section to `semantic-email-previews.mdc`
+  pointing at this log path so future preview triage starts there instead
+  of guessing.
+- Kinds whose legacy mock injects a *different* item title than the
+  default mock_item ("Sales Bootcamp" for `:session_updated_learner`,
+  "Product Overview Deck" for `:reviewer_removed_by_deactivate`) are
+  intentionally NOT included — they need legacy-side title alignment or a
+  builder-side card-rendering path that doesn't go through
+  `item_to_output`.
+- User-anchored kinds (~22 in the missing_card backlog, "Alice Smith" not
+  carded) still need a builder change to emit the actor as a primary
+  identifier card. Out of scope for this mock-data-only pass.
+
+---
+
 ## 2026-05-09 - compare_email_previews.py: --reason-type now matches backlog tags verbatim
 
 **Repository:** latest (nutella/web)
