@@ -4354,3 +4354,39 @@ Applied a batch of PM-review copy fixes to Learning & Courses semantic emails. S
 - All legacy `ALERT_CONFIG` entries in `alert_commands.rb` are intentionally untouched — semantic-only scope per the running design decision.
 
 ---
+
+## 2026-05-10 - Drain remaining [RULE:missing_card] backlog (smart_feedback / marketplace / reviewer_removed / digest fan-out / user_deleted)
+
+**Repository:** nutella
+**Branch:** HS-182399/semantic-email-text-and-styling-fixes
+**Files Changed:**
+- nutella/web/common/email/semantic/builders/alert/immediate/generic_builder.rb
+- nutella/web/common/email/semantic/builders/alert/digests/digest_builder.rb
+- nutella/web/common/email/semantic/builders/alert/digests/digest_builder_kinds.rb
+- nutella/web/common/email/semantic/builders/direct/ops_builder.rb
+- nutella/web/common/email/semantic/preview/semantic_email_preview.rb
+- nutella/web/scripts/notifications-migration/compare_email_previews.py
+
+**Summary:**
+Closed out the final five `[RULE:missing_card]` issues in the HS-178954 backlog. After this pass, `compare_email_previews.py`'s missing_card backlog count drops to **zero across all 312 kinds** (the rule no longer appears in the run summary). Every remaining FAIL across the suite now falls under separate, already-tracked rules (`inlined_card_title`, `content_lost`, `newlines`, `cta_url`, `tracking_tag`, etc.).
+
+**Changes Made:**
+- `:smart_feedback_license_failure` / `:smart_feedback_rubric_failure` (Pattern C mock-data fix): added a `when :smart_feedback_license_failure, :smart_feedback_rubric_failure` clause to `SemanticEmailPreview.mock_alert` that merges the production-shape `{"type" => Constants::ITEM_ENTITY, "id" => item_obj.id}` into `data["item"]`, mirroring the existing `:smart_feedback_failure` override. `fetch_item(data)` now resolves and `build_generic_immediate_email` emits the course card for "Sales Training 101"; the `[{user}]` Alice Smith link stays inline (secondary-entity carve-out).
+- `:request_marketplace_spot_install_access` (custom listing card + reply chip):
+  - Declared `property :marketplace_spot_listing, coerce: Hashie::Mash` on `GenericAlertEmailData` so the `{name, url}` dict (NOT a real Highspot entity — no id/type, no `EntityCache` representation) survives `IgnoreUndeclared`.
+  - Added a dedicated `GenericBuilder.build_marketplace_spot_install_access_email` helper that builds a custom listing card from `data[:marketplace_spot_listing]`, anchors the requester's `:comment` (`FROM_WROTE_COMMENT`) as a reply chip on that card, and wires the `[:marketplace_spot_listing, :url]` action href to a "View" CTA. Mirrors the `:session_updated_learner` dispatch pattern (early `next` from the main `ALL_GENERIC_KINDS` lambda).
+  - Added a `:request_marketplace_spot_install_access` mock-data override that merges string `"type"` / `"id"` into `data["from"]` so `fetch_user(data, :from)` resolves and the reply chip emits — same shared-mock symbol-vs-string `:id` quirk that previously affected `:session_updated_learner`, `:user_deactivated_notification`, `:password_*`, and `:took_ownership`.
+- `:reviewer_removed_by_deactivate` (`OpsBuilder` rebuild): refactored `OpsBuilder.build_reviewer_removed` from an inline-link `html_body_copy` shape into the same item-card layout as its sibling `build_proctor_replaced`. The body is now a stripped sentence ("…removed as a reviewer for at least one submitted lesson in the following course:"), the course is rendered as an `item_group` card with `primary_identifier: { text: course_title, url: item_url }`, and the legacy "click here" footer link is replaced by a `section_action` "Review Submissions" button anchored to `manage_submissions_url`. The card emits without a thumbnail (mirroring `proctor_replaced`).
+- `digest_pitch_templates` / `digest_downloads_reports` / `digest_mirroring` (multi-card fan-out):
+  - Surgically pruned `EmailContentBuilder::DigestBuilder::NO_CARD_KINDS` (in `digest_builder_kinds.rb`) — removed every kind whose alert payload carries an `item` / `spot` / `pitch` reference: `pitch_expired`, `digital_room_expired`, `pitch_templates_item_archived/deleted/restored`, `message_templates_item_archived/deleted/restored`, `items_download_ready`, `item_unzip_ready`, `analytics_report_download_ready`, `export_external_contact_download_ready`, `export_privacy_download_ready`, `export_team_download_ready`, `mirroring_spot_completed/failed/completed_notify`, `mirroring_marketplace_spot_completed/failed`, `updating_mirrored_spot_completed/failed`, `updating_mirrored_marketplace_spot_completed/pending`. True system-only kinds (sync, password, mirroring_failed/start_failed/skipped_objects, salesforce_*, workday_*, dynamics_*, etc.) stay on the list with an inline rationale comment block.
+  - Added `"pitch"` to the `entity_keys` lookup order in `DigestBuilder.detect_and_build_card` (default + `GROUP_PRIORITY_KINDS` + `SPOT_PRIORITY_KINDS` branches) so `pitch_expired` / `digital_room_expired` (`data["pitch"]`) get carded in `digest_pitch_templates` without needing a dedicated `PITCH_PRIORITY_KINDS` constant.
+  - End-state: `digest_pitch_templates` (was 8 missing entities) and `digest_downloads_reports` (was 2) now fall under `[RULE:inlined_card_title]` — body text inlines a card title, separate concern. `digest_mirroring` is fully WARN (lenient pass).
+- `:user_deleted_notification` (`MISSING_CARD_EXEMPT`): added the kind to `MISSING_CARD_EXEMPT_KINDS` in `compare_email_previews.py` (previously an empty `set()`) with a multi-line rationale block. PM direction (per the prior conversation thread) was "Don't do anything" — keep the semantic version equally terse as legacy ("Account deleted" + the same single-sentence inline link) without forcing a `USER_CARD_KINDS` opt-in that would surface a misleading empty-comment user card for the actor. The exemption is narrowly scoped to this one kind and documented as the "no comment plumbing; pending product decision" follow-up.
+
+**Notes:**
+- After this pass the `compare_email_previews.py` Backlogs-by-issue summary no longer lists `[RULE:missing_card]` at all. All 312 kinds either render a card for every legacy entity link (or document a deliberate exemption). `[RULE:inlined_card_title]`, `[FAIL:content_lost]`, `[RULE:newlines]`, etc. remain as separate, pre-existing follow-ups.
+- The `digest_builder_kinds.rb` change is intentionally surgical — kinds with no entity stay on `NO_CARD_KINDS`. `invalid_bulk_pitch_ownership_transfer` / `invalid_bulk_digital_room_ownership_transfer` were kept on the no-card list because their bodies render system-status text only (no entity hyperlink in legacy).
+- The `OpsBuilder.build_reviewer_removed` change introduces a copy delta from legacy ("click here" → "Review Submissions" button + "the following course:" body strip), now flagged as `[FAIL:content_lost]` for the literal legacy phrase. Kept minimal per the "minimal changes for bug fixes" rule — content_lost is a separate copy-style issue, addressable when product picks the target wording.
+- Continues the same Pattern C mock-data approach used for `:took_ownership`, `:user_deactivated_notification`, `:password_*`, `:session_updated_learner`. The pattern is now codified in the migrate-semantic-email-body-copy AI skill.
+
+---
