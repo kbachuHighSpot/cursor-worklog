@@ -4486,3 +4486,42 @@ Major rework of the semantic email assessment-family kinds plus a documentation 
 - Cursor rule + skill sync mirrors the canonical sources in `nutella/.cursor/rules/` and `~/.cursor/skills/migrate-semantic-email-body-copy/SKILL.md` to the ai-plugins distribution.
 
 ---
+
+## 2026-05-11 - PR #70329 Aristarch review fixes (notification rules REST API)
+
+**Repository:** nutella
+**Branch:** HS-180223/notification-rules-rest-api (review-fixes commit `224fa1002ad`)
+**Worktree:** /Users/kiran.bachu/Codebase/nutella-pr70329-review (off origin/HS-180223/notification-rules-rest-api)
+**Files Changed:**
+- `web/api/controllers/notification_rules.rb`
+- `web/common/models/queries/notification_rule_override_queries.rb`
+- `web/spec/integration/api/controllers/notification_rules_controller_spec.rb`
+- `web/spec/unit/common/models/queries/notification_rule_override_queries_spec.rb`
+
+**Summary:**
+Reviewed all 22 inline comments on PR #70329 (Phase 3 notification-rules REST API). Most cursor[bot] / semgrep[bot] comments were already addressed in subsequent commits to the PR HEAD. Four substantive issues from AMoo-Miki (Aristarch) needed code fixes: NoSQL injection on the override list filter, missing Hash validation in `parse_json_body!`, TOCTOU race on rule create, and non-deterministic pagination for overrides. Applied all four in a separate worktree (`HS-180223/notification-rules-review-fixes`) so the active `HS-182399/...` branch was untouched, then pushed the squashed commit directly onto the PR branch on origin.
+
+**Changes Made:**
+
+1. **NoSQL injection guard (HIGH / security)** — `NotificationRuleOverrideQueries.build_filter_selector` now accepts only `String` or explicit `nil` for `scope.domain_id` / `scope.user_id`, mirroring `NotificationRuleQueries.build_filter_selector`. Rack's bracket-notation parser (`?domain_id[$gt]=`) now silently drops the operator expression instead of forwarding it to Mongo.
+
+2. **`parse_json_body!` Hash check (MEDIUM / api)** — body must be a JSON object; bare arrays, strings, numbers, etc. return 400 ("Request body must be a JSON object"). Narrowed the rescue from `StandardError` to `JSON::ParserError` with a generic "Request body is not valid JSON" message, consistent with the earlier exception-leak fix.
+
+3. **TOCTOU race on `name` (MEDIUM / data)** — wrapped `NotificationRuleCommands.create` rescue to detect Mongo error code 11000 via `Mongo.duplicate_key_error(e)` and halt 409. This is defense-in-depth; the durable fix is a unique MongoDB index on `notification_rules.name`, deferred to a follow-up under HS-180223 (DBA-coordinated migration). The rescue is a no-op for the race until the index ships.
+
+4. **Pagination tiebreaker (MEDIUM / data)** — `NotificationRuleOverrideQueries.find_filtered` sort now ends with `:_id => 1` so pagination is stable when `(rule_name, scope.domain_id, scope.user_id)` are non-unique. Updated unit spec assertion to match.
+
+**Test Coverage:**
+
+- Unit `notification_rule_override_queries_spec`: +4 cases for NoSQL-injection rejection (3 in `find_filtered`, 1 in `count_filtered`) + updated sort assertion. 15 examples, 0 failures.
+- Integration `notification_rules_controller_spec`: +3 cases for `parse_json_body!` Hash guard, +1 for dup-key->409 (stubs `NotificationRuleCommands.create` to raise an E11000 `OperationFailure`), +1 HTTP-layer NoSQL injection regression that asserts a `nil` domain override is still returned when `?domain_id[$gt]=` is sent. 45 examples, 0 failures.
+
+**Notes:**
+
+- Used a separate worktree (`/Users/kiran.bachu/Codebase/nutella-pr70329-review`) so the active `HS-182399/semantic-email-text-and-styling-fixes` branch in the main checkout stayed clean.
+- All cursor[bot] comments (11) on the PR were already addressed in subsequent commits before this session; only AMoo-Miki's 5 comments were outstanding, and 1 of those (DELETE override cross-rule guard) was also already fixed on HEAD.
+- Replies to the GitHub comments are drafted but NOT posted (per user direction).
+- Follow-up to file: HS-180223 subtask for the unique Mongo index migration on `notification_rules.name`.
+- Push: `git push origin HS-180223/notification-rules-review-fixes:HS-180223/notification-rules-rest-api` (43bec997c32..224fa1002ad).
+
+---
