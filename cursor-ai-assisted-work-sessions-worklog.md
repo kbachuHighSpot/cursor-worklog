@@ -4390,3 +4390,29 @@ Closed out the final five `[RULE:missing_card]` issues in the HS-178954 backlog.
 - Continues the same Pattern C mock-data approach used for `:took_ownership`, `:user_deactivated_notification`, `:password_*`, `:session_updated_learner`. The pattern is now codified in the migrate-semantic-email-body-copy AI skill.
 
 ---
+
+## 2026-05-11 - Remove WARN:semantic_extra rule check from compare_email_previews.py
+
+**Repository:** latest (nutella)
+**Branch:** HS-182399/semantic-email-text-and-styling-fixes
+**Files Changed:**
+- nutella/web/scripts/notifications-migration/compare_email_previews.py
+
+**Summary:**
+Fully removed the always-on `WARN:semantic_extra` warning (semantic content not present in legacy) from `compare_email_previews.py`. The check, its result fields, the SemInLeg tick column, the CSV column, the dedicated Markdown section, the summary table row, the BACKLOG_DESCRIPTIONS entry, and all argparse / docstring / comment references are gone. `WARN:tracking_tag` (HS-183419) is now the sole always-on informational warning.
+
+**Changes Made:**
+- Removed the `check_semantic_content_in_legacy` helper and its two call sites in `compare_kind` / `compare_digest` (no more `result["semantic_content_missing_in_legacy"]` / `result["extra_semantic_phrases"]`).
+- Simplified `_result_has_warning` (and `_demote_pass_to_warn` docstring) to key only on `tracking_tag_gap`.
+- Stripped both `WARN:semantic_extra` branches from `fail_reason_parts` (passing and failing kinds) and dropped the entry from `BACKLOG_DESCRIPTIONS`.
+- Dropped the `WARN:semantic_extra` Markdown summary row, the per-failure "Semantic content in legacy" lines in the failures section, and the dedicated `## WARN:semantic_extra` Markdown section.
+- Removed the `SemInLeg` tick column from `format_summary_table` (header, width, layout doc) and the matching `sem_in_leg_ok` column from `write_summary_csv`.
+- Removed the `extra_semantic_phrases` printout from `_print_verbose`.
+- Cleaned up argparse epilog ("Semantic-extra content check (always-on)" paragraph), `--failed-only` and `--show-checks` help strings, and several lingering comments/docstrings.
+
+**Notes:**
+- Helper `_has_generic_entity_reference` is still used by other checks, so it stays.
+- README (`nutella/web/scripts/notifications-migration/README.md`) still has `WARN:semantic_extra` / `SemInLeg` references — left untouched because the user's request was scoped to the `.py` file. Flagged to the user.
+- Verified with `python3 -m py_compile` (passes) and Cursor lint (clean).
+
+---
