@@ -4525,3 +4525,26 @@ Reviewed all 22 inline comments on PR #70329 (Phase 3 notification-rules REST AP
 - Push: `git push origin HS-180223/notification-rules-review-fixes:HS-180223/notification-rules-rest-api` (43bec997c32..224fa1002ad).
 
 ---
+
+## 2026-05-11 - PR #70329 review-comment replies posted
+
+**Repository:** highspot/nutella (PR #70329) — meta-entry, no code change
+**Branch:** N/A
+**Files Changed:** N/A
+
+**Summary:**
+Posted all 17 review-comment replies on PR #70329 following the Aristarch-tool review and the cursor[bot] passes. Each Aristarch reply includes inline feedback on the comment quality (accuracy, severity calibration, confidence calibration, repro quality, suggested-fix actionability) because the tool explicitly asks reviewers for feedback. Also posted a single consolidated PR-level comment summarizing cross-cutting feedback so the Aristarch product team doesn't have to stitch it together from 5 threads.
+
+**Changes Made:**
+
+1. **5 Aristarch threaded replies** (`#3192274628`, `#3192278392`, `#3192282319`, `#3192286260`, `#3192293969`) — each links to commit `224fa1002ad` and includes a "Feedback on this Aristarch comment" section.
+2. **1 PR-level consolidated comment** ([#issuecomment-4425286727](https://github.com/highspot/nutella/pull/70329#issuecomment-4425286727)) — net 4/5 actionable; called out three concrete improvement asks for the tool team (duplicate-finding scan, operational-fix awareness, count/data agreement).
+3. **11 cursor[bot] resolved-in-HEAD acknowledgments** — short pointers to the file/line on HEAD where each finding was addressed.
+
+**Notes:**
+
+- Posting script lives at `/tmp/pr70329_post_replies.py` and per-comment markdown bodies at `/tmp/pr70329_reply_*.md` for traceability.
+- The semgrep[bot] threads (3) already had human replies and were intentionally skipped.
+- Per the workspace rule on minimal changes, the unique-MongoDB-index follow-up for `notification_rules.name` is still a separate TODO (need parent epic to file under HS-180223).
+
+---
