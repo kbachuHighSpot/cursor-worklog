@@ -6,6 +6,65 @@ Weekly summaries and YTD running summary are in [weekly-summary-worklog.md](week
 
 ---
 
+## 2026-05-12 - Trim verbose comments across semantic email PR
+
+**Repository:** latest (nutella/web)
+**Branch:** HS-182399/semantic-email-text-and-styling-fixes
+**PR:** https://github.com/highspot/nutella/pull/70801
+**Commit:** dfedfcd4ead
+**Files Changed:** 28 (semantic email builders, preview/, core/, alert_commands.rb, alert_presenter.rb, semantic_email.mjml.erb, compare_email_previews.py)
+
+**Summary:**
+Replaced multi-paragraph docstrings and inline explainer blocks with terse
+1-3 line versions per PM-style "short and sweet" request. Kept only the
+"why" / contractual statements, dropped "what the code does" narration
+and most `cf.` / line-number citations.
+
+**Changes Made:**
+- Hand-crafted 60 block replacements in `generic_builder.rb` (40KB → 27KB)
+- Auto-trimmed remaining 27 files using a "keep-first-paragraph"
+  heuristic (truncate each comment block at first blank `#` line, fall
+  back to 2-line cap)
+- Ran a stricter follow-up pass that drops dangling sentence-mid-clause
+  lines (unmatched parens/brackets, continuation words like `and`/`the`,
+  trailing `—`/`,`/`:`/`(`)
+- Trimmed the 6 longest `<%# %>` ERB blocks in `semantic_email.mjml.erb`
+  by hand
+
+**Mechanics:**
+- Pass 1 (auto): 313 blocks trimmed, 2,211 lines dropped
+- Pass 2 (auto, convergence): 31 blocks, 163 lines
+- Pass 3 (dangling-clause fix, strict): 212 blocks fixed
+- Pass 4 (dangling-clause, convergence): 0 blocks (stable)
+- Net result: 28 files changed, 164 insertions, 3,512 deletions
+  (~3,348 net lines of comment cruft removed)
+
+**Verification:**
+- `ruby -c` on all 27 .rb files: Syntax OK
+- `py_compile` on `compare_email_previews.py`: Syntax OK
+- ReadLints on most-touched files: no errors
+
+**Biggest cuts:**
+- generic_builder.rb: 932 lines
+- semantic_email_preview.rb: 608 lines
+- learning_builder.rb: 501 lines
+- compare_email_previews.py: 461 lines
+- legacy_email_preview.rb: 287 lines
+- mock_data.rb: 128 lines
+- alert_commands.rb: 122 lines
+
+**Notes:**
+Per user direction, this is the "full PR sweep" / "one-liner" comment
+style (option `full_pr` + `one_liner` from the scope prompt). Helper
+scripts used during the trim (`_trim_comments_auto.py`,
+`_fix_dangling_comments.py`, `_trim_comments_generic_builder.py`) were
+created in `scripts/notifications-migration/` and deleted before commit
+so they don't pollute the PR.
+
+---
+
+
+
 ## 2026-05-09 - Phase 2: production-shape mock data unlocks 5 missing_card kinds
 
 **Repository:** latest (nutella/web)
