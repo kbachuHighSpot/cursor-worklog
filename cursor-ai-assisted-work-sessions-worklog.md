@@ -6,6 +6,42 @@ Weekly summaries and YTD running summary are in [weekly-summary-worklog.md](week
 
 ---
 
+## 2026-05-13 - compare_email_previews: show zero-count rule checks in run summary
+
+**Repository:** latest (nutella/web)
+**Branch:** HS-182399/semantic-email-text-and-styling-fixes
+**Files Changed:**
+- web/scripts/notifications-migration/compare_email_previews.py
+
+**Summary:**
+Reworked the "Backlogs by issue" section of the run summary into a full
+"Rule checks" checklist that always renders every check the script knows
+about. Previously only tags that tripped at least once appeared, so a
+reviewer couldn't tell whether a check had been quietly disabled or had
+genuinely produced zero violations. Now every entry in
+`BACKLOG_DESCRIPTIONS` (22 [RULE:*], 11 [FAIL:*], 1 WARN:*) shows up with
+a count, and a `count = 0` row confirms the check ran cleanly.
+
+**Changes Made:**
+- Seeded `backlog_counts` with every key from `BACKLOG_DESCRIPTIONS`
+  (Pass/Fail/Miss=0) before sort+render so zero-violation checks make
+  the cut.
+- Removed the `if total > 0` filter on the `backlogs` list.
+- Updated the sort key to put non-zero rows ahead of zero rows within
+  each (RULE/FAIL) vs WARN group so the active issues stay at the top of
+  the table.
+- Renamed the section header to "Rule checks" and clarified that zero
+  rows mean "the check ran with no violations".
+
+**Notes:**
+- Smoke-tested: `--rule-category support` (1 kind, all clean) shows 33
+  zero-count hard-fail rows + WARN:tracking_tag at the bottom;
+  `--rule-category digest` (11 fails) shows 6 active rows first
+  (inlined_card_title=11, cta_url=3, ...) then 27 zero rows then the
+  warning.
+
+---
+
 ## 2026-05-13 - compare_email_previews: `--rule-category` filter (Mongo-backed)
 
 **Repository:** latest (nutella/web)
