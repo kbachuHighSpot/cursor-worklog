@@ -6,6 +6,150 @@ Weekly summaries and YTD running summary are in [weekly-summary-worklog.md](week
 
 ---
 
+## 2026-05-13 - semantic_email_preview.rb: concise PR-added comments
+
+**Repository:** highspot/nutella (branch HS-182399/semantic-email-text-and-styling-fixes; no commit from subagent)
+**Files Changed:**
+- `nutella/web/common/email/semantic/preview/semantic_email_preview.rb`
+
+**Summary:**
+Applied `concise-code-comments` to PR-added comment hunks vs `origin/main`: merged multi-line blocks (incl. broken/truncated `#` lines), dropped path/line/rule dumps, consolidated mock URL commentary; comments only.
+
+**Changes Made:**
+- Comment-only edits in `semantic_email_preview.rb`.
+
+**Notes:**
+- Parent agent handles nutella commit/push.
+
+---
+
+## 2026-05-13 - learning_builder.rb: concise PR-added comments
+
+**Repository:** highspot/nutella (branch HS-182399/semantic-email-text-and-styling-fixes; no commit from subagent)
+**Files Changed:**
+- `nutella/web/common/email/semantic/builders/alert/immediate/learning_builder.rb`
+
+**Summary:**
+Applied `concise-code-comments` to comments introduced in the PR diff vs `origin/main`: collapsed multi-line and narration-heavy blocks to one-line “why” notes, removed ALERT_CONFIG/legacy path dumps, fixed truncated `#` lines.
+
+**Changes Made:**
+- Comment-only edits throughout `learning_builder.rb` (no code/strings/i18n keys).
+
+**Notes:**
+- Parent agent handles nutella commit/push.
+
+---
+
+## 2026-05-13 - Pattern E dispatch: move from registration lambda to method body (autoloader fix)
+
+**Repository:** highspot/nutella + ~/.cursor/skills/migrate-semantic-email-body-copy
+**Files Changed:**
+- `nutella/web/common/email/semantic/builders/alert/immediate/send_failed_builder.rb`
+- `~/.cursor/skills/migrate-semantic-email-body-copy/SKILL.md`
+
+**Summary:**
+Resolved why `custom_smtp_pitch_send_failed` continued to fail
+`[RULE:body_after_following_reference]` after Pattern E was added: the
+Padrino autoloader redefines methods on file change but does NOT
+re-execute top-level code blocks (the `each` block that calls
+`SemanticAlertRenderer.register(...)`). The lambda body was captured
+at module load time and the `each` block never re-ran on edits, so
+the new `if alert.kind.to_sym == :custom_smtp_pitch_send_failed`
+dispatch only took effect after a full server restart.
+
+Moved the dispatch from the registration lambda into
+`build_send_failed_email` itself. Since methods are redefined on
+every file reload, the dispatch now picks up file edits on the next
+request — no Padrino restart required.
+
+**Changes Made:**
+- `send_failed_builder.rb#build_send_failed_email` — added a Pattern E
+  dispatch at the top of the method. When `account_type == "custom_smtp"`
+  and `failure_type == :send_failed`, branches on
+  `pitch_label(pitch).casecmp?("external share")` to route to either
+  `build_custom_smtp_digital_room_send_failed_email` (for "External
+  Share" labeled pitches) or `build_custom_smtp_pitch_send_failed_email`
+  (for regular pitches). Returns early in either case, bypassing the
+  rest of `build_send_failed_email`'s logic.
+- `send_failed_builder.rb` registration lambda — removed the (now
+  redundant) `if alert.kind.to_sym == :custom_smtp_pitch_send_failed`
+  / `:custom_smtp_digital_room_send_failed` branches. Replaced with
+  a comment explaining why dispatch lives in the method, not here.
+- `migrate-semantic-email-body-copy/SKILL.md` — added a Common Gotchas
+  entry titled "Pattern E dispatch MUST live inside a method, not
+  inside the registration lambda" with a ❌ BAD / ✅ GOOD code
+  snippet, the autoloader explanation, and a diagnostic ("if Pattern G
+  worked but Pattern E didn't, this is almost certainly the cause —
+  move the dispatch into the method body").
+
+**Verification:**
+- `python3 scripts/notifications-migration/compare_email_previews.py --kind custom_smtp_pitch_send_failed -v`:
+  - ✅ pass (content match + structured)
+  - `[RULE:body_after_following_reference]`: 0
+  - `[RULE:following_missing_colon]`: 0
+  - Body now renders as TWO sections:
+    - Primary: `'The following pitch could not be sent:'` + pitch card
+    - Footer: `'There was an issue connecting to your email server. If the issue persists, please contact your company administrator.'` + CTA
+  - Only signal: `WARN:tracking_tag` (HS-183419 informational).
+
+**Notes:**
+- Root-cause finding generalizable across the SendFailed family and
+  any other family using top-level `each` block lambda registration
+  in this codebase (PitchRelationshipBuilder, SpotAccessBuilder,
+  ShareBuilder, etc.). Future Pattern E (or any per-kind dispatch)
+  additions should follow the method-body pattern to avoid
+  restart-pinned changes.
+- The cause was diagnosable from the rendered body: Pattern G's
+  colon DID appear (method-level change) but Pattern E's section
+  split DID NOT (lambda-level change). Skill gotcha now documents
+  this exact diagnostic.
+- The dead `account_type == "custom_smtp"` branch in
+  `build_send_failed_body_copy` is now even deader (both custom_smtp
+  kinds are intercepted before reaching it). Left untouched per the
+  workspace "Don't change working code" rule.
+
+---
+
+## 2026-05-13 - Worklog skill + rule: gate git push on user confirmation
+
+**Repository:** ~/.cursor/skills/update-worklog + ~/.cursor/rules
+**Files Changed:**
+- `~/.cursor/skills/update-worklog/SKILL.md`
+- `~/.cursor/rules/work-log.mdc`
+
+**Summary:**
+Changed the worklog automation policy so that the local file append
+still happens automatically, but the `git add` / `git commit` /
+`git pull --rebase` / `git push` step is now **gated on explicit user
+confirmation** via `AskQuestion`. Previously both the skill and the
+always-applied rule said to push automatically every time an entry
+was appended.
+
+**Changes Made:**
+- `update-worklog/SKILL.md` — rewrote the "Commit and Push Workflow"
+  section to make the user-confirmation step explicit and required.
+  Added a "Why this gate exists" paragraph explaining the
+  motivation (chance to revise entries before they hit the public
+  repo, batching multiple entries, sensitive names, etc.).
+- `work-log.mdc` (always-applied rule) — rewrote the "Commit and
+  Push" section with the same gate. Replaced "always commit and
+  push to the remote repository" with "always ask the user for
+  confirmation before running git operations on the worklog
+  repository". Added a closing note that the confirmation step
+  must not be skipped even for routine entries.
+
+**Notes:**
+- Both files now consistently describe the same workflow:
+  (1) append locally, (2) ask via `AskQuestion`,
+  (3) only run git commands after user confirms.
+- If the user declines, the file stays modified locally and the
+  agent moves on — the user can batch the entry into a later
+  commit or amend it before pushing.
+- This entry itself is the first to be added under the new policy
+  — the agent will ask for confirmation before pushing it.
+
+---
+
 ## 2026-05-13 - [RULE:body_after_following_reference]: broaden regex + Pattern E for custom_smtp_pitch_send_failed + skill update
 
 **Repository:** highspot/nutella + ~/.cursor/skills/migrate-semantic-email-body-copy
@@ -5048,5 +5192,81 @@ Posted all 17 review-comment replies on PR #70329 following the Aristarch-tool r
 - Posting script lives at `/tmp/pr70329_post_replies.py` and per-comment markdown bodies at `/tmp/pr70329_reply_*.md` for traceability.
 - The semgrep[bot] threads (3) already had human replies and were intentionally skipped.
 - Per the workspace rule on minimal changes, the unique-MongoDB-index follow-up for `notification_rules.name` is still a separate TODO (need parent epic to file under HS-180223).
+
+---
+
+## 2026-05-13 - concise-code-comments on compare_email_previews.py (HS-182399)
+
+**Repository:** highspot/nutella (PR #70801)
+**Branch:** HS-182399/semantic-email-text-and-styling-fixes
+**Files Changed:**
+- web/scripts/notifications-migration/compare_email_previews.py
+
+**Summary:**
+Applied `concise-code-comments` rule to PR-added docstrings and long `#` blocks only: shortened migration-rule module bullets, discovery/snapshot/rule-check docstrings, exempt-kind headers, regex-adjacent comments, and fixed truncated comments; left argparse `epilog` user-facing help unchanged. No logic or regex changes.
+
+**Changes Made:**
+- Collapsed verbose `_check_*` docstrings to `[RULE:…]` one-liners (or brief 2–3 line summaries where needed for `[RULE:newlines]`).
+- Replaced multi-line exempt-list / taxonomy narration with short anchored comments; repaired accidental half-comments from earlier PR edits.
+
+**Notes:**
+(parent agent commits; nutella not committed in this session)
+
+---
+
+## 2026-05-13 - concise-code-comments on semantic builders Base (HS-182399)
+
+**Repository:** highspot/nutella
+**Branch:** HS-182399/semantic-email-text-and-styling-fixes
+**Files Changed:**
+- web/common/email/semantic/builders/base.rb
+
+**Summary:**
+Applied `concise-code-comments` to `#` comments only: collapsed ≥3-line blocks and narrating 2-line blocks to one line (preserving MJML/`[RULE:newlines]`, preview-slice, and locale/routing “why”), restored `Locale.switch_to` and markdown_html escaping as explicit two-liners where the second line is a correctness constraint; fixed truncated comments above training banner helpers. No Ruby logic changes.
+
+**Changes Made:**
+- Single-line replacements for module intro, timestamp/thumbnail helpers, `build_email_data` inner paragraph bridging, message extract/join comments, `extract_external_comment`, `strip_html_tags`, etc.
+- `build_email_data`, `extract_config_text`, `render_markdown_html_part` kept as two-line method comments where needed.
+
+**Notes:**
+Nutella changes not committed in this session (per request).
+
+---
+
+## 2026-05-13 - concise-code-comments on semantic_email_renderer.rb (HS-182399)
+
+**Repository:** highspot/nutella (PR #70801)
+**Branch:** HS-182399/semantic-email-text-and-styling-fixes
+**Files Changed:**
+- web/common/email/semantic/core/semantic_email_renderer.rb
+
+**Summary:**
+Applied `concise-code-comments` to PR-added preheader helpers: two ≥3-line `#` blocks collapsed to one line each (html_content vs content parity with MJML; punctuation fold after tag strip); merged/fix-ended incomplete method comments; tightened PREHEADER_MAX_LENGTH and strip_html_for_preheader headers. Comments only; no code changes. User requested no commit on nutella.
+
+**Changes Made:**
+- 10-line `_card_text_parts` rationale → single line (template-order “why” without kind lists / line refs).
+- 3-line punctuation-spacing note → one line.
+- PREHEADER cap, override/derive/truncate/doc headers completed or single-lined; `strip_html_for_preheader` method comment merged to one line.
+
+**Notes:**
+ReadLints: no issues on `semantic_email_renderer.rb`.
+
+---
+
+## 2026-05-13 - concise-code-comments on mock_data.rb (HS-182399)
+
+**Repository:** highspot/nutella
+**Branch:** HS-182399/semantic-email-text-and-styling-fixes
+**Files Changed:**
+- web/common/email/semantic/preview/mock_data.rb
+
+**Summary:**
+Applied `concise-code-comments` to `#` blocks: collapsed ≥3-line and mechanism-heavy 2-line comments to single why-focused lines; repaired truncated half-comments (MOCK_IDS lesson, mock_user avatars, mock_spot, reviewer/proctor); shortened legacy expiry-digest narration. Comments only; nutella not committed (per user).
+
+**Changes Made:**
+- One-line replacements for module, DEFAULTS, admin_message parity, HS-182399 path URLs (user/item/spot/pitch), assessment_status, mock_lesson, `build_default_alert_data`, `build_preview_context`, mock alert stub, `:reviewer_removed_by_deactivate` / `:proctor_replaced_by_deactivate`, expiry URL hints.
+
+**Notes:**
+ReadLints: clean on `mock_data.rb`. Subagent session.
 
 ---
