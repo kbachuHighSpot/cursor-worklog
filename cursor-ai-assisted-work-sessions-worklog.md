@@ -6,7 +6,7 @@ Weekly summaries and YTD running summary are in [weekly-summary-worklog.md](week
 
 ---
 
-## 2026-05-13 - compare_email_previews: `--rule-category` filter
+## 2026-05-13 - compare_email_previews: `--rule-category` filter (Mongo-backed)
 
 **Repository:** latest (nutella/web)
 **Branch:** HS-182399/semantic-email-text-and-styling-fixes
@@ -17,23 +17,24 @@ Weekly summaries and YTD running summary are in [weekly-summary-worklog.md](week
 Added a `--rule-category` filter to `compare_email_previews.py` so reviewers
 can scope a compare run to a single notification-rule taxonomy bucket
 (e.g. `--rule-category training`, `--rule-category share feedback`). The
-filter reads `alert_config_to_rules_mapping.json` (auto-discovered next to
-`nutella/`) and matches the per-kind `category` field that the new
-notification-rules system uses. Coarser than the existing
-`--category immediate_share` subcategory filter; complementary, not a
-replacement.
+mapping is fetched live from `GET /api/v1/notification_rules` (Mongo-backed
+notification-rules collection) rather than from any local JSON export so
+the filter always reflects the rules currently seeded in the system.
+Coarser than the existing `--category immediate_share` subcategory filter;
+complementary, not a replacement.
 
 **Changes Made:**
-- `_resolve_rules_mapping_path` / `_load_rules_mapping` helpers that
-  auto-discover the JSON in two canonical locations and tolerate both the
-  `{ "rules": [...] }` and bare-list shapes the export script has used.
-- New CLI flags:
-  - `--rule-category <name>` (repeatable) — filters per-kind work.
-  - `--rules-mapping <path>` — override the auto-discovered JSON path.
+- `_fetch_notification_rules_mapping(base_url, cookie)` helper that pages
+  through `/api/v1/notification_rules` (limit=100, follows pagination.total)
+  and returns `{kind: category}`. Translates 403 into a clear error about
+  the session cookie's account needing `RIGHT_NOTIFICATION_RULES`.
+- New CLI flag: `--rule-category <name>` (repeatable). The earlier
+  `--rules-mapping` JSON-path override was removed since the API is the
+  single source of truth.
 - Fail-fast validation: unknown rule-category values print the full
-  available list (59 categories, e.g. training/direct/user/spot/share/...)
-  and exit 2 before any HTTP traffic; missing JSON file produces a helpful
-  error pointing to the candidate paths.
+  available list (60 categories live in Mongo, e.g.
+  training/direct/user/spot/share/...) and exit 2 before any compare
+  traffic.
 - Digest aggregation buckets (`digest_*` on the index) are dropped unless
   `digest` is explicitly in the selected rule-categories, since only the
   digest aggregation rule itself maps to that category.
@@ -41,12 +42,13 @@ replacement.
   `rule-category=...` filter alongside `type=`, `category=`, `kind=`.
 
 **Notes:**
-- Smoke-tested with `--rule-category support` (1 kind), `--rule-category
-  share feedback` (8 kinds), `--rule-category training` (91 kinds, drops
-  digests), and `--rule-category digest` (15 digest_* buckets only).
-- The mapping has 59 categories across 375+ kinds; auto-discovery picks
-  the larger nutella/-local copy (Apr 2026) over the older workspace-root
-  copy.
+- Smoke-tested against the running preview server: `support` (1 kind),
+  `share + feedback` (8 kinds), `training` (91 kinds, drops digests),
+  `digest` (15 digest_* buckets + 1 per-kind digest aggregator row).
+- The live Mongo collection has 382 rules / 60 categories — a few more
+  than the older static export (e.g. `content_generated`,
+  `content_generation_failed`, `email`) which is exactly why we read the
+  API now.
 
 ---
 
