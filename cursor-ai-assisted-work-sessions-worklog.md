@@ -6,6 +6,110 @@ Weekly summaries and YTD running summary are in [weekly-summary-worklog.md](week
 
 ---
 
+## 2026-05-13 - [RULE:body_after_following_reference]: broaden regex + Pattern E for custom_smtp_pitch_send_failed + skill update
+
+**Repository:** highspot/nutella + ~/.cursor/skills/migrate-semantic-email-body-copy
+**Files Changed:**
+- `nutella/web/scripts/notifications-migration/compare_email_previews.py`
+- `nutella/web/common/email/semantic/builders/alert/immediate/send_failed_builder.rb`
+- `~/.cursor/skills/migrate-semantic-email-body-copy/SKILL.md`
+
+**Summary:**
+Identified and closed two gaps in the `[RULE:body_after_following_reference]`
+detection that caused `custom_smtp_pitch_send_failed` to silently pass
+the rule check after Pattern G landed, even though the kind's rendered
+body clearly had a post-colon sentence above the pitch card that
+should have moved below it (Pattern E territory). Fixed the rule's
+regex, applied Pattern E to the affected kind, and updated the
+skill to document the broader phrasing convention.
+
+**Changes Made:**
+
+1. **`compare_email_previews.py` — broadened the rule's regex:**
+   - Old: `r'(the following \w+|the \w+ below):\s+([A-Z][^.!?]{14,}[.!?])'`
+   - New: `r'((?:the following [^:.!?\n]{1,120}?|the \w+ below)):\s*([A-Z][^.!?]{14,}[.!?])'`
+   - Two gaps closed:
+     - `the following \w+:` only matched a single noun word
+       immediately before the colon. Bodies like `"The following
+       pitch could not be sent:"` (predicate-phrase anchor, 5
+       words between `following` and `:`) silently passed.
+     - `\s+` required ≥1 whitespace char after the colon. But
+       `extract_body_copy` strips `<br>` tags without replacement,
+       leaving `:There` with zero whitespace. Switched to `\s*`.
+   - Added a comment block above the regex explaining both fixes.
+
+2. **`send_failed_builder.rb` — Pattern E for `custom_smtp_pitch_send_failed`:**
+   - Added `build_custom_smtp_pitch_send_failed_email` helper
+     (mirror of the existing `build_custom_smtp_digital_room_send_failed_email`
+     sibling at lines 195-235). Two sections: primary with the
+     colon-anchored headline + pitch card, footer with the
+     connection-error guidance + CTA.
+   - New i18n keys: `sFcSmtpP1` (headline) and `sFcSmtpP2` (footer
+     body) — mirror the `DR1` / `DR2` naming used by the
+     digital_room variant.
+   - Added an early-return dispatch in the registration lambda
+     (line 308-312) before the digital_room dispatch, so the kind
+     routes through the dedicated helper instead of
+     `build_send_failed_body_copy`'s `account_type == "custom_smtp"`
+     branch (which now serves no kind — dead code, left in place
+     for safety, not removed).
+
+3. **`migrate-semantic-email-body-copy/SKILL.md` — three updates:**
+   - Pattern E trigger section now lists three explicit
+     phrasing shapes (simple noun, predicate phrase, "below"
+     anchor) in a table — so future agents recognize all three.
+   - Pattern G's G3 step now includes a manual sanity-check
+     instruction: read the rendered Body copy from the verbose
+     output even when `[RULE:body_after_following_reference]`
+     reports 0, because unusual constructions could still slip
+     past the rule. Includes guidance on when to report a regex
+     gap.
+   - Three new "Common gotchas" entries:
+     - Pattern E predicate-phrase anchors look identical to
+       simple noun anchors and require the same fix.
+     - Historical narrow-regex gap (`\w+` + `\s+`) documented so
+       contributors know the rule was once weaker than it is now.
+     - Rendered body extraction strips `<br>` tags without
+       replacement (use `\s*` for delimiters that may sit
+       adjacent to stripped-tag content).
+
+**Verification:**
+
+- Single-kind verify after broadening regex: `[RULE:body_after_following_reference]`
+  now FIRES on `custom_smtp_pitch_send_failed` as expected (matches
+  `"The following pitch could not be sent:"` + post-colon sentence). ✅
+- Full report run after the regex broadening: 2 NEW kinds caught
+  across 226 compared kinds — `session_proctor_assigned__ics_attachment`
+  and `session_proctor_unassigned__ics_attachment` (both have
+  multi-word predicate phrases before the colon). No regressions /
+  false positives elsewhere. Same rules that previously fired still
+  fire on the same kinds.
+- Pattern E builder code is verified by static inspection (exact
+  mirror of the working `build_custom_smtp_digital_room_send_failed_email`
+  sibling, only the noun + i18n keys differ). Live preview render
+  pending Rails dev server reload — the dev server still has the
+  OLD lambda registered (top-level `each` block at module load
+  time captures the lambda body, doesn't auto-re-run on file
+  change without Spring or explicit reload).
+
+**Notes / Follow-up:**
+
+- `custom_smtp_pitch_send_failed` was absent from the full report's
+  discovered set (305 kinds discovered → only 226 compared). This is
+  pre-existing — needs investigating separately why ~79 kinds aren't
+  in the compare set. Outside scope of this session.
+- The dead `account_type == "custom_smtp"` branch in
+  `build_send_failed_body_copy` (lines 106-117 in the file post-Pattern-E)
+  no longer serves any kind. Left in place — removing is a
+  refactor, not a bug fix, per the workspace rule.
+- 2 newly-detected kinds (`session_proctor_*_ics_attachment`) now
+  need Pattern E applied per the standard recipe (separate session).
+- Live verification of Pattern E on `custom_smtp_pitch_send_failed`
+  requires Rails dev server restart. Worth doing before any batch
+  Pattern E application across the other flagged kinds.
+
+---
+
 ## 2026-05-13 - compare_email_previews: remove [RULE:custom_smtp] (Pattern G-sanctioned divergence false-positive)
 
 **Repository:** highspot/nutella (`/Users/kiran.bachu/Codebase/latest/nutella`)
