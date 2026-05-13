@@ -6,6 +6,61 @@ Weekly summaries and YTD running summary are in [weekly-summary-worklog.md](week
 
 ---
 
+## 2026-05-13 - compare_email_previews: remove [RULE:custom_smtp] (Pattern G-sanctioned divergence false-positive)
+
+**Repository:** highspot/nutella (`/Users/kiran.bachu/Codebase/latest/nutella`)
+**Branch:** (current working branch)
+**Files Changed:**
+- `nutella/web/scripts/notifications-migration/compare_email_previews.py`
+
+**Summary:**
+Removed the `[RULE:custom_smtp]` rule entirely from the email-preview
+comparison script. The rule's heuristic (`could not be sent:` colon
+presence in semantic text, absent in legacy) is no longer valid now
+that Pattern G (card-anchor colon) is the sanctioned PM convention for
+semantic emails — every custom_smtp_*_send_failed kind that gets the
+colon fix would trigger this rule as a false-positive, even though
+the actual content the rule was meant to forbid (interpolated
+`{error_msg}` text after the colon) is not present.
+
+**Changes Made:**
+- `compare_email_previews.py`:
+  - Removed call to `_check_custom_smtp_error_leak` from
+    `_run_rule_checks_for_kind` (line 1066 in pre-change file).
+  - Removed `_check_custom_smtp_error_leak` function definition
+    (lines 1115-1129 in pre-change file).
+  - Removed the `[RULE:custom_smtp]` entry from the CLI epilog
+    (line 5720 in pre-change file).
+- No registry entry to remove — the rule was never in the rule
+  registry table (lines 4115-4144). It only appeared in the run
+  summary because it fired; once `rule_issues` no longer contains
+  the tag, it disappears naturally.
+
+**Verification:**
+- `python3 scripts/notifications-migration/compare_email_previews.py --kind custom_smtp_pitch_send_failed -v`:
+  - ✅ pass (content match + structured)
+  - `[RULE:custom_smtp]` no longer listed in the rule summary at all.
+  - `[RULE:following_missing_colon]`: 0 (Pattern G fix from this
+    same session still holds).
+  - `[RULE:body_after_following_reference]`: 0.
+  - Only signal: `WARN:tracking_tag` (HS-183419 informational,
+    doesn't FAIL).
+
+**Notes:**
+- The rule was a coarse heuristic — `could not be sent:` colon as a
+  proxy for "error text follows". Pattern G's PM-mandated card-anchor
+  colon now coexists with the static "There was an issue connecting
+  to your email server" message that legacy also has. The rule had
+  no smart detection of actual error-text interpolation; refining
+  it would have required diff-aware comparison of post-colon content,
+  which the existing `[FAIL:content_lost]` and similar parity rules
+  already cover from the legacy → semantic direction.
+- Legacy-side semantics: `alert_commands.rb` line 1443 still ends
+  with `.` ("Pitch [{pitch}] could not be sent."). Per skill
+  convention, legacy copy is sign-off-locked and ships as-is.
+
+---
+
 ## 2026-05-13 - Pattern G colon fix: custom_smtp_pitch_send_failed
 
 **Repository:** highspot/nutella (`/Users/kiran.bachu/Codebase/latest/nutella`)
