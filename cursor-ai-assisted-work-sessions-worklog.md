@@ -6,6 +6,59 @@ Weekly summaries and YTD running summary are in [weekly-summary-worklog.md](week
 
 ---
 
+## 2026-05-13 - migrate-semantic-email-body-copy skill: add Pattern G (card-anchor colon)
+
+**Repository:** kbachuHighSpot/cursor-worklog (skill lives under `~/.cursor/skills/`)
+**Branch:** N/A (skill file is local)
+**Files Changed:**
+- `~/.cursor/skills/migrate-semantic-email-body-copy/SKILL.md`
+
+**Summary:**
+Extended the existing `migrate-semantic-email-body-copy` Cursor skill to
+cover the newly-added `[RULE:following_missing_colon]` rule from
+`compare_email_previews.py`. The rule flags semantic body_copy sentences
+that use "the following" but terminate with `.`, `!`, `?`, or no
+terminator instead of the PM-required `:` (card-anchor convention).
+
+**Changes Made:**
+- Updated the SKILL frontmatter `description` to include
+  `[RULE:following_missing_colon]` as a trigger phrase, with an inline
+  example so the skill activates when the user pastes this violation.
+- Added a row for "Pattern G — card-anchor colon" in the
+  "Quick Reference: Related Rules" table, pointing at the new
+  sub-recipe.
+- Added a new "Pattern G sub-recipe — Card-anchor colon
+  (terminator-only fix)" section after Pattern F. ~90 lines covering:
+  trigger signal; G1 A-path vs B-path decision (same as Step 1);
+  G2 the one-line edit + mandatory i18n key rotation; G3 re-run
+  compare script + how G unblocks a Pattern E follow-up;
+  G4 regression spec; canonical references.
+- Added 3 entries to "Common gotchas":
+  1. Pattern G is a prerequisite for Pattern E (do them sequentially,
+     not in one pass — `[RULE:body_after_following_reference]` can
+     only detect a post-card sentence once the colon exists).
+  2. Don't edit legacy `ALERT_CONFIG` to "fix" the colon — colon
+     convention is semantic-only; legacy copy is signed off.
+  3. Rotating the i18n id is mandatory even for one-character edits
+     (rendered string changed → translations are stale).
+
+**Notes:**
+- The rule's full implementation in
+  `scripts/notifications-migration/compare_email_previews.py` was
+  landed earlier in this session; see prior worklog entry for that
+  change. This entry only covers the skill extension so the fix
+  pattern is discoverable + automatable for the 39 flagged kinds
+  going forward.
+- Pattern G fix mechanics intentionally piggy-back on Pattern A / B
+  rather than duplicating them — the only delta is the trailing
+  punctuation and i18n key rotation. Keeps the skill DRY.
+- Pattern G ↔ Pattern E sequencing is the most important behavioral
+  detail: a kind that needs BOTH fixes will surface only G first,
+  then E becomes visible after the colon lands. Documented in both
+  G3 and Common Gotchas.
+
+---
+
 ## 2026-05-13 - compare_email_previews: show zero-count rule checks in run summary
 
 **Repository:** latest (nutella/web)
