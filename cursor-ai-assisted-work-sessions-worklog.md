@@ -6,6 +6,50 @@ Weekly summaries and YTD running summary are in [weekly-summary-worklog.md](week
 
 ---
 
+## 2026-05-13 - compare_email_previews: `--rule-category` filter
+
+**Repository:** latest (nutella/web)
+**Branch:** HS-182399/semantic-email-text-and-styling-fixes
+**Files Changed:**
+- web/scripts/notifications-migration/compare_email_previews.py
+
+**Summary:**
+Added a `--rule-category` filter to `compare_email_previews.py` so reviewers
+can scope a compare run to a single notification-rule taxonomy bucket
+(e.g. `--rule-category training`, `--rule-category share feedback`). The
+filter reads `alert_config_to_rules_mapping.json` (auto-discovered next to
+`nutella/`) and matches the per-kind `category` field that the new
+notification-rules system uses. Coarser than the existing
+`--category immediate_share` subcategory filter; complementary, not a
+replacement.
+
+**Changes Made:**
+- `_resolve_rules_mapping_path` / `_load_rules_mapping` helpers that
+  auto-discover the JSON in two canonical locations and tolerate both the
+  `{ "rules": [...] }` and bare-list shapes the export script has used.
+- New CLI flags:
+  - `--rule-category <name>` (repeatable) — filters per-kind work.
+  - `--rules-mapping <path>` — override the auto-discovered JSON path.
+- Fail-fast validation: unknown rule-category values print the full
+  available list (59 categories, e.g. training/direct/user/spot/share/...)
+  and exit 2 before any HTTP traffic; missing JSON file produces a helpful
+  error pointing to the candidate paths.
+- Digest aggregation buckets (`digest_*` on the index) are dropped unless
+  `digest` is explicitly in the selected rule-categories, since only the
+  digest aggregation rule itself maps to that category.
+- Filter summary line + "no kinds matched" help now surface the
+  `rule-category=...` filter alongside `type=`, `category=`, `kind=`.
+
+**Notes:**
+- Smoke-tested with `--rule-category support` (1 kind), `--rule-category
+  share feedback` (8 kinds), `--rule-category training` (91 kinds, drops
+  digests), and `--rule-category digest` (15 digest_* buckets only).
+- The mapping has 59 categories across 375+ kinds; auto-discovery picks
+  the larger nutella/-local copy (Apr 2026) over the older workspace-root
+  copy.
+
+---
+
 ## 2026-05-13 - Semantic email migration: builder fixes + compare-script tooling
 
 **Repository:** latest (nutella/web)
