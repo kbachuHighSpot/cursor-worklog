@@ -6,6 +6,96 @@ Weekly summaries and YTD running summary are in [weekly-summary-worklog.md](week
 
 ---
 
+## 2026-05-13 - Semantic email migration: builder fixes + compare-script tooling
+
+**Repository:** latest (nutella/web)
+**Branch:** HS-182399/semantic-email-text-and-styling-fixes
+**Commit:** 8965782aa79
+**Files Changed:** 12 (8 builder/preview, 2 spec, 1 compare-script tooling, +renderer)
+- web/common/email/semantic/builders/alert/immediate/generic_builder.rb
+- web/common/email/semantic/builders/alert/immediate/learning_builder.rb
+- web/common/email/semantic/builders/alert/immediate/learning_builder_kinds.rb
+- web/common/email/semantic/builders/alert/immediate/send_failed_builder.rb
+- web/common/email/semantic/builders/alert/immediate/spot_access_builder.rb
+- web/common/email/semantic/core/semantic_email_renderer.rb
+- web/common/email/semantic/preview/legacy_compare/legacy_email_preview.rb
+- web/common/email/semantic/preview/mock_data.rb
+- web/common/email/semantic/preview/semantic_email_preview.rb
+- web/scripts/notifications-migration/compare_email_previews.py
+- web/spec/unit/common/email/builders/alert/immediate/generic_builder_spec.rb
+- web/spec/unit/common/email/builders/alert/immediate/send_failed_builder_spec.rb
+
+**Summary:**
+Landed a batch of HS-182399 semantic email migration fixes: dedicated Pattern E
+builders (card-anchored body where post-card sentences move below the card),
+dynamic provider plumbing for meeting account linking emails, mock-data
+type-suffix cleanup, and a verification-aware compare-script that now hides
+already-verified kinds from the default report.
+
+**Changes Made:**
+
+*Builders / previews:*
+- `generic_builder`: new Pattern E builders for `new_workflow_reviewer` and
+  the `meeting_account_linking_template` / `meeting_account_relinking_template`
+  family (dynamic `provider` + `<strong>` bolding + `<br><br>` paragraph
+  spacing — no more hardcoded "Google Calendar"). Added
+  `training_event_completion` to `COMMENT_AS_REPLY_KINDS`. Trimmed
+  `stripped_body_for_kind` for `new_workflow_reviewer` to a single
+  colon-anchored headline.
+- `send_failed_builder`: dedicated Pattern E builder for
+  `custom_smtp_digital_room_send_failed` ("The following external share could
+  not be sent:" + pitch card + SMTP-error footer section).
+- `spot_access_builder`: `support_request` body now mirrors legacy exactly
+  ("Alice Smith submitted a support request") via explicit `request_action`.
+- `learning_builder` / `learning_builder_kinds`: added `course_incomplete` and
+  `lesson_submitted_new` to `KIND_PREFERS_SEMANTIC_BODY` (Pattern A); cleaned
+  up assessment-family interpolation.
+- `mock_data`: every default mock title now has explicit trailing type words
+  (e.g. "Sales Bootcamp Event", "Sales Training 101 Course") so noun /
+  entity-type relationships are unambiguous in previews.
+- `semantic_email_preview` / `legacy_email_preview`: `session_canceled_*` and
+  `training_event_*` kinds now resolve to the training-event mock title (was
+  leaking the course title); `new_workflow_reviewer` added to the spot-id
+  merge block; `custom_smtp_digital_room_send_failed` gets a direct dispatch
+  branch so previews stop bypassing the dedicated builder.
+- Specs: regression coverage for `meeting_account_linking_body`
+  (plain / HTML / `<br><br>` spacing / HTML escaping) and the new
+  `build_custom_smtp_digital_room_send_failed_email` builder; updated
+  `COMMENT_AS_REPLY_KINDS` / `stripped_body_for_kind` assertions.
+
+*compare_email_previews.py:*
+- Three new rule checks: `[RULE:body_after_following_reference]` (Pattern E),
+  `[RULE:semantic_card_without_legacy_link]` (Pattern F),
+  `[RULE:noun_entity_type_mismatch]` (mock-data shape bug).
+- Verification-aware reporting: parses the
+  `<button class=verification-badge data-kind=... data-status=...>` markers
+  from the email-preview index page and skips kinds / digest categories
+  marked "Verified" in the compare UI. New `--include-verified` flag opts
+  back in; `--snapshot-update`, `--snapshot-check`, and explicit `--kind X`
+  always bypass the skip.
+- Verdict cleanup: dropped both `warn_same` and `warn_structured` buckets
+  and the demotion path. HS-183419 tracking-tag-gap kinds stay as passes;
+  the dedicated HS-183419 inventory section remains the canonical view.
+  Run summary now collapses to Pass / Fail / Preview Missing with a single
+  `Pass / Total` success rate.
+- Backlog-row de-duplication: filter `[CTA *]` and `[ENTITY *]` rule-issue
+  prefixes from `_expanded_reason_tags` so they don't shadow their
+  `[FAIL:cta_*]` / `[FAIL:entity_*]` categorical counterparts. Renamed the
+  markdown report's "Failures grouped by reason type" bucket headers to use
+  the same `[FAIL:*]` form for consistency across all outputs.
+
+**Notes:**
+- Pre-commit RuboCop hit an internal `Layout/ArgumentAlignment` cop crash on
+  the multi-line keyword-args call for `support_request` in
+  `semantic_email_preview.rb`. Flattened that one call onto a single line to
+  match surrounding sibling entries; the cop then ran cleanly. Auto-fixes
+  also normalized a ternary, a regex literal, and `<br>` join indentation.
+- `_result_has_warning` and `_demote_pass_to_warn` are gone; downstream
+  consumers (snapshot gate, `--failed-only`, CSV `verdict` column) updated
+  in lockstep.
+
+---
+
 ## 2026-05-12 - Trim verbose comments across semantic email PR
 
 **Repository:** latest (nutella/web)
