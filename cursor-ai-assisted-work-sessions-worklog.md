@@ -6,6 +6,65 @@ Weekly summaries and YTD running summary are in [weekly-summary-worklog.md](week
 
 ---
 
+## 2026-05-13 - Pattern G colon fix: custom_smtp_pitch_send_failed
+
+**Repository:** highspot/nutella (`/Users/kiran.bachu/Codebase/latest/nutella`)
+**Branch:** (current working branch)
+**Files Changed:**
+- `nutella/web/common/email/semantic/builders/alert/immediate/send_failed_builder.rb`
+
+**Summary:**
+Applied Pattern G (card-anchor colon) from the
+`migrate-semantic-email-body-copy` skill to
+`custom_smtp_pitch_send_failed`. The semantic body's
+"The following pitch could not be sent" headline was terminating with
+`.` instead of the PM-required `:` (card-anchor convention pointing
+at the pitch card below). The fix is a one-line punctuation change
+in the `build_send_failed_body_copy` helper's `account_type == "custom_smtp"`
+branch, with the i18n key rotated per skill convention.
+
+**Changes Made:**
+- `send_failed_builder.rb` line 109-117:
+  - i18n key rotated `sFcSmtp01` → `sFcSmtpP01` (`P` mnemonic
+    for pitch — mirrors `DR` naming in sibling `sFcSmtpDR1` /
+    `sFcSmtpDR2` keys used by the Pattern E digital-room variant).
+  - String: `"The following {noun} could not be sent.\n\nThere was..."` →
+    `"The following {noun} could not be sent:\n\nThere was..."`.
+  - Updated the inline comment to clarify the branch is now
+    pitch-only (the digital_room variant routes through Pattern E
+    earlier).
+
+**Verification:**
+- `python3 scripts/notifications-migration/compare_email_previews.py --kind custom_smtp_pitch_send_failed -v`:
+  - `[RULE:following_missing_colon]`: 0 (cleared — was firing
+    before the fix).
+  - `[RULE:body_after_following_reference]`: 0 (no Pattern E
+    follow-up required for this kind).
+- Semantic body now renders: "The following pitch could not be sent:
+  / There was an issue connecting to your email server. If the issue
+  persists, please contact your company administrator." ✅
+
+**Notes / Follow-up:**
+- A separate rule, `[RULE:custom_smtp]`, is now firing on this kind
+  as a script false-positive. Its regex
+  (`re.search(r'could not be sent\s*:', sem_text)` + legacy
+  inverse) matches the Pattern G colon literally, but its intent
+  (per epilog: "Custom SMTP should not include error text") is to
+  catch interpolated `{error_msg}` text after the colon — which the
+  semantic body does NOT include (the trailing sentence is the
+  canonical server-connection message). This is exactly the
+  legacy/semantic divergence Pattern G sanctions per the skill's
+  gotcha. The rule needs refinement: either tighten the regex to
+  detect actual error-text interpolation, exempt kinds on the
+  semantic body path, or drop the colon-only signal entirely.
+  Not addressed in this session — separate follow-up.
+- Legacy `ALERT_CONFIG[:custom_smtp_pitch_send_failed]` in
+  `alert_commands.rb` line 1443 still uses `.` — intentionally
+  unchanged per skill's "don't edit legacy ALERT_CONFIG to fix
+  the colon" gotcha (legacy copy is signed off, ships as-is).
+
+---
+
 ## 2026-05-13 - migrate-semantic-email-body-copy skill: add Pattern G (card-anchor colon)
 
 **Repository:** kbachuHighSpot/cursor-worklog (skill lives under `~/.cursor/skills/`)
