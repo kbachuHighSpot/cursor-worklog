@@ -107,6 +107,85 @@ The front-matter description ("Content rules for semantic emails (no soft fallba
 
 ---
 
+## More failures from the same session
+
+The i18n incident is the cleanest example, but the same failure modes hit several other semantic-email rules and skills over the course of the week. Each item below is an actual incident from the same `HS-182399` session; together they show the four root causes are systemic, not isolated.
+
+### Skill failure: `migrate-semantic-email-body-copy` only applied half its own recipe
+
+The skill defines a multi-step copy migration with several named patterns. For `custom_smtp_pitch_send_failed`, the agent applied the colon fix correctly but stopped — the same recipe explicitly says "if there is a sentence after the entity reference, move it below the card", and that step was skipped. The live preview still rendered the body as a single block.
+
+The root cause was that the skill's pattern descriptions are written as prose narrative ("if X happens, do Y"). When a kind matches multiple sequential steps, the agent treated each step as a standalone option and stopped at the first match. The user had to flag it explicitly: *"the above AI skill did not move the sentence below the colon. What's missing in the skill or rule check?"*
+
+The fix is the same shape as Pattern C above (one topic per file): each named step in a skill should have an explicit "after applying me, check for X next" pointer, written as imperative — not buried in prose. Decision trees beat narratives for agent compliance.
+
+### Conflicting rules: `[RULE:custom_smtp]` flagged a sanctioned copy fix as a regression
+
+A validation rule named `[RULE:custom_smtp]` existed to flag any `custom_smtp_*` kind whose body diverged from the legacy template's wording. When the colon fix above was applied (changing `"…could not be sent."` to `"…could not be sent:"`), this rule fired against the now-correct body.
+
+Two rules with opposite signals — one enforcing "match legacy verbatim", one enforcing "use improved copy pattern" — will eventually conflict. The fix was to delete `[RULE:custom_smtp]` entirely; the positive rule (`[RULE:following_missing_colon]`) is sufficient and unambiguous. **General lesson:** when migrating, retire negative "same-as-legacy" rules as positive "use new pattern" rules come online. Leaving both means every copy improvement trips a false alarm.
+
+### Missing rule + missing skill warning: Padrino autoloader silently broke Pattern E dispatch
+
+The agent put the Pattern E dispatch logic in a top-level lambda registered via `SemanticAlertRenderer.register(:custom_smtp_pitch_send_failed) do |…| … end`. In dev mode, Padrino's autoloader reloads method bodies when the file changes, but does **not** re-execute top-level `each` blocks that register lambdas. The live preview kept using the lambda from the first boot — completely independent of any later edits to the file. Hours of "the fix isn't taking effect" debugging followed.
+
+This wasn't a discoverability failure — it was a **missing rule entirely**. The skill demonstrated Pattern E with a working example, but the example happened to put the dispatch inside a method body, where reloading works. Nothing in the skill or any rule warned: "side-effecting registration in top-level blocks doesn't reload; put dispatch in method bodies." After the discovery, the dispatch was refactored from lambda-registration into `build_send_failed_email` method body, where the autoloader picks it up.
+
+**General lesson:** framework-specific reload behaviors are exactly the kind of footgun that an `alwaysApply: true` rule with a one-line MUST should capture. Add a rule the moment you discover a non-obvious reload pitfall; future-you should not have to discover it twice.
+
+### Rule existed but was insufficient: `[RULE:newlines]` missed `scheduled_subscription__feedback`
+
+Earlier in the session, 14 kinds had `[RULE:newlines]` failures fixed. The check fired, the fixes landed. Then `scheduled_subscription__feedback` came up showing "legacy has a newline, semantic doesn't" — and the rule didn't flag it.
+
+The original rule had three flaws stacked on each other: (1) **asymmetric directionality** — it only checked when legacy had *more* breaks than semantic, never the reverse; (2) **a word floor** that exempted short messages, even though short alerts are exactly where formatting regressions are most visible; (3) it counted "newline boundaries" instead of paragraph blocks. The rewrite is now a strict paragraph-count equality check in both directions with no length floor.
+
+**General lesson:** when authoring a validation rule, default to symmetric equality and zero exceptions. Asymmetric "legacy lost something" thinking misses regressions in the other direction. The cost of false positives is cheap (a comment in a PR); the cost of false negatives is shipping a styling regression.
+
+### Rule existed but accepted bad substitutes: `concise-code-comments.mdc` and opaque taxonomy
+
+`concise-code-comments.mdc` was authored mid-session to forbid elaborate code comments. It worked — the next sweep collapsed a 749-line comment diff to 398. But the resulting comments included gems like `# Pattern E for custom_smtp_pitch_send_failed (mirrors digital_room sibling)`. These satisfied the rule's "single line, why-not-what" criterion but were useless without the skill open in another tab.
+
+The rule had taught the agent **what to compress**, not **what to compress to**. The fix amended the rule with explicit BAD / STILL-BAD / GOOD examples and forbade opaque internal taxonomy (Pattern letters, naked `[RULE:foo]` tags, skill names) as the primary explanation in a comment.
+
+**General lesson:** when you write a rule that says "don't do X", you must also model "do Y instead" with at least one concrete example. The agent will find a literal way to satisfy "don't X" that violates the spirit. This is a specific instance of the imperative-voice pattern: show the target state, not just the constraint.
+
+### Sibling rules with the same stale globs: `semantic-email-builders.mdc` and `semantic-email-entity-parity.mdc`
+
+The audit during the i18n incident found that `semantic-email-content.mdc` had broken globs from an old directory rename. Two adjacent rules written by the same author at the same time — `semantic-email-builders.mdc` (21k chars) and `semantic-email-entity-parity.mdc` (8k chars) — have **identical** broken glob lists. Combined, they cover ~30k characters of mandates that currently auto-attach to nothing.
+
+This is the clustering pattern called out in TL;DR but worth stating concretely: **stale globs are temporally correlated**. When you find one, search the directory for siblings written in the same week or by the same author. The maintenance audit script above will surface them in one pass.
+
+**Status:** flagged in today's worklog as `sibling_globs`, not fixed. Owner-of-the-week call: fix them in a follow-up sweep, or wait for the next time one of their topics is in scope and fix opportunistically.
+
+### Other repo-local skills the agent never saw
+
+`nutella-intl-strings` is one of **five** repo-local skills under `nutella/.cursor/skills/`. The other four:
+
+- `nutella-pre-commit-quality-check` — would have advised on RuboCop's known `Layout/MultilineMethodCallIndentation` cop bug that crashed the pre-commit hook twice during this session (once on `base.rb`, once on six lines in `semantic_email_commands_spec.rb`). Each crash required ad-hoc inlining of multi-line method chains to dodge.
+- `nutella-polar-ui-usage` — UI conventions, not relevant this session but invisible regardless.
+- `nutella-client-unit-tests` — would have informed the test-writing patterns in `semantic_email_commands_spec.rb`.
+- `nutella-client-feature-workflow` — feature flag conventions, partially relevant given the LaunchDarkly migration in `a8ee013a6d0`.
+
+None of them appeared in the agent's available-skills context block. Like `nutella-intl-strings`, they exist as documentation for humans only. **Status:** the same lift-into-a-surfaced-location pattern from the i18n case applies, but none have been done. Open question for the team: which of these repo-local skills are critical enough to surface, vs. which are fine as human-only documentation?
+
+### Rule space hadn't been audited against PM-review feedback
+
+`[RULE:following_missing_colon]` didn't exist at session start. A whole class of bugs — "sentence ending in 'following …' should end with a colon, with the entity card immediately below" — had no validation rule. Multiple kinds had been migrated with inline periods instead of colons, and the issue surfaced only during PM review, after the fact.
+
+A nearby rule, `[RULE:body_after_following_reference]`, did exist but had a regex narrow enough that variant phrasings ("…that you submitted…", "…the latest version of…") slipped through. Both got authored or broadened during the session in reaction to specific PM review threads.
+
+**General lesson:** recurring PM-review feedback is rule-shaped. "We always say colons before reference lists" or "we never inline the entity title in the body" or "footer sentences go below the card" are all candidates for validation rules. After a PM-review pass, do an audit: which categories of feedback have rules? Which don't? The ones that don't are next session's slipped-through bugs.
+
+### Mock data drift had no rule at all
+
+The validation script (`compare_email_previews.py`) compared semantic and legacy email previews against an `EXPECTED_MOCK_ENTITIES` constant. The runtime preview mock (`PreviewMockData::DEFAULTS` in `mock_data.rb`) provided the actual values. Nothing kept the two in sync, and nothing rule-shaped flagged divergence.
+
+Five `[FAIL:mock_data]` errors surfaced this session: three turned out to be redundant with other rules (the same entity name was already flagged by `[RULE:missing_card]` or `[ENTITY TITLE]`), two were the legacy Velocity renderer failing to handle nested-paren macro arguments — neither was actual mock drift. The fix added validation-time deduplication (`_filter_mock_data_issues_covered_elsewhere`) and a renderer short-circuit (`_legacy_preview_unrenderable`), but the underlying drift potential remains.
+
+**General lesson:** when validation logic and runtime logic depend on the same constant, you need either (a) a shared source of truth (one file, both readers), or (b) a rule that mandates they're updated together as a single commit. Otherwise drift is just a matter of time, and when it surfaces, you can't tell drift from false positives without investigation.
+
+---
+
 ## Patterns that work
 
 Each of the four failures has a corresponding pattern. None of them is hard; they just have to be deliberate.
@@ -269,6 +348,10 @@ When refactoring directories, run check 1 in the same PR as the rename. When aud
 
 ## What this document does not solve
 
-- It does not change Cursor's behavior around repo-local skill surfacing. That is a product question and likely needs a feature request or config investigation.
-- It does not retroactively fix rules that already shipped with stale globs. For those, do a one-time sweep using the maintenance scripts above.
-- It does not add commit-time enforcement. That's the highest-leverage follow-up but requires separate hook/cop authoring per check.
+- **Cursor product behavior around repo-local skill surfacing.** That's a feature-request / config-investigation question, not something a rule or doc can fix on its own.
+- **Retroactive fixes for already-stale globs.** A one-time sweep using the maintenance scripts above is still required. Specifically: sibling rules `semantic-email-builders.mdc` and `semantic-email-entity-parity.mdc` were identified as having the same stale globs as the i18n incident's rule, and remain unfixed.
+- **Commit-time enforcement.** Highest-leverage follow-up. Each check (i18n key length, descriptive-key pattern, mock-data drift, …) needs its own pre-commit hook or RuboCop cop. The rules will continue to be advisory until something at the git layer can block.
+- **A framework-reload rule for Padrino / Rails autoloader pitfalls.** The Padrino autoloader silently broke Pattern E dispatch this session because lambda-registration in top-level `each` blocks doesn't reload. No rule warns about this. Worth authoring an `alwaysApply: true` Ruby rule with a one-line MUST as soon as someone has 15 minutes.
+- **PM-review-feedback-to-rule audit.** Recurring style feedback ("colons before reference lists", "no inline entity titles in body", "footer sentences below the card") is rule-shaped. The session built `[RULE:following_missing_colon]` reactively after PM review surfaced it. A proactive sweep of past PM-review threads would surface the next few rules before they're needed.
+- **Lifting the other four repo-local Nutella skills.** Only `nutella-intl-strings` got its critical mandate lifted into a surfaced location. `nutella-pre-commit-quality-check`, `nutella-polar-ui-usage`, `nutella-client-unit-tests`, `nutella-client-feature-workflow` remain invisible to agents — open question whether each is critical enough to lift or fine as human-only documentation.
+- **Mock-data drift root cause.** Today's fix was validation-time deduplication and renderer-error short-circuiting. The underlying coupling problem (validation script and runtime mock share a constant without enforcement) is still there. Long-term fix is either a shared source-of-truth file or a rule mandating co-update.
