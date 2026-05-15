@@ -6,6 +6,45 @@ Weekly summaries and YTD running summary are in [weekly-summary-worklog.md](week
 
 ---
 
+## 2026-05-15 - Enrich share_meeting card with render-time meeting metadata
+
+**Repository:** `latest` (nutella/web)
+**Branch:** `HS-182399/semantic-email-text-and-styling-fixes-428d5380` (working branch)
+**Files Changed:**
+- `nutella/web/common/models/queries/engagement_meeting_queries.rb`
+- `nutella/web/common/email/semantic/builders/alert/immediate/share_builder.rb`
+- `nutella/web/common/email/semantic/preview/mock_data.rb`
+- `nutella/web/common/email/semantic/preview/semantic_email_preview.rb`
+- `nutella/web/spec/unit/common/email/builders/alert/immediate/share_builder_spec.rb` (+10 examples)
+
+**Summary:**
+Added render-time meeting-metadata enrichment for the `share_meeting` / `share_meeting_highlight` semantic email cards. Previously the card showed only the title + URL because `AlertCommands.create_meeting_shared` only writes `{id, title, meeting_highlight_id, domain_id, shared_full_meeting}` to `data[:item]`. Now the semantic lambda issues a best-effort Mongo lookup against `engagement_meeting_list_records` (rich-metadata sibling, synced from engagement aurora) and renders Host / Meeting Date / Duration / Opportunity / Account / Attendees rows when data is present — omits rows that are absent (no fabricated fallbacks).
+
+**Architectural decision (user-approved):**
+Picked "render-time DB lookup" over (a) plumbing more fields end-to-end through the upstream `MeetingHighlightHandler` contract + `create_meeting_shared` signature, and (b) preview-only mock enrichment. Trade-off accepted: one extra `Mongo.find_one` per share-meeting email render; tolerated because (i) the unique index `(domain_id, source_id)` makes it a point read, (ii) we project only the `attrs.*` fields the card renders, and (iii) the call is wrapped in `rescue nil` so any failure (sync lag, missing doc, slow query) degrades gracefully to the prior minimal card.
+
+**Changes Made:**
+- `EngagementMeetingQueries.find_list_record(domain_id, meeting_id)` — projection-scoped lookup against `Constants::ENGAGEMENT_MEETING_LIST_RECORDS` via the existing `(domain_id, source_id)` unique index. Returns the raw doc or `nil`. Confirmed `source_id` matches the upstream `meeting_id` via `engagement_sync_spec.rb` (which asserts `attrs.meeting_id == "1"` for the doc with `source_id == 1`).
+- `ShareBuilder.extract_meeting_details(doc)` — Mongo→flat-hash adapter. Tolerates both string-keyed Mongo docs and symbol-keyed preview mocks, omits rows when sub-fields are blank (no placeholders), and emits a nil result when no usable rows survive (so the card stays minimal rather than rendering an empty `<br>`-only block).
+- `ShareBuilder.format_meeting_start_date` / `.format_meeting_duration` — duration is stored in seconds per `MeetingListRecordsContract` and matches the JS `formatDuration` consumer (`ShareMeetingInternallyModal.js`). Renders `"42m"`, `"1h"`, or `"1h 5m"` (no stray `"0m"` on exact hours).
+- `ShareBuilder.build_share_meeting_email(..., meeting_details: nil)` — new keyword arg (backward-compatible default). When present, attaches `card[:html_content]` with `<strong>Label:</strong> value<br>…` rows; when nil, the card renders exactly as before (production minimal-card behavior when the engagement-list-record sync hasn't populated metadata yet).
+- Both `:share_meeting` and `:share_meeting_highlight` lambdas now call `extract_meeting_details(FETCH_MEETING_DETAILS.call(to_user, meeting_id)) rescue nil` before invoking the builder.
+- `PreviewMockData.mock_meeting_list_record(meeting_id:)` — production-shape `attrs.*` hash so the preview path exercises the same code path as the lambda (no preview-only short-circuit; protects against the kind of shared-wrong-mock parity bug that masked the wrong-entity issue last session).
+- `semantic_email_preview.rb` `share_meeting` / `share_meeting_highlight` branches now call `extract_meeting_details(mock_meeting_list_record(...))` and pass `meeting_details:` directly (the preview doesn't go through the lambda).
+- Spec coverage: 10 new examples — 4 for `build_share_meeting_email` (`meeting_details` happy path, sparse fields omit rows, nil details keep card minimal, HTML-injection escaping via `CGI.escapeHTML`) + 6 for `.extract_meeting_details` (Mongo string-keyed shape, hour+minute / exact-hour duration formats, host-email fallback when name absent, blank-doc → nil, symbol-keyed preview mock tolerance). All 30 spec examples pass.
+
+**Verification:**
+- `compare_email_previews.py --rule-category share --include-verified` reports all 4 share kinds (`share_meeting`, `share_meeting_highlight`, `items_shared`, `share_item`) ✅ Pass.
+- Direct fetch of `/email_preview/semantic_raw/immediate_share_meeting/share_meeting` and `.../share_meeting_highlight` both confirm 6 enriched rows (Host: Alice Smith, Meeting Date: April 1, 2026 at 10:00 AM PDT, Duration: 42m, Opportunity: Acme Enterprise Deal, Account: Acme Inc, Attendees: 3) under the existing title "Q4 Pipeline Review Meeting".
+
+**Notes:**
+- Did NOT pick the thumbnail option from the user's choices — they explicitly skipped it, so `item_preview: nil` stays.
+- The engagement-list-record sync has gaps in practice (ad-hoc meetings with no opportunity/account, AMF-FF-only customers, sync lag). The card intentionally renders only the rows that come back populated — consistent with the project's standing "no fallbacks, no fabrication" rule from prior sessions.
+- Per-render Mongo cost: one indexed point-read, ~field-projected to 6 fields. If this ever becomes a hot path, consider pre-computing the metadata at alert-creation time in `AlertCommands.create_meeting_shared` (matches the assessment-family pattern in `alert_commands.rb#L10030` where `data[:meeting]` is populated inline).
+- Legacy email is unchanged — it has no equivalent metadata rendering. This is a semantic-side enhancement on top of parity, not a parity fix.
+
+---
+
 ## 2026-05-13 - Lessons-learned doc + `effective-cursor-rules` user rule
 
 **Repository:** `cursor-worklog` (this push); `~/.cursor/rules/effective-cursor-rules.mdc` (new user-level rule, lives outside any git repo).
