@@ -5581,3 +5581,29 @@ Applied `concise-code-comments` to `#` blocks: collapsed ≥3-line and mechanism
 ReadLints: clean on `mock_data.rb`. Subagent session.
 
 ---
+
+## 2026-05-15 - Rephrase + correct `workflow_items_reviewed_approve_level` semantic copy (HS-182399)
+
+**Repository:** highspot/nutella
+**Branch:** HS-182399/semantic-email-text-and-styling-fixes
+**Files Changed:**
+- web/common/email/semantic/builders/alert/immediate/workflow_builder.rb
+
+**Summary:**
+The semantic builder's `approve_level` branch was a verbatim copy of `submit_for_review`: same section-title text ("Item ready for review"), same body wording with "submitted by {user}", and reused the same i18n keys (`s31yd7k7`, `sNBoeMeu`, `spZfiPge`). Recipients couldn't distinguish the two kinds, and the named user is actually the prior-level reviewer who approved — not the submitter — so "submitted by" was inaccurate. Rephrased the title and corrected the body for `approve_level` only.
+
+**Changes Made:**
+- Section title (line 48): `wF3mRs5z` "Item ready for review" → fresh key `k806YDvh` "Item approved at prior level".
+- Body copy item variant (line 67): `s31yd7k7` "…submitted by {user}…" → fresh key `yYW2vcR9` "…approved by {user}…".
+- Body copy items variant (line 68): `sNBoeMeu` "…submitted by {user}…" → fresh key `XmkFyJjd` "…approved by {user}…".
+- Body copy default variant (line 69): `spZfiPge` "…submitted by {user}…" → fresh key `7rv4d830` "…approved by {user}…".
+- Subject + action_text in the same case arrays left alone (still pulled from `config_defaults`; original keys remain canonical for `submit_for_review`).
+- All 4 fresh keys generated via `./iidgen 4`, 8-char audit passes.
+
+**Notes:**
+- `submit_for_review` is unchanged — it still references the original keys with their original "submitted by" wording, so its rendering is unaffected.
+- Legacy `ALERT_CONFIG[:workflow_items_reviewed_approve_level]` in `alert_commands.rb` (lines 1039-1068) is still a verbatim copy of `submit_for_review` and still says "submitted by" in the legacy `:message` / `:messages` / `:subject` strings. Left intact per minimal-change rule; flag for follow-up if PM wants legacy parity too (would also touch push / in-app notification text).
+- No spec added — no existing `workflow_builder_spec.rb` to extend, and the change is a 4-string copy fix.
+- ReadLints: clean.
+
+---
