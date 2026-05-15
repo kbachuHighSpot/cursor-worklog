@@ -5590,20 +5590,22 @@ ReadLints: clean on `mock_data.rb`. Subagent session.
 - web/common/email/semantic/builders/alert/immediate/workflow_builder.rb
 
 **Summary:**
-The semantic builder's `approve_level` branch was a verbatim copy of `submit_for_review`: same section-title text ("Item ready for review"), same body wording with "submitted by {user}", and reused the same i18n keys (`s31yd7k7`, `sNBoeMeu`, `spZfiPge`). Recipients couldn't distinguish the two kinds, and the named user is actually the prior-level reviewer who approved — not the submitter — so "submitted by" was inaccurate. Rephrased the title and corrected the body for `approve_level` only.
+The semantic builder's `approve_level` branch was a verbatim copy of `submit_for_review`: same section-title text ("Item ready for review"), same body wording with "submitted by {user}", and reused the same i18n keys (`s31yd7k7`, `sNBoeMeu`, `spZfiPge`). Two-pass fix in the same branch: (1) rephrased the title and corrected the "submitted by" → "approved by" wording in-place; (2) then restructured the rendering to mirror the existing non-step-aware decline path — single spot card with the reviewer's comment as a reply chip, instead of N item cards.
 
 **Changes Made:**
-- Section title (line 48): `wF3mRs5z` "Item ready for review" → fresh key `k806YDvh` "Item approved at prior level".
-- Body copy item variant (line 67): `s31yd7k7` "…submitted by {user}…" → fresh key `yYW2vcR9` "…approved by {user}…".
-- Body copy items variant (line 68): `sNBoeMeu` "…submitted by {user}…" → fresh key `XmkFyJjd` "…approved by {user}…".
-- Body copy default variant (line 69): `spZfiPge` "…submitted by {user}…" → fresh key `7rv4d830` "…approved by {user}…".
-- Subject + action_text in the same case arrays left alone (still pulled from `config_defaults`; original keys remain canonical for `submit_for_review`).
-- All 4 fresh keys generated via `./iidgen 4`, 8-char audit passes.
+- Pass 1 (now superseded): rotated keys for title (`k806YDvh`) and 3 body variants (`yYW2vcR9`, `XmkFyJjd`, `7rv4d830`) inside the shared case-statement, kept item-card rendering.
+- Pass 2 (current state): dispatched `event_type == "approve_level"` to a new dedicated helper `build_approve_level_email` (parallel to `build_decline_email`). Removed the pass-1 keys (`k806YDvh`, `yYW2vcR9`, `XmkFyJjd`, `7rv4d830`) — never committed, fully replaced.
+- New helper renders a single spot card carrying the reviewer's comment as a reply chip for all variations (`:item`, `:items`, `:default`).
+- Variation-aware section title: `MtI2gmBC` "Item approved at prior level" / `nMxE6OeR` "Items approved at prior level" / `fYXpOgY3` "Item(s) approved at prior level".
+- Variation-aware body: `KtpZMxQH` "{user} approved an item. Review it in the following spot:" / `qymIhVKE` "{user} approved {amount} items. Review them in the following spot:" / `8LPvrBlp` "{user} approved {amount} item(s). Review them in the following spot:".
+- CTA + URL preserved via `config_defaults` (legacy `ALERT_CONFIG[:action][:href] = [:item, :alert_set_url]`), so the button still lands on the review queue.
+- All 6 fresh keys generated via `./iidgen 6`, 8-char audit passes.
 
 **Notes:**
-- `submit_for_review` is unchanged — it still references the original keys with their original "submitted by" wording, so its rendering is unaffected.
-- Legacy `ALERT_CONFIG[:workflow_items_reviewed_approve_level]` in `alert_commands.rb` (lines 1039-1068) is still a verbatim copy of `submit_for_review` and still says "submitted by" in the legacy `:message` / `:messages` / `:subject` strings. Left intact per minimal-change rule; flag for follow-up if PM wants legacy parity too (would also touch push / in-app notification text).
-- No spec added — no existing `workflow_builder_spec.rb` to extend, and the change is a 4-string copy fix.
+- `submit_for_review` and `decline` paths unchanged.
+- Legacy `ALERT_CONFIG[:workflow_items_reviewed_approve_level]` in `alert_commands.rb` (lines 1039-1068) still copies `submit_for_review` verbatim ("submitted by" everywhere) — drives legacy email + push + in-app notification text. Left intact per minimal-change rule; flag if PM wants legacy parity.
+- Visual verify previews: `workflow_items_reviewed_approve_level` (default), `workflow_items_reviewed_approve_level__item`, `workflow_items_reviewed_approve_level__items`. All three should render exactly one spot card with reply chip, no item cards.
+- No spec added — no existing `workflow_builder_spec.rb` to extend.
 - ReadLints: clean.
 
 ---
