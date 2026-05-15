@@ -6,6 +6,34 @@ Weekly summaries and YTD running summary are in [weekly-summary-worklog.md](week
 
 ---
 
+## 2026-05-15 - Cross-reference 7 semantic-email-migration skills in their front-matter descriptions
+
+**Repository:** `ai-plugins` (branch `add-nutella-semantic-email-migration`) + personal skills folder
+**Files Changed:**
+- `ai-plugins/nutella-semantic-email-migration/add-notification-kind/SKILL.md`
+- `ai-plugins/nutella-semantic-email-migration/analyze-compare-report/SKILL.md`
+- `ai-plugins/nutella-semantic-email-migration/debug-email-rendering/SKILL.md`
+- `ai-plugins/nutella-semantic-email-migration/email-migration-validation/SKILL.md`
+- `ai-plugins/nutella-semantic-email-migration/migrate-notification-kind/SKILL.md`
+- `ai-plugins/nutella-semantic-email-migration/migrate-semantic-email-body-copy/SKILL.md`
+- `ai-plugins/nutella-semantic-email-migration/semantic-email-review/SKILL.md`
+- `~/.cursor/skills/migrate-semantic-email-body-copy/SKILL.md` (personal copy — the one Cursor loads today)
+
+**Summary:**
+Prior agent (this session) had read only `migrate-semantic-email-body-copy/SKILL.md` when asked to "consider all the skills we have for semantic email migration effort." User flagged the gap. Surveyed the full landscape and found 7 skills dedicated to the migration bundle in `ai-plugins/nutella-semantic-email-migration/`, plus a divergent personal copy of `migrate-semantic-email-body-copy` (2820 lines on laptop vs. 1244 lines canonical — ~1576 lines of Pattern A–J additions never made it back to the shared repo). User chose not to sync yet but did approve adding cross-references in each skill's front-matter description so a future agent that hits one is steered to the relevant siblings.
+
+**Changes Made:**
+- Appended a consistent cross-reference sentence to each of the 7 skills' front-matter `description` fields. Each description now lists the other 6 siblings with a one-phrase scope hint (e.g. `analyze-compare-report` (interpret `compare_email_previews.py` output)).
+- Applied the same cross-reference to the personal-folder copy of `migrate-semantic-email-body-copy` (since that is the version Cursor actually auto-loads today; the canonical ai-plugins copy is not symlinked into `~/.cursor/skills/`).
+- ai-plugins changes left UNCOMMITTED on the `add-nutella-semantic-email-migration` feature branch pending user review.
+
+**Notes:**
+- Two follow-ups deferred:
+  1. **Sync divergence:** personal `migrate-semantic-email-body-copy/SKILL.md` has 1576+ lines (Patterns A–J) that the canonical shared copy doesn't have. Teammates' agents don't see them. User declined to sync this session.
+  2. **Activation gap:** the 6 sibling email-migration skills in ai-plugins are NOT symlinked into `~/.cursor/skills/` (only `migrate-semantic-email-body-copy` exists as a standalone personal copy). Cross-referencing helps once one is loaded, but Cursor still can't auto-discover the other 6 from the ai-plugins folder alone. Worth flagging for a future activation pass — symlinks like the existing `debug-email-deliverability -> ai-plugins/nutella-mcp/skills/...` pattern would do it.
+
+---
+
 ## 2026-05-15 - Create `learn-session-fixes` skill (capture accepted fixes for reuse)
 
 **Repository:** `cursor-skills` (`~/.cursor/skills/learn-session-fixes/`)
