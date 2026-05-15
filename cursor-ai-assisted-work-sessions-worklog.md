@@ -6,6 +6,30 @@ Weekly summaries and YTD running summary are in [weekly-summary-worklog.md](week
 
 ---
 
+## 2026-05-15 - Route share_meeting preview thumbnail through ThumbnailPresenter / UrlPresenter
+
+**Repository:** `latest` (nutella/web)
+**Branch:** `HS-182399/semantic-email-text-and-styling-fixes-428d5380` (working branch)
+**Files Changed:**
+- `nutella/web/common/email/semantic/preview/semantic_email_preview.rb`
+
+**Summary:**
+Audited every semantic-email thumbnail-URL path (production lambdas + previews for item, spot, pitch, user, and meeting) and found that all of them route through `ThumbnailPresenter#url_for_email → UrlPresenter#to_output` — except the share_meeting preview branches I'd added earlier today, which hardcoded the URL string and skipped both presenters. Rewired the two preview branches to call `EmailContentBuilder::Base.get_item_thumbnail_url(mock_meeting_item(...))`, identical to how `build_item_card` / `build_spot_card` / `build_pitch_card` resolve thumbnails for every other entity card in preview. Now the preview exercises the same `ThumbnailPresenter#url_for_email → UrlPresenter` chain as production (where the share_meeting lambda calls `get_item_thumbnail_url(FETCH_MEETING_ITEM.call(...))`), with the only difference being the source of the Item (mock vs. `ItemQueries.for_meeting_id`).
+
+**Changes Made:**
+- `semantic_email_preview.rb` `share_meeting` / `share_meeting_highlight`: replaced `thumbnail_url = "#{PreviewMockData.base_url}/img/processing/245x/1.gif"` with `thumbnail_url = EmailContentBuilder::Base.get_item_thumbnail_url(mock_meeting_item(meeting_id: meeting.id, title: meeting.title))`. The mock was already wired up (stubs `get_presented_thumbnail("small")`, defines `thumbnails_version`, and returns `false` for both `is_training_container?` / `is_training_event?` so the training-banner short-circuit isn't tripped). Added a comment explaining the consistency.
+
+**Verification:**
+- Rendered HTML for both kinds: 3 `<img>` tags as before, thumbnail src is still `http://localhost:3000/img/processing/245x/1.gif` (UrlPresenter is a no-op on relative paths; `ThumbnailPresenter#url_for_email` prepends `G.home_base_url` since `URI(url).host` is nil after `should_convert` returns false → identical end result, now via the proper pipeline).
+- `bundle exec rspec spec/unit/common/email/builders/alert/immediate/share_builder_spec.rb` → 33 examples, 0 failures.
+- `compare_email_previews.py --rule-category share --kind share_meeting --kind share_meeting_highlight --include-verified` → 2/2 PASS (content match + structured), only pre-existing tracking_tag WARN (HS-183419).
+
+**Notes:**
+- No production-builder change needed: `share_builder.rb` already does the right thing — the lambdas at L484 / L503 call `get_item_thumbnail_url(FETCH_MEETING_ITEM.call(to_user, meeting_id)) rescue nil`, which is the same `ThumbnailPresenter → UrlPresenter` chain.
+- `UrlPresenter` does meaningful work only for S3-storage-bucket URLs (`should_convert` short-circuits on non-S3 / relative URLs). For the mock's relative `/img/processing/245x/1.gif` path it's a no-op, but threading the call still has value: (1) parity with production code path, (2) future-proofing if the mock ever moves to an S3 URL, (3) ensures the training-banner short-circuit in `get_item_thumbnail_url` keeps getting exercised in preview, and (4) catches any future divergence between mock surface and the helpers' expectations early.
+
+---
+
 ## 2026-05-15 - Render meeting thumbnail on share_meeting semantic email card
 
 **Repository:** `latest` (nutella/web)
