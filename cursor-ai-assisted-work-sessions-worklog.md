@@ -6,6 +6,32 @@ Weekly summaries and YTD running summary are in [weekly-summary-worklog.md](week
 
 ---
 
+## 2026-05-15 - Document `--semantic-only-rubric` mode + `validate_rule_category.sh` in notifications-migration README
+
+**Repository:** `highspot/nutella` (latest worktree, working dir uncommitted)
+**Branch:** working tree only (no commit yet — README docs follow-on to the rubric-mode implementation done earlier in the same session)
+**Files Changed:**
+- `nutella/web/scripts/notifications-migration/README.md` (+~60 lines: PM-rubric checks subsection, `pm_pass`/`pm_fail` verdicts, `--rule-category` + `--semantic-only-rubric` CLI rows, new "PM rubric mode" and "Per-rule-category PM-batch validation" sections, `validate_rule_category.sh` in Files table)
+
+**Summary:**
+Brought the `notifications-migration/README.md` in line with the new Layer-A PM-rubric mode (`--semantic-only-rubric` / `--rubric`) and the `validate_rule_category.sh` wrapper that landed earlier in the session. The previous README documented only legacy↔semantic parity rules and the snapshot catalogue; PM-side rubric checks and per-rule-category batching were undocumented.
+
+**Changes Made:**
+- **Files table:** added `validate_rule_category.sh` row pointing to the new "Per-rule-category PM-batch validation" section.
+- **Verdicts table:** added `pm_pass` ✅ and `pm_fail` ❌ rows scoped to `--semantic-only-rubric` mode; clarified that `pm_fail` joins `fail` and `semantic_preview_missing` as non-zero exit verdicts; documented the rubric-mode total invariant `pm_pass + pm_fail + semantic_preview_missing == Total`.
+- **New `### PM-rubric checks (--semantic-only-rubric only)` subsection** under Migration-rule checks: documents all 6 `[RUBRIC:*]` checks (`cta_verb`, `section_title_format`, `subject_format`, `card_anchor_missing`, `body_block_length`, `body_block_count`) with severity, description, and exemption-set name. Notes digest categories are skipped automatically.
+- **CLI reference table:** added `--rule-category CATEGORY` row (live Mongo-backed taxonomy from `/api/v1/notification_rules`, repeatable, PM-facing, coarser than `--category`) and `--semantic-only-rubric` / `--rubric` row (cross-links to the new section, notes mutual exclusivity with `--snapshot-*`).
+- **New `## PM rubric mode` section** parallel to the snapshot section: explains the gap between parity / snapshot / rubric, gives 3 invocation examples (single kind, rule-category, CI gate), documents verdict semantics and digest skipping.
+- **New `## Per-rule-category PM-batch validation` section:** documents `validate_rule_category.sh`'s 4-step pipeline (parity → rubric → snapshot drift → SMTP+mailpit), supported env vars (`COOKIE_FILE`, `BASE_URL`, `MAILPIT_URL`, `SKIP_SEND`, `SKIP_SNAPSHOT`, `SKIP_RUBRIC`, `UPDATE_SNAPSHOTS`), and 2 invocation examples.
+
+**Notes:**
+- README structure verified after edits — 22 sections, all heading levels consistent.
+- `README_SEMANTIC_EMAIL.md` (`nutella/web/common/email/`) does not reference any of the migration scripts and was intentionally left alone — out of scope for this validation-tooling docs update.
+- The `## Adding a new rule` section is still accurate as-is for the new `[RUBRIC:*]` checks (just authors hit a different exempt-set naming convention `RUBRIC_*_EXEMPT_KINDS`); not bloating the section with rubric-specific instructions per the workspace "minimal changes" rule.
+- Source code (`compare_email_previews.py`, `validate_rule_category.sh`) was not modified in this turn — this entry is README-only.
+
+---
+
 ## 2026-05-15 - Sync personal skills with `add-nutella-semantic-email-migration` branch via symlinks
 
 **Repository:** `highspot/ai-plugins` (branch `add-nutella-semantic-email-migration`) + personal skills folder
