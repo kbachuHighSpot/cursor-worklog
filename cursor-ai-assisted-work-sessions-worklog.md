@@ -5596,7 +5596,7 @@ The semantic builder's `approve_level` branch was a verbatim copy of `submit_for
 - Pass 1 (now superseded): rotated keys for title (`k806YDvh`) and 3 body variants (`yYW2vcR9`, `XmkFyJjd`, `7rv4d830`) inside the shared case-statement, kept item-card rendering.
 - Pass 2 (current state): dispatched `event_type == "approve_level"` to a new dedicated helper `build_approve_level_email` (parallel to `build_decline_email`). Removed the pass-1 keys (`k806YDvh`, `yYW2vcR9`, `XmkFyJjd`, `7rv4d830`) — never committed, fully replaced.
 - New helper renders a single spot card carrying the reviewer's comment as a reply chip for all variations (`:item`, `:items`, `:default`).
-- Variation-aware section title: `MtI2gmBC` "Item approved at prior level" / `nMxE6OeR` "Items approved at prior level" / `fYXpOgY3` "Item(s) approved at prior level".
+- Variation-aware section title (rephrased after preview review): `7gaozhaT` "Item approved, awaiting your review" / `o54xQdqq` "Items approved, awaiting your review" / `lOi8VKJH` "Item(s) approved, awaiting your review". Earlier "approved at prior level" keys (`MtI2gmBC`, `nMxE6OeR`, `fYXpOgY3`) were never committed and are fully replaced.
 - Variation-aware body: `KtpZMxQH` "{user} approved an item. Review it in the following spot:" / `qymIhVKE` "{user} approved {amount} items. Review them in the following spot:" / `8LPvrBlp` "{user} approved {amount} item(s). Review them in the following spot:".
 - CTA + URL preserved via `config_defaults` (legacy `ALERT_CONFIG[:action][:href] = [:item, :alert_set_url]`), so the button still lands on the review queue.
 - All 6 fresh keys generated via `./iidgen 6`, 8-char audit passes.
