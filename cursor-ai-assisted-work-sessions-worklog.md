@@ -6,6 +6,30 @@ Weekly summaries and YTD running summary are in [weekly-summary-worklog.md](week
 
 ---
 
+## 2026-05-15 - Create KTLO follow-up ticket HS-185019 for `prod_content_cdn_lambda_throttling` mitigation
+
+**Repository:** N/A (Jira)
+**Branch:** N/A
+**Files Changed:** N/A
+
+**Summary:**
+Created Jira ticket [HS-185019](https://highspot.atlassian.net/browse/HS-185019) capturing the follow-up work from the `prod_content_cdn_lambda_throttling` New Relic alert slack thread. Filed under the `KTLO - App Platform Summer Major (26.4.0)` epic (HS-183256) with proper sprint and feature crew assignment.
+
+**Changes Made:**
+- New Task **HS-185019** — _Mitigate prod_content_cdn_lambda_throttling caused by magma-api pod scaling churn_
+  - Parent epic: HS-183256 (KTLO - App Platform Summer Major (26.4.0))
+  - Assignee: Kiran Bachu
+  - Feature Crew: App Platform
+  - Sprint: 26.4.0 Summer Major 4 Weeks
+  - Description captures the 3 follow-up items from the slack thread: (1) tune magma-api pod scaling config with foundation team, (2) reduce retries on connection/timeout failures, (3) add graceful shutdown to magma-api so in-flight requests are drained on `SIGTERM` instead of being dropped and triggering a retry storm that bursts lambda invocations above the shared 1000-concurrency account limit.
+
+**Notes:**
+- Root cause was confirmed in-thread: throttling is **not** the CDN lambda hitting its dedicated limit — it's pod-restart-induced retry bursts on the shared account-level concurrency.
+- Long-term we may also want to request an AWS account-level lambda concurrency increase, but that's noted as a secondary mitigation in the ticket — the main fix is reducing the burst at the source.
+- Slack thread: https://highspot.slack.com/archives/C081VLCNN6Q/p1778529739114609?thread_ts=1778522558.498459&cid=C081VLCNN6Q
+
+---
+
 ## 2026-05-15 - Document `--semantic-only-rubric` mode + `validate_rule_category.sh` in notifications-migration README
 
 **Repository:** `highspot/nutella` (latest worktree, working dir uncommitted)
