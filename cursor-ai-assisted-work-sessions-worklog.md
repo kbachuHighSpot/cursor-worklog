@@ -6,6 +6,50 @@ Weekly summaries and YTD running summary are in [weekly-summary-worklog.md](week
 
 ---
 
+## 2026-05-15 - Sync personal skills with `add-nutella-semantic-email-migration` branch via symlinks
+
+**Repository:** `highspot/ai-plugins` (branch `add-nutella-semantic-email-migration`) + personal skills folder
+**Branch:** `add-nutella-semantic-email-migration` (pushed; PR at https://github.com/highspot/ai-plugins/compare/add-nutella-semantic-email-migration?expand=1)
+**Commits on branch (this session):**
+- `1123a3a` skill: cross-reference 7 semantic-email-migration skills in their descriptions
+- `43075b9` skill: sync migrate-semantic-email-body-copy SKILL.md from local
+
+**Files Changed:**
+- `nutella-semantic-email-migration/add-notification-kind/SKILL.md` (+1/-1 description)
+- `nutella-semantic-email-migration/analyze-compare-report/SKILL.md` (+1/-1)
+- `nutella-semantic-email-migration/debug-email-rendering/SKILL.md` (+1/-1)
+- `nutella-semantic-email-migration/email-migration-validation/SKILL.md` (+1/-1)
+- `nutella-semantic-email-migration/migrate-notification-kind/SKILL.md` (+1/-1)
+- `nutella-semantic-email-migration/migrate-semantic-email-body-copy/SKILL.md` (+1594/-18; +8/-1 desc and +1586/-17 body in two commits)
+- `nutella-semantic-email-migration/semantic-email-review/SKILL.md` (+1/-1)
+- `~/.cursor/skills/migrate-semantic-email-body-copy/` (was directory, now symlink → ai-plugins canonical)
+- `~/.cursor/skills/add-notification-kind` (new symlink → ai-plugins canonical)
+- `~/.cursor/skills/analyze-compare-report` (new symlink → ai-plugins canonical)
+- `~/.cursor/skills/debug-email-rendering` (new symlink → ai-plugins canonical)
+- `~/.cursor/skills/email-migration-validation` (new symlink → ai-plugins canonical)
+- `~/.cursor/skills/migrate-notification-kind` (new symlink → ai-plugins canonical)
+- `~/.cursor/skills/semantic-email-review` (new symlink → ai-plugins canonical)
+
+**Summary:**
+User asked "Can we keep my personal skills and this branch in sync?" — replaced the divergence-prone copy-and-overwrite pattern (last instance: prior commit `f0c297a`) with a permanent symlink layout matching the existing `debug-email-deliverability` pattern. All 7 semantic-email-migration skills are now symlinked from `~/.cursor/skills/<name>` → `ai-plugins/nutella-semantic-email-migration/<name>/`. The 6 sibling skills that were previously invisible to Cursor's auto-discovery are now active.
+
+**Changes Made:**
+- Verified the divergence was safe to resolve one-way (personal → canonical): personal copy was a strict structural superset with 1362 net additions; the 18 "lost" lines were all YAML reformatting, content moved into the new MANDATORY i18n section, or the pre-revision Apollo-thumbnail paragraph superseded by Pattern J.
+- Committed cross-reference suffix (`1123a3a`) before the bulk sync so the PR diff stays reviewable as two logical commits.
+- Overwrote the canonical body-copy SKILL.md with the personal copy (commit `43075b9`, 1612 lines changed).
+- Pushed branch to `origin/add-nutella-semantic-email-migration`.
+- Backed up the personal `migrate-semantic-email-body-copy/` directory as `~/.cursor/skills/.bak_migrate-semantic-email-body-copy_<ts>/` before replacing it with a symlink (safety net; can be deleted once the PR merges and the user is satisfied).
+- Created 7 symlinks in `~/.cursor/skills/` pointing into `ai-plugins/nutella-semantic-email-migration/`.
+- Verified each symlink resolves and `SKILL.md` is readable through the link (sizes: 137–362 lines for the smaller skills; 2827 lines for body-copy).
+
+**Notes:**
+- **Operational change**: future edits to any of these 7 skills (from inside Cursor or by hand) now land on tracked files in the `ai-plugins` checkout. The user must commit those edits to whichever branch is current (typically still `add-nutella-semantic-email-migration` until the PR merges, then `main`).
+- **Branch lifecycle**: after the PR merges, `git checkout main && git pull` in `ai-plugins` updates all 7 skills atomically. No symlink maintenance needed.
+- **`learn-session-fixes` skill** (created earlier this session, standalone in personal skills folder) is unaffected — left as a non-symlinked personal skill.
+- **Backup directory cleanup**: `~/.cursor/skills/.bak_migrate-semantic-email-body-copy_*` can be deleted after the user confirms the symlinks work as expected.
+
+---
+
 ## 2026-05-15 - Cross-reference 7 semantic-email-migration skills in their front-matter descriptions
 
 **Repository:** `ai-plugins` (branch `add-nutella-semantic-email-migration`) + personal skills folder
