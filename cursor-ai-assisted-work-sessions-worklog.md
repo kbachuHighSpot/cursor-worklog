@@ -6,6 +6,29 @@ Weekly summaries and YTD running summary are in [weekly-summary-worklog.md](week
 
 ---
 
+## 2026-05-15 - Create `learn-session-fixes` skill (capture accepted fixes for reuse)
+
+**Repository:** `cursor-skills` (`~/.cursor/skills/learn-session-fixes/`)
+**Files Changed:**
+- `~/.cursor/skills/learn-session-fixes/SKILL.md` (new, 220 lines)
+- `~/.cursor/skills/learn-session-fixes/session-learnings.md` (new, archive seed)
+
+**Summary:**
+New personal skill that captures generalizable fixes the user accepts mid-session and persists them for future agents. Auto-fires on acceptance signals ("perfect", "looks good", "merge it", "thanks", "lgtm", explicit "capture this") and on explicit promotion requests, then proposes (with diff preview + confirmation) one of three persistence targets: extend an existing matching skill, promote an archive cluster into a new skill, or append to the `session-learnings.md` archive.
+
+**Changes Made:**
+- Authored `SKILL.md` with: trigger model (auto-on-acceptance + explicit), 6-step capture checklist, decision tree for persistence target, capture-filter rules to prevent over-capture (no typos / no one-offs / no duplicates), front-matter description packed with trigger phrases for high discoverability, anti-patterns section (no silent writes, no generic titles, no cross-project leakage), and worklog cross-reference via `update-worklog`.
+- Seeded `session-learnings.md` archive with header, search-hint examples (`rg "Domain:"`), and an entry template comment block so the first capture has a stable format to follow.
+- Listed off-limits write targets explicitly: `~/.cursor/skills-cursor/` (built-ins) and `~/.cursor/plugins/cache/` (vendored plugin skills).
+- Documented promotion path: when ≥3 archive entries share a `**Domain:**` label, propose clustering them into a new dedicated skill.
+
+**Notes:**
+- Storage strategy chosen: hybrid (existing-skill-first, archive-fallback, cluster-promotion). Matches today's organic capture flow where Patterns I/J landed in `migrate-semantic-email-body-copy` rather than a generic archive.
+- Trigger model chosen: auto-fire on acceptance signals (with mandatory diff-preview confirmation before writing). Lower friction than explicit-only, and matches the `update-worklog` mid-session cadence the user already runs.
+- SKILL.md is 220 lines, well under the 500-line recommendation from `create-skill`.
+
+---
+
 ## 2026-05-15 - Add Patterns I + J to migrate-semantic-email-body-copy skill
 
 **Repository:** `cursor-skills` (`~/.cursor/skills/migrate-semantic-email-body-copy/SKILL.md`)
