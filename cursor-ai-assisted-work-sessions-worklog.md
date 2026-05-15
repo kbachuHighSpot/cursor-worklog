@@ -6,6 +6,35 @@ Weekly summaries and YTD running summary are in [weekly-summary-worklog.md](week
 
 ---
 
+## 2026-05-15 - Render meeting thumbnail on share_meeting semantic email card
+
+**Repository:** `latest` (nutella/web)
+**Branch:** `HS-182399/semantic-email-text-and-styling-fixes-428d5380` (working branch)
+**Files Changed:**
+- `nutella/web/common/email/semantic/builders/alert/immediate/share_builder.rb` (qualify constants)
+- `nutella/web/common/email/semantic/preview/semantic_email_preview.rb` (thread `thumbnail_url` through preview lambdas)
+- `nutella/web/spec/unit/common/email/builders/alert/immediate/share_builder_spec.rb` (+3 examples)
+
+**Summary:**
+Finished the `share_meeting` / `share_meeting_highlight` card by wiring the thumbnail image end-to-end. The Highspot Item that backs a meeting recording (Content-Kind == `"Meeting"`) already carries pre-rendered S3 thumbnails on `thumbnails.{small,tiny,490x,…}.url` — there was no need to call Apollo at render time. The builder had `FETCH_MEETING_ITEM` / `thumbnail_url:` plumbing in place, but two gaps prevented the thumbnail from ever rendering: (1) unqualified `THUMBNAIL_WIDTH` / `THUMBNAIL_HEIGHT` references in `share_builder.rb` raised `NameError` as soon as a non-nil URL was passed (Ruby's `extend` mixes methods into the singleton class but does not bring constants into the host module's lookup chain), and (2) the preview lambdas in `semantic_email_preview.rb` never threaded a `thumbnail_url:` value, so the rendered preview always took the nil-thumbnail short-circuit.
+
+**Changes Made:**
+- `share_builder.rb` `build_share_meeting_email`: replaced unqualified `THUMBNAIL_WIDTH` / `THUMBNAIL_HEIGHT` with `EmailContentBuilder::Base::THUMBNAIL_WIDTH` / `…::THUMBNAIL_HEIGHT` (same form `ops_builder.rb` uses). Added a comment documenting why qualification is required (extend vs include constant-lookup semantics).
+- `semantic_email_preview.rb` `share_meeting` / `share_meeting_highlight` branches: pass `thumbnail_url:` pointing at the on-domain `img/processing/245x/1.gif` placeholder. Production uses the real `ItemQueries.for_meeting_id` → `get_item_thumbnail_url` path (which round-trips through `ThumbnailPresenter` for cache-busting); preview bypasses `ThumbnailPresenter` because the mock Item isn't fully populated, but exercises the same `item_preview` rendering branch in the builder.
+- `share_builder_spec.rb`: added three new examples in a `with thumbnail_url` context — (1) verifies the rendered `item_preview` block has `type: :thumbnail`, the URL, both standard dimensions, and the meeting title as `alt`; (2) verifies `item_preview` is `nil` when `thumbnail_url:` is omitted (text-only card path); (3) regression guard that calling with a non-nil URL doesn't raise `NameError` — pins the constant-qualification fix.
+
+**Verification:**
+- `bundle exec rspec spec/unit/common/email/builders/alert/immediate/share_builder_spec.rb` → 33 examples, 0 failures (all 3 new examples pass alongside the existing meeting-details + extract_meeting_details suite).
+- Rendered preview HTML for both `share_meeting` and `share_meeting_highlight`: 3 `<img>` tags (brand logo + meeting thumbnail + comment-author avatar). Thumbnail: `<img src=".../img/processing/245x/1.gif" alt="Q4 Pipeline Review Meeting" width="155" height="116" style="border-radius: 4px; …" />` — confirms `type: :thumbnail` (4px radius, not 50% avatar radius) and that `meeting_title` flows through to `alt`.
+- `compare_email_previews.py --rule-category share --kind share_meeting --kind share_meeting_highlight --include-verified`: 2/2 PASS (content match + structured). Only WARN is the pre-existing tracking_tag inventory issue (HS-183419), unrelated.
+
+**Notes:**
+- Production path (real meeting Item, real domain) already worked once the builder was correct — the gap was preview visibility only. The user's sample Mongo doc (`properties.Content-Kind == "Meeting"` with populated `thumbnails.{small,tiny,490x,large}.url`) confirms the production lookup `ItemQueries.for_meeting_id(domain_id, meeting_id)` returns exactly what `get_item_thumbnail_url` needs.
+- Meetings that exist purely as engagement-service calendar events (no Highspot Item ever created) fall through to the text-only card — `FETCH_MEETING_ITEM.call(...)` returns nil, `get_item_thumbnail_url(nil)` returns nil, and `item_preview` stays nil. No degradation, no broken-image placeholder.
+- Dev-server caching quirk during the debug: Padrino's reloader serves a stale "Could not render" response after a render-time exception until the response cache is busted via a query param. Recording it here in case a future caller hits the same red herring while iterating on preview wiring.
+
+---
+
 ## 2026-05-15 - Enrich share_meeting card with render-time meeting metadata
 
 **Repository:** `latest` (nutella/web)
