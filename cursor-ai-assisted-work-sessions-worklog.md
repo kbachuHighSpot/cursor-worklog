@@ -6,6 +6,29 @@ Weekly summaries and YTD running summary are in [weekly-summary-worklog.md](week
 
 ---
 
+## 2026-05-15 - Add Patterns I + J to migrate-semantic-email-body-copy skill
+
+**Repository:** `cursor-skills` (`~/.cursor/skills/migrate-semantic-email-body-copy/SKILL.md`)
+**Files Changed:**
+- `~/.cursor/skills/migrate-semantic-email-body-copy/SKILL.md` (+593 lines)
+
+**Summary:**
+Codified two patterns into the migrate-semantic-email-body-copy skill so future agent runs reuse the recipe rather than re-deriving it. Both came out of today's share_meeting card work. (1) Pattern I — render-time entity-card enrichment via DB lookup (the `meeting_details:` keyword + projection-scoped `Mongo.find_one` + `extract_<entity>_details` adapter + `<strong>Label:</strong> value<br>…` row renderer; distinct from Pattern D in that it does NOT plumb new fields end-to-end through the controller / AlertCommands signature). (2) Pattern J — entity card thumbnail via the canonical `get_<entity>_thumbnail_url → ThumbnailPresenter#url_for_email → UrlPresenter` presenter chain (the right path for `Content-Kind == "Meeting"` Items with pre-rendered S3 thumbnails; explicitly distinguished from the wrong path — Apollo `meeting_thumbnails` with short-lived signed URLs — which already has a "when NOT to plumb" note under Pattern D).
+
+**Changes Made:**
+- Front-matter description: added the new triggers (enrich entity card via Mongo lookup; `NameError: uninitialized constant THUMBNAIL_WIDTH/HEIGHT` from a sibling builder; preview-vs-production hardcoded-URL asymmetry; Padrino "Could not render" cache-bust hint).
+- Quick Reference table: two new rows (Pattern I, Pattern J) summarising when to reach for each.
+- Updated the existing "Meeting thumbnails — when NOT to plumb" subsection under Pattern D to scope it specifically to the Apollo path and add a cross-reference to Pattern J for the durable Items-thumbnail path.
+- Pattern I sub-recipe: 8-step progress checklist (I1 confirm unique index → I2 projection-scoped query → I3 Mongo→flat adapter (tolerant of both key styles) → I4 row renderer with `CGI.escapeHTML` per field → I5 `<entity>_details:` keyword wiring → I6 `rescue nil` registration block → I7 preview mock mirroring Mongo doc shape → I8 specs). Includes canonical references to `engagement_meeting_queries.rb#find_list_record`, `share_builder.rb#extract_meeting_details`, `share_builder.rb#build_meeting_details_html_content`, `mock_data.rb#mock_meeting_list_record`, and the existing share_builder spec template.
+- Pattern J sub-recipe: 5-step progress checklist (J1 canonical helper / sibling helper for new entity types → J2 render-time Item lookup with `FETCH_<ENTITY>_ITEM` lambda → J3 the `extend EmailContentBuilder::Base` constant-qualification gotcha (extend brings methods but not constants — qualify as `EmailContentBuilder::Base::THUMBNAIL_*`) → J4 preview routes through the same chain via `get_item_thumbnail_url(mock_<entity>_item(...))`, never a hardcoded URL → J5 specs with a regression test for the J3 NameError gotcha). Includes a Padrino dev-server cache-bust subsection (`?cb=$(date +%s%N)` to dispel stale "Could not render" responses).
+
+**Notes:**
+- Pattern I and Pattern D both produce richer entity cards. The choice rule: use D when adding new metadata fields means changes ripple through controllers / `AlertCommands.create_*` and the callers are few; use I when the fields are cosmetic, the upstream surface is invasive to change, and a unique-index Mongo point-read is available. Both should reference each other so the next agent reads the trade-off before picking.
+- Pattern J is intentionally narrow: it's about the URL-resolution chain (`base.rb` helper → `ThumbnailPresenter` → `UrlPresenter`), not about WHEN to add a thumbnail. The "when not to plumb" decision (Apollo path, pre-processing kinds, family-wide consistency) remains under Pattern D where it was originally written.
+- The constant-qualification gotcha (J3) is documented with both the failing form and the correct qualified form, plus the dormant-bug explanation (the ternary short-circuit hides it until a non-nil URL is passed in). The matching regression spec template in J5 ensures it gets caught next time.
+
+---
+
 ## 2026-05-15 - Route share_meeting preview thumbnail through ThumbnailPresenter / UrlPresenter
 
 **Repository:** `latest` (nutella/web)
