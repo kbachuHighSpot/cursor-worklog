@@ -5587,18 +5587,28 @@ ReadLints: clean on `mock_data.rb`. Subagent session.
 **Repository:** highspot/nutella
 **Branch:** HS-182399/semantic-email-text-and-styling-fixes
 **Files Changed:**
-- web/common/email/semantic/preview/legacy_compare/legacy_email_preview.rb
+- web/common/email/semantic/preview/semantic_email_preview.rb
 
 **Summary:**
-`compare_email_previews.py` flagged `bulk_digital_room_ownership_transfer` (and the sibling `bulk_pitch_ownership_transfer`) for divergent counts: legacy rendered "1 External Shares" while semantic rendered "5 External Shares". Root cause: the semantic preview routing hardcodes `num_items: 5` in `semantic_email_preview.rb#L2587-2590`, but the legacy mock baseline (`mock_alert_data`) defaults `summary.num_items` to "1" and has no override for these kinds. Workflow kinds already have a similar override (`"3"`); bulk transfer kinds were missed.
+`compare_email_previews.py` flagged `bulk_digital_room_ownership_transfer` (and the sibling `bulk_pitch_ownership_transfer`) for divergent counts: legacy rendered "1 External Shares" while semantic rendered "5 External Shares". Root cause: `semantic_email_preview.rb#L2587-2590` hardcoded `num_items: 5` in the routing call, bypassing the shared mock baseline (`LegacyEmailPreview.mock_alert_data`) that legacy reads from. This is the asymmetry pattern the skill explicitly warns about ("preview parity bug — preview should call \[shared chain\]" / "avoiding soft fallbacks").
 
-**Changes Made:**
-- Added `when :bulk_pitch_ownership_transfer, :bulk_digital_room_ownership_transfer` clause in `legacy_email_preview.rb#mock_alert_data_for_kind` that sets `data["num_items"] = "5"` and `data["summary"]["num_items"] = "5"`. Mirrors the existing workflow-kinds override pattern (3 lines above in the same `case`).
-- Inline comment explains the asymmetric source of the value (semantic hardcode in the preview wiring).
+**Initial wrong-direction attempt (reverted):** added a `when :bulk_pitch_ownership_transfer, :bulk_digital_room_ownership_transfer` override in `legacy_email_preview.rb` to set the legacy mock's `num_items` to `"5"`. This papered over the asymmetry by duplicating the semantic hardcode onto the legacy side instead of fixing it at the source. User flagged: "No fallbacks, no overrides were in the skill. Rely on the mock data to be enhanced as needed and mock data should be shared between legacy and semantic." Reverted that file.
+
+**Correct fix:** changed the semantic preview routing to read `num_items` from the shared mock baseline:
+```ruby
+when "bulk_pitch_ownership_transfer"
+  bulk_num_items = LegacyEmailPreview.mock_alert_data.dig("summary", "num_items").to_i
+  EmailContentBuilder::PitchRelationshipBuilder.build_bulk_pitch_ownership_transfer_email(from, to, comment, num_items: bulk_num_items, config_defaults: defaults)
+when "bulk_digital_room_ownership_transfer"
+  bulk_num_items = LegacyEmailPreview.mock_alert_data.dig("summary", "num_items").to_i
+  EmailContentBuilder::PitchRelationshipBuilder.build_bulk_pitch_ownership_transfer_email(from, to, comment, num_items: bulk_num_items, digital_room: true, config_defaults: defaults)
+```
+
+Both sides now read `summary.num_items` from the same `LegacyEmailPreview.mock_alert_data` baseline. No override, no hardcode. The shared baseline currently sets `num_items` to `"1"`; if the rendered "1 External Shares" reads awkwardly, the fix is to enhance the shared baseline (in mock_alert_data itself) — both sides will pick up the new value automatically.
 
 **Notes:**
-- No production code touched. This is preview-only data; production carries `summary.num_items` from `AlertCommands.create_bulk_pitch_ownership_transfer` (`alert_commands.rb#L6228`) which is `pitches.length.to_s` — the legacy override only affects the comparison preview.
-- Both kinds now render "Alice Smith has transferred 5 External Shares to you" (subject + body) consistently.
+- No production code touched.
+- `LegacyEmailPreview` was already imported and referenced elsewhere in `semantic_email_preview.rb` (e.g. L2175, L2354, L2532) — the new `.dig` call follows the established pattern.
 - ReadLints: clean.
 
 ---
