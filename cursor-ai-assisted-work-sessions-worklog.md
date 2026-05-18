@@ -6,6 +6,38 @@ Weekly summaries and YTD running summary are in [weekly-summary-worklog.md](week
 
 ---
 
+## 2026-05-18 - HS-155824: Fix `email_tracking_details_v1` job timeouts (PR #71197)
+
+**Repository:** highspot/nutella
+**Branch:** `HS-155824/fix-email-tracking-details-slow-query`
+**Worktree:** `/Users/kiran.bachu/Codebase/nutella-HS-155824-email-tracking`
+**PR:** https://github.com/highspot/nutella/pull/71197
+**Jira:** https://highspot.atlassian.net/browse/HS-155824
+
+**Files Changed:**
+- `web/common/jobs/email_tracking/email_tracking_details_job.rb` — full rewrite
+- `web/common/stores/database/commands/database_commands.rb` — partial index added to both `mongo_a` and `mongo_e` blocks
+- `web/spec/unit/common/jobs/email_tracking/email_tracking_details_job_spec.rb` — new unit spec (6 examples)
+- `CODEOWNERS` — ownership entry for the new spec under `@highspot/app-platform`
+
+**Summary:**
+The `email_tracking_details_v1` job has been timing out in Prod SU0 (2h budget) because each loop iteration re-runs a `find(details: {$exists: 1}, created_at: {$lt: 90d}).sort(created_at: 1).limit(1)` to locate the next-oldest doc to clean. Without a partial/sparse index on `details`, the planner walks the entire `created_at < 90d` range on the `mongo_a` cluster. This PR addresses both the index gap and the query pattern.
+
+**Changes Made:**
+- Added a partial index `{ created_at: 1 }` filtered by `details: { $exists: true }` to both `mongo_a` and `mongo_e` `email_tracking` index definitions; named explicitly (`for_email_tracking_details_v1`) to coexist with the existing plain `{ created_at: 1 }` index.
+- Rewrote the job to walk backward in 7-day windows from the 90-day boundary, issuing one bounded `update_many` per window. Removes the find-oldest hop entirely. Bails after 4 consecutive empty windows (tolerates a small gap left by any partial prior run) with a hard 5-year safety floor.
+- Dropped the `MongoHelpers.with_prefer_query_mongodb_secondary` wrapper in the job — the new loop has no reads, only writes that always go to primary.
+- Added unit spec covering: empty-window exit, no-find regression guard, selector/update shape, mid-backlog gap tolerance, and the `MAX_LOOKBACK_YEARS` floor.
+- Updated `CODEOWNERS` for the new spec file.
+
+**Notes:**
+- Old `[details:1, created_at:-1]` (mongo_a) and `[details:1, created_at:1]` (mongo_e) indexes are intentionally **left in place** — they will be dropped in a follow-up PR once Atlas Insights confirms the new partial index is in use in production (add-before-drop sequencing).
+- The new worktree was created off latest `origin/main` (`5b08bfc1795`) without disturbing the active `HS-182399/semantic-email-text-and-styling-fixes` worktree.
+- Initial commit failed the `test-ownership` pre-commit hook because the new spec wasn't covered by `CODEOWNERS`; resolved by adding the entry next to the existing email-tracking ownership rule and re-committing — no hooks were skipped.
+- All pre-commit checks green; 6 unit specs pass locally; CI now running on the PR.
+
+---
+
 ## 2026-05-15 - Create KTLO follow-up ticket HS-185019 for `prod_content_cdn_lambda_throttling` mitigation
 
 **Repository:** N/A (Jira)
