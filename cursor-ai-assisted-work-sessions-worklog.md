@@ -36,6 +36,10 @@ The `email_tracking_details_v1` job has been timing out in Prod SU0 (2h budget) 
 - Initial commit failed the `test-ownership` pre-commit hook because the new spec wasn't covered by `CODEOWNERS`; resolved by adding the entry next to the existing email-tracking ownership rule and re-committing — no hooks were skipped.
 - All pre-commit checks green; 6 unit specs pass locally; CI now running on the PR.
 
+**Review follow-ups (same day):**
+- Removed `HS-155824:` ticket-ID prefix from inline code comments (commit `9711336e549`) — ticket reference belongs on the PR/commit, not in source.
+- Cursor Bugbot flagged a real concern: query selector used `$exists => 1` (BSON int32) while my new partial index's `partial_filter_expression` uses `$exists => true` (BSON boolean). Both forms parse to the same `ExistsMatchExpression` internally, but the partial-index matcher has historically been conservative about non-canonical forms and the partial filter parser itself only accepts the boolean form. Aligned the selector to `:$exists => true` in both the job and the spec assertion, and added inline comments so a future edit doesn't silently regress the planner's index selection (commit `f96cd64abe1`). Also matches the codebase convention — every existing `partial_filter_expression` in `DatabaseCommands` uses `$exists => true`.
+
 ---
 
 ## 2026-05-15 - Create KTLO follow-up ticket HS-185019 for `prod_content_cdn_lambda_throttling` mitigation
