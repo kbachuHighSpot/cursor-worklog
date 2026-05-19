@@ -5992,3 +5992,44 @@ snapshot: 16 skills + 20 plans cataloged, 62 files scanned, 1 dangling ref
 
 ---
 
+## 2026-05-18 - Rescue 3 orphaned nutella rules from untracked working-copy limbo
+
+**Type:** post-mortem
+**Repository:** ai-plugins (branch `add-nutella-semantic-email-migration`) + local `~/.cursor/rules/`
+**Severity:** medium
+**Detected by:** user (asked "isn't keeping rules in nutella repo a problem? I haven't checked them in")
+
+**Timeline:**
+- Earlier sessions — author created 14 nutella `.cursor/rules/*.mdc` rules locally; never committed.
+- 2026-05-13 — i18n-keys.mdc authored as the explicit prevention for the 150-bad-keys incident; landed at `nutella/.cursor/rules/i18n-keys.mdc` but blocked from git by `nutella/.gitignore:161:.cursor/**`.
+- 2026-05-18 21:00 PT — published `docs/effective-cursor-rules-and-skills.md` for community sharing, with section calling out 14 nutella rules as fine where they are because Cursor auto-attaches via globs.
+- 2026-05-18 23:00 PT — user pushed back: those rules are not committed, so a fresh clone loses them. Diagnosis confirmed:
+  - `nutella/.gitignore` has `.cursor/**` blocking the dir entirely.
+  - 8 files have been force-added past the gitignore historically; the other ~14 rules sit untracked.
+  - Of the 14, 11 are recoverable via re-installing `ai-plugins/nutella-semantic-email-migration` (they already exist in that plugin's `rules/` dir).
+  - 3 are NOT in any tracked location: `i18n-keys.mdc`, `codeowners-update.mdc`, `update-all-references.mdc`.
+- 2026-05-18 23:15 PT — user chose Option B: i18n-keys to the plugin (it's nutella-specific), other two to user-level `~/.cursor/rules/`.
+
+**Root Cause:**
+A team policy (`.gitignore: .cursor/**`) was applied as a blanket block when it should have been a narrow opt-out for personal/experimental rules. As a result, every new team-shared rule has to be individually force-added — easy to forget when the rule is authored mid-session. The i18n incident's *Prevention added* (the rule itself) was effectively never deployed beyond the author's working copy.
+
+**Fix:**
+- `i18n-keys.mdc` copied to `ai-plugins/nutella-semantic-email-migration/rules/i18n-keys.mdc`; plugin's `.install.sh` already auto-discovers `rules/*.mdc`, so engineers who re-install the plugin pick it up automatically. (commit `80cc1a7`)
+- `codeowners-update.mdc` and `update-all-references.mdc` copied to `~/.cursor/rules/` (user-level; these are general-hygiene rules, not nutella-specific).
+- `nutella-semantic-email-migration/README.md` updated: rule count 11 → 12, i18n-keys.mdc added to the rule table.
+
+**Prevention added:**
+- The published `_audit_crossrefs.sh` / `_audit_globs.sh` scripts catch *authoring-time* decay (broken globs, broken references). They do NOT catch the "rule was authored but never committed" failure mode. Open follow-up: add a third audit script `_audit_untracked.sh` that compares the on-disk `.cursor/rules/` and `.cursor/skills/` against `git ls-files .cursor/`. (Not done in this session.)
+- The narrative now belongs in `effective-cursor-rules-and-skills.md` as a future Pattern (provisionally "Pattern L: Track your `.cursor/` directory") — not added in this commit because the doc was just stabilized for community sharing.
+
+**Related entries:**
+- 2026-05-18 — Normalize semantic-email skill bundle (round 2): archive bak, split mega-skill, audit scripts, type-tagged worklog (milestone)
+- 2026-05-18 — Generalize effective-cursor-rules-and-skills for community sharing (milestone, commit `c5c0c96`)
+
+**Notes / follow-ups not done in this session:**
+1. The plugin's `.install.sh` SKILLS array is stale — lists only 6 skills, but the bundle now has 13 (5 sibling skills from the Pattern J split + migrate-semantic-email-body-copy + the original 6 are all in the directory but only 6 in the SKILLS list). Anyone running `./install.sh nutella-semantic-email-migration` today gets 6/13 skills.
+2. The 11 semantic-email rules in the plugin and the 11 same-named rules in `nutella/.cursor/rules/` are now TWO copies that can drift. Recommendation: keep the plugin as source-of-truth and run `./install.sh nutella-semantic-email-migration ~/Codebase/latest/nutella` to refresh the working copy; or wire up a sync rule analogous to `sync-unified-notifications-plans.mdc`.
+3. `nutella/.gitignore`'s blanket `.cursor/**` should probably be narrowed to `.cursor/_local/**` so future team rules can be tracked without force-adds. Not addressed in this session per user direction; flagged separately.
+
+---
+
