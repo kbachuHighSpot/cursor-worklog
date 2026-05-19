@@ -1,10 +1,10 @@
-# Why Cursor Rules and Skills Fail Silently
+# Effective Cursor Rules and Skills — A Field Guide Built from Real Failures
 
 **Audience:** Engineers and team leads who author `.cursor/rules/*.mdc` or `.cursor/skills/*/SKILL.md` files in their team's repos — or are about to.
 
 A perfectly correct rule existed. It said exactly the right thing. The Cursor agent never read it. By the time the team noticed, 150 i18n keys had been hand-crafted and shipped on a PR — every one of them violating the rule the rule existed to prevent. **That's one incident. There were eight others in the same project.**
 
-This is a post-mortem of nine distinct incidents from a multi-week, multi-PR Cursor-assisted code-migration project. The i18n cascade above is the cleanest single example; the eight surrounding incidents — a doppelgänger source-of-truth confusion, a half-applied multi-step skill recipe, conflicting old-vs-new validators, a missing rule for a framework autoloader pitfall, an asymmetric checker that missed the other direction, a "don't do X" rule that accepted bad substitutes for "do Y", a class of review-feedback bugs with no rule, and a 2,827-line mega-skill whose mandates the agent couldn't reliably parse — are what make the failure modes look systemic instead of isolated. Repo-specific details are anonymized below; the failure modes generalize to any team using Cursor's rules or skills, in any repo, in any language. The next section names all nine at a glance; the rest of the document walks each one through to a concrete pattern that prevents the next round.
+This is a field guide built from nine distinct incidents in a multi-week, multi-PR Cursor-assisted code-migration project — each failure paired with the authoring pattern that prevents the next round. The i18n cascade above is the cleanest single example; the eight surrounding incidents — a doppelgänger source-of-truth confusion, a half-applied multi-step skill recipe, conflicting old-vs-new validators, a missing rule for a framework autoloader pitfall, an asymmetric checker that missed the other direction, a "don't do X" rule that accepted bad substitutes for "do Y", a class of review-feedback bugs with no rule, and a 2,827-line mega-skill whose mandates the agent couldn't reliably parse — are what make the failure modes look systemic instead of isolated. Repo-specific details are anonymized below; the failure modes generalize to any team using Cursor's rules or skills, in any repo, in any language. The next section names all nine at a glance; the body that follows walks each one through to a concrete pattern, and the operational checklist at the end distills the result.
 
 ---
 
@@ -36,6 +36,59 @@ The body below tells each story in full. The "Patterns that work" section turns 
 6. **Doppelgänger terms route the agent to the wrong source of truth.** When the same noun refers to two different things in the codebase (e.g. two `category` fields, two `tenant` concepts), the agent grep-matches the first one and reasons from there — silently, plausibly, and 30 minutes deep into a fix. A one-line canonical-source declaration up front (or a `sources_of_truth:` block in the relevant rule) replaces multiple correction round-trips.
 
 The rest of this document walks through one incident that hit failure modes 1–4 simultaneously, several follow-on incidents that exhibited variants of all five, and the concrete patterns that prevent each failure mode in turn.
+
+---
+
+## Rules vs skills — a 60-second primer
+
+The rest of this document uses both terms heavily. They are related but mechanically distinct, and the failure modes attach to them differently. If you only remember one thing: **rules attach by file path; skills attach by conversation topic.**
+
+### Mechanical differences
+
+| Dimension | Rule (`.cursor/rules/*.mdc`) | Skill (`.cursor/skills/<name>/SKILL.md`) |
+|---|---|---|
+| **Trigger** | `globs:` match the file the agent is editing — or `alwaysApply: true` | `description:` semantically matches the agent's current conversation context |
+| **Where it can live and still work** | `~/.cursor/rules/` (user) **and** `<repo>/.cursor/rules/` (repo-local) — **both auto-attach** | `~/.cursor/skills/` (user) or plugin-bundled. **Repo-local `<repo>/.cursor/skills/` is not surfaced to the agent** — this is failure mode #2 |
+| **How the agent sees it** | Injected inline into the agent's context when the trigger fires; agent has no choice | Listed in the agent's `<available_skills>` system block as a one-line description; the agent decides whether to read the body |
+| **Length budget** | Short — ~50-100 lines, single topic (Pattern D) | Longer — but split into sibling bundles past ~300-600 lines (Pattern J) |
+| **Authoring discipline** | `description:` names the *constraint*; `globs:` name the *files where the constraint applies* | `description:` names the *task or workflow* in imperative voice, with verbatim keywords the agent will actually see in conversation |
+| **Failure modes that bite hardest** | Stale globs (#1) · cross-refs that don't fire (#3) · mandate buried (#4) | Repo-local invisibility (#2) · description that doesn't trigger · mega-skill exceeding attention budget (Pattern J) |
+
+### When to write which
+
+| If the thing you're authoring is… | Use a… |
+|---|---|
+| A constraint on how code is written ("every X must Y") | **Rule** |
+| A constraint that applies only to a specific class of files | **Rule** with narrow `globs:` |
+| A constraint that applies everywhere (logging, secrets, i18n keys, comment style) | **Rule** with `alwaysApply: true` or `globs: ["**/*.<lang>"]` |
+| A footgun about how a specific framework behaves at runtime | **Rule** with `alwaysApply: true` and the symptom verbatim in the description |
+| A multi-step recipe for a task ("how to migrate Z from legacy to new") | **Skill** |
+| A diagnostic playbook ("when validator emits `[RULE:foo]`, do X then Y then Z") | **Skill** with the validator code verbatim in the description |
+| A workflow that wires multiple constraints together | **Skill** that *cites the rules* it depends on inline (not via passive cross-reference — see Pattern C) |
+| Project status, decisions, source-of-truth maps | Neither — that's what a `PROJECT.md` is for |
+
+### When the lines blur
+
+A single concern often needs both. The i18n incident is the canonical example: a *rule* enforces "every key must come from `./iidgen`" (file-shaped constraint that auto-attaches whenever a Ruby file with an `i18n.t` call is edited), and a *skill* documents the full workflow including translation-file updates and key-reuse policies (a multi-step recipe the agent invokes when the conversation is about adding or changing copy).
+
+The right pattern when both apply:
+
+1. **Rule states the MUST** in imperative voice with the command verbatim.
+2. **Skill walks the workflow** end-to-end including the steps the rule doesn't see (translation files, reuse search, post-merge follow-up).
+3. **Rule's description cites the skill name verbatim** so the agent's skill-selection step picks it up when the rule fires.
+
+If you skip step 3, the rule and skill drift apart — the rule fires on file edit but the agent doesn't read the skill because the conversation never names the skill's trigger keywords.
+
+### Why this distinction sharpens the failure-mode analysis
+
+Knowing which lever you're pulling tells you which failure modes are even possible:
+
+- **A stale glob** breaks a *rule* — the rule silently never attaches. Skills don't have globs; they cannot fail this way.
+- **An invisible repo-local file** breaks a *skill* — the agent never knows it exists. Rules don't have this problem; both `~/.cursor/rules/` and `<repo>/.cursor/rules/` are read.
+- **A buried mandate in a long file** is mainly a *rule* problem at >80 lines and a *skill* problem at >300 lines. Different thresholds, same shape — and the fix (split into focused single-topic files) is the same shape too.
+- **Passive cross-references that don't fire** affect both equally — a "see `X.mdc`" in a skill's prose is just as inert as a "see `Y.SKILL.md`" in a rule's prose.
+
+Patterns A and J are the rule-specific and skill-specific recovery patterns respectively; Patterns B, C, F, G, K, and L apply to both.
 
 ---
 
