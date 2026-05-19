@@ -5900,3 +5900,95 @@ this session) executed end-to-end:
 
 ---
 
+## 2026-05-18 - Normalize semantic-email skill bundle (round 2): archive v1, split mega-skill, add audit scripts, type-tag worklog
+
+**Type:** milestone
+**Repository:** ai-plugins (branch `add-nutella-semantic-email-migration`) + local `~/.cursor/`
+**Branch:** add-nutella-semantic-email-migration (ai-plugins)
+**PR:** n/a — direct commits to feature branch
+**Files Changed:**
+
+ai-plugins (commit `d8766df`):
+- nutella-semantic-email-migration/body-copy-card-anchor/SKILL.md (NEW, 373 lines)
+- nutella-semantic-email-migration/entity-card-validity/SKILL.md (NEW, 255)
+- nutella-semantic-email-migration/body-copy-link-preservation/SKILL.md (NEW, 350)
+- nutella-semantic-email-migration/entity-card-enrichment/SKILL.md (NEW, 303)
+- nutella-semantic-email-migration/entity-card-thumbnails/SKILL.md (NEW, 671)
+- nutella-semantic-email-migration/analyze-compare-report/pattern-rule-index.md (updated archive paths)
+
+Local (`~/.cursor/`):
+- skills-archive/migrate-semantic-email-body-copy_v1-A-thru-J/ (NEW, moved from active skills/)
+- skills-archive/migrate-semantic-email-body-copy_v1-A-thru-J/README.md (NEW — archive rationale + replacement map)
+- skills/{body-copy-card-anchor, entity-card-validity, body-copy-link-preservation, entity-card-enrichment, entity-card-thumbnails} → 5 new symlinks to ai-plugins
+- skills/update-worklog/SKILL.md (Entry Types section + 4 per-type templates)
+- rules/_audit_globs.sh (NEW — Python-backed glob-freshness check)
+- rules/_audit_crossrefs.sh (NEW — skill ↔ plan ↔ rule reference resolver)
+
+**Summary:**
+Executed 5 normalization items from the prior session's leverage-ranked
+sequence (items #2, #6, #8, #9, #10):
+
+**#2 — Archive the bak skill.** Relocated `.bak_migrate-semantic-email-body-copy_*`
+out of `~/.cursor/skills/` into a sibling `~/.cursor/skills-archive/` folder
+(outside Cursor's auto-load path). Added a README naming the replacement
+skills and stating the removal criteria.
+
+**#6 — Split the mega-skill.** The 2,827-line v1 (Patterns A–J) is replaced
+by a bundle of 6 single-topic skills under
+`nutella-semantic-email-migration/`:
+- Active `migrate-semantic-email-body-copy` keeps Patterns A–D (location
+  classification).
+- 5 new sibling skills each own one symptom-keyed pattern:
+  - `body-copy-card-anchor` (E + G)
+  - `entity-card-validity` (F)
+  - `body-copy-link-preservation` (H)
+  - `entity-card-enrichment` (I)
+  - `entity-card-thumbnails` (J)
+Each new skill carries the v1 sub-recipe prose verbatim with an imperative
+front-matter `description:` that names the `[RULE:*]` code it resolves, a
+"When this skill fires" trigger table, a provenance note, and a "Related
+skills" cross-reference footer. Symlinks added under `~/.cursor/skills/` so
+Cursor auto-attaches them.
+
+**#9 — Worklog entry types.** Extended `update-worklog/SKILL.md` with a
+`**Type:**` field (milestone | mid-session | investigation | post-mortem)
+and 4 distinct templates. This entry uses the new milestone template.
+
+**#10 — Glob freshness audit.** New `_audit_globs.sh` script (Python-backed
+to avoid bash globstar's recursive blow-up from $HOME) that scans every
+`*.mdc` rule's `globs:` field and reports dead globs. Current snapshot: 5
+rules / 12 globs / 0 dead. Run via `bash ~/.cursor/rules/_audit_globs.sh`.
+
+**#8 — Cross-reference audit.** New `_audit_crossrefs.sh` script that
+checks skill ↔ plan ↔ rule references resolve to real targets. Current
+snapshot: 16 skills + 20 plans cataloged, 62 files scanned, 1 dangling ref
+(master plan references a never-created `extract_alert_config_f6a45394.plan.md`
+— flagged for manual cleanup).
+
+**Changes Made:**
+- 5 new published skills in ai-plugins (commit `d8766df`, 1,955 insertions).
+- 1 archive directory move (local).
+- 2 audit scripts (local, executable).
+- 1 rule extension (Target 1 + Target 2 globs include the new files).
+- 1 skill enhancement (`update-worklog`).
+
+**Notes:**
+- The active `migrate-semantic-email-body-copy/SKILL.md` was intentionally
+  NOT touched in this round — there's a pending -1595/+25 working-tree diff
+  on it from a prior session that should be reviewed separately before
+  committing.
+- Cross-ref audit caught a real pre-existing issue: master plan references
+  `extract_alert_config_f6a45394.plan.md` which doesn't exist. Either the
+  plan was removed or the reference is stale. Not fixed in this session
+  per "don't change working code" — flagged for user.
+- Worklog entry-type tagging is opt-in for now (existing entries are
+  unchanged). Future entries should use the new templates.
+- Archive can be deleted entirely once each new sibling skill has been
+  validated through at least one PM-review cycle (criteria documented in
+  the archive's README).
+- Items #5 (iidgen pre-commit hook) and #7 (CI job running
+  compare_email_previews.py on PR diff) remain deferred — they require
+  changes outside this session's scope.
+
+---
+
