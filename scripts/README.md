@@ -11,6 +11,7 @@ folder) and run it.
 |---|---|---|
 | [`_audit_globs.sh`](_audit_globs.sh) | Verify every `globs:` entry in `~/.cursor/rules/*.mdc` matches at least one real file | Yes — weekly, plus in any PR that renames source directories |
 | [`_audit_crossrefs.sh`](_audit_crossrefs.sh) | Verify every sibling-skill markdown link, every plan-file reference, and every `related_skills:` front-matter entry resolves to a real target | Yes — after editing any skill `description:` or `related_skills:` |
+| [`_check_project_md_staleness.sh`](_check_project_md_staleness.sh) | Compare every `PROJECT.md`'s mtime against commit cadence in its enclosing dir; flag 🟢 / 🟡 / 🔴 verdicts. Defends against narrative rot at agent velocity. | Yes — weekly (or invoked by the `monthly-review` skill) |
 
 ## Quick start
 
@@ -19,9 +20,15 @@ folder) and run it.
 bash _audit_globs.sh
 bash _audit_crossrefs.sh
 
+# PROJECT.md staleness (scans ~/Codebase/* for PROJECT.md, no config needed)
+bash _check_project_md_staleness.sh                # human-readable report
+bash _check_project_md_staleness.sh --quiet        # only print when stale
+bash _check_project_md_staleness.sh --json         # machine-readable
+
 # Strict mode for CI:
-bash _audit_globs.sh --strict          # exit 1 if any glob is dead
-bash _audit_crossrefs.sh --strict      # exit 1 if any cross-ref is broken
+bash _audit_globs.sh --strict                      # exit 1 if any glob is dead
+bash _audit_crossrefs.sh --strict                  # exit 1 if any cross-ref is broken
+bash _check_project_md_staleness.sh --strict       # exit 1 if any PROJECT.md is 🔴 stale
 ```
 
 ## Configuration
