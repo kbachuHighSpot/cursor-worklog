@@ -88,6 +88,8 @@ Repo-local skills are not enumerated there. The project's repo had five repo-loc
 
 This is a Cursor product behavior, not a rule-authoring mistake. The mitigation has to happen at a different layer (see Pattern B below).
 
+> **Heads-up: rules don't have this problem.** Cursor reads both `~/.cursor/rules/` **and** `<repo>/.cursor/rules/` and auto-attaches any `.mdc` whose `globs:` match the currently-open file. Repo-local placement is the *correct* location for rules that are codebase-specific (a rule about your Rails app's content security policy doesn't belong in `~/.cursor/rules/` where it would be evaluated against every other project). The discoverability gap above is specific to skills.
+
 ### 3. Cross-references between rules and skills are passive
 
 A user-level skill that the agent *did* have in context cross-referenced the i18n rule twice in its prose:

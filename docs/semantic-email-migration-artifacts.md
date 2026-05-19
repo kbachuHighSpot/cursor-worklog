@@ -98,6 +98,8 @@ Rules are `.mdc` files with YAML front-matter that **auto-attach to the agent's 
 
 ### 2.2 Nutella repo-local rules (`nutella/.cursor/rules/`, 14 files)
 
+> **Why repo-local is correct for these.** Cursor reads both `~/.cursor/rules/` and `<repo>/.cursor/rules/` and auto-attaches any `.mdc` whose `globs:` match the open file. These 14 rules are nutella-specific (MJML escaping, `KIND_PREFERS_SEMANTIC_BODY`, semantic-email builder conventions, …); lifting them to `~/.cursor/rules/` would either misfire on every other repo or have to be re-globbed so narrowly they'd never fire. The discoverability gap that applies to repo-local *skills* (§3.2) does NOT apply to rules.
+
 | Rule | Topic | One-line mandate |
 |---|---|---|
 | `i18n-keys.mdc` | i18n key generation | MUST use `./iidgen` for every `Hspt::Intl.t` key; 8 alphanumeric chars; never hand-craft |
