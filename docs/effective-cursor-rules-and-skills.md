@@ -2,9 +2,27 @@
 
 **Audience:** Engineers and team leads who author `.cursor/rules/*.mdc` or `.cursor/skills/*/SKILL.md` files in their team's repos — or are about to.
 
-A perfectly correct rule existed. It said exactly the right thing. The Cursor agent never read it. By the time the team noticed, 150 i18n keys had been hand-crafted and shipped on a PR — every one of them violating the rule the rule existed to prevent.
+A perfectly correct rule existed. It said exactly the right thing. The Cursor agent never read it. By the time the team noticed, 150 i18n keys had been hand-crafted and shipped on a PR — every one of them violating the rule the rule existed to prevent. **That's one incident. There were eight others in the same project.**
 
-This is a post-mortem of how that happened, why it was nearly invisible, and the concrete patterns that prevent it next time. The examples come from a multi-week, multi-PR code migration project. Repo-specific details are anonymized below; the failure modes themselves generalize to any team using Cursor's rules or skills, in any repo, in any language.
+This is a post-mortem of nine distinct incidents from a multi-week, multi-PR Cursor-assisted code-migration project. The i18n cascade above is the cleanest single example; the eight surrounding incidents — a doppelgänger source-of-truth confusion, a half-applied multi-step skill recipe, conflicting old-vs-new validators, a missing rule for a framework autoloader pitfall, an asymmetric checker that missed the other direction, a "don't do X" rule that accepted bad substitutes for "do Y", a class of review-feedback bugs with no rule, and a 2,827-line mega-skill whose mandates the agent couldn't reliably parse — are what make the failure modes look systemic instead of isolated. Repo-specific details are anonymized below; the failure modes generalize to any team using Cursor's rules or skills, in any repo, in any language. The next section names all nine at a glance; the rest of the document walks each one through to a concrete pattern that prevents the next round.
+
+---
+
+## Issues and lessons at a glance
+
+| # | Symptom | Root cause | Lesson | Deep-link |
+|---|---|---|---|---|
+| 1 | ~150 hand-crafted i18n keys shipped on a PR despite a rule that forbade them | **Four stacked failures:** stale globs (rule attached to only ~10% of edits) + repo-local skill invisible to agent + passive `see X.mdc` cross-refs + the mandate buried in part 2 of a 230-line multi-topic rule | Even a perfectly-written rule does nothing if four orthogonal mechanisms each silently disable it. Audit the *mechanisms*, not just the prose. | [Anatomy of a silent failure](#anatomy-of-a-silent-failure) · Patterns [A](#a-treat-glob-lists-as-production-code), [B](#b-cross-reference-repo-local-skills-from-skills-the-agent-already-sees), [C](#c-use-imperative-voice-and-put-the-command-in-the-description), [D](#d-one-topic-per-rule-file) |
+| 2 | Agent reasoned about the production feature-flag gate from a preview-only Ruby constant | Same word ("category") referred to two things — an in-memory constant and a database column. Agent grepped, hit the constant first (more grep-visible), reasoned from there | When the same noun refers to two things in your codebase, name the winner explicitly — at kickoff or in a `sources_of_truth:` front-matter block. The cost of not doing it is the entire debugging round-trip every new session | [Same word, two referents](#same-word-two-referents-the-canonical-source-ambiguity) · Pattern [L](#l-name-canonical-sources-for-ambiguous-terms-at-kickoff-or-in-a-rule) |
+| 3 | Sequential migration recipe was applied half-way — step 1 done, step 2 ignored even though the recipe demanded it | Skill's pattern descriptions were written as **prose narrative** ("if X happens, do Y"). Agent treated each named pattern as a standalone option and stopped at the first match | Decision trees beat narratives for agent compliance. Each named step needs an explicit imperative "after applying me, check for X next" pointer, not buried in prose | [Skill failure: a multi-step recipe was applied half-way](#skill-failure-a-multi-step-recipe-was-applied-half-way) |
+| 4 | A sanctioned copy improvement was flagged by a validator as a regression — false alarm on every fix | Two rules with opposite signals coexisted: one enforcing "match legacy verbatim", one enforcing "use the new pattern" | When migrating, retire negative same-as-legacy rules as positive use-new-pattern rules come online. Leaving both means every improvement trips a false alarm | [Conflicting rules: a sanctioned fix was flagged as a regression](#conflicting-rules-a-sanctioned-fix-was-flagged-as-a-regression) |
+| 5 | Hours of "the fix isn't taking effect" debugging — framework autoloader didn't re-execute top-level registration blocks | **No rule existed at all.** Team's skill examples happened to put dispatch in method bodies (where reload works) and never warned about side-effecting top-level blocks | Framework-specific reload behaviors are exactly the kind of footgun an `alwaysApply: true` one-line MUST should capture. Add a rule the moment you discover a non-obvious reload pitfall; future-you should not have to discover it twice | [Missing rule entirely: framework autoloader pitfall](#missing-rule-entirely-framework-autoloader-pitfall) |
+| 6 | A specific case slipped past a paragraph-count validation rule that fired correctly in many others | Three flaws stacked: **asymmetric** directionality (only checked one direction), a **word-floor exception** that exempted short content, and counting "newline boundaries" instead of paragraph blocks (fragile to whitespace) | Default to symmetric equality and zero exceptions when authoring validation rules. False positives are cheap (a PR comment); false negatives ship regressions | [Rule existed but was insufficient: asymmetric checks](#rule-existed-but-was-insufficient-asymmetric-checks-miss-the-other-direction) |
+| 7 | "Concise comments" rule worked — but produced opaque internal-taxonomy comments like `# Pattern E for custom_smtp_pitch_send_failed` that were useless without the project's skill open in another tab | Rule taught the agent **what to compress**, not **what to compress to**. The agent found a literal way to satisfy "don't elaborate" that violated the spirit | When a rule says "don't do X", model "do Y instead" with at least one concrete example. Forbid the bad-substitute classes explicitly (pattern letters, naked `[RULE:foo]` tags, internal skill names as the primary explanation) | [Rule existed but accepted bad substitutes](#rule-existed-but-accepted-bad-substitutes) |
+| 8 | "Sentence ending in 'following …' should end with a colon" — no rule, recurring slip-throughs, only caught in PM review after the fact | Recurring PM review feedback hadn't been audited as a source for new validation rules | Recurring review feedback is rule-shaped. After a review pass, sweep the threads: which categories of feedback have rules? Which don't? The ones that don't are next session's slipped-through bugs | [Rule space hadn't been audited against review feedback](#rule-space-hadnt-been-audited-against-review-feedback) |
+| 9 | A single skill grew to **2,827 lines** covering 10 sub-recipes (A–J). Even when it auto-attached, review-driven fixes sometimes routed to the wrong recipe | Mega-skill exceeded the agent's attention budget; mixed-topic prose made it unreliable to route a specific symptom to the correct named recipe | Split mega-skills into sibling bundles — one trigger per skill, imperative `description:` naming the validator code or symptom verbatim. ~300–600 lines of single-topic prose beats 2,827 lines of mixed-topic prose | Pattern [J](#j-skill-bundles-instead-of-mega-skills) |
+
+The body below tells each story in full. The "Patterns that work" section turns each lesson into a concrete recipe; the authoring checklist at the end is the operational distillation of all 9 lessons.
 
 ---
 
@@ -15,6 +33,7 @@ This is a post-mortem of how that happened, why it was nearly invisible, and the
 3. **Passive cross-references don't fire.** "See `X.mdc` for full rules" in another rule's prose does not cause the agent to read X.
 4. **Critical mandates buried in long files get skipped.** Part 2 of a 4-part 230-line rule is read less attentively than a focused 80-line file. The same is true for a 2,800-line skill with 10 sub-recipes.
 5. **Without commit-time enforcement, rules are advisory.** Runtime validators at app boot catch problems too late. A pre-commit hook or lint cop is the actual safety net.
+6. **Doppelgänger terms route the agent to the wrong source of truth.** When the same noun refers to two different things in the codebase (e.g. two `category` fields, two `tenant` concepts), the agent grep-matches the first one and reasons from there — silently, plausibly, and 30 minutes deep into a fix. A one-line canonical-source declaration up front (or a `sources_of_truth:` block in the relevant rule) replaces multiple correction round-trips.
 
 The rest of this document walks through one incident that hit failure modes 1–4 simultaneously, several follow-on incidents that exhibited variants of all five, and the concrete patterns that prevent each failure mode in turn.
 
@@ -155,6 +174,21 @@ A code-comment style rule was authored mid-project to forbid elaborate code comm
 The rule had taught the agent **what to compress**, not **what to compress to**. The fix amended the rule with explicit BAD / STILL-BAD / GOOD examples and forbade opaque internal taxonomy (pattern letters, naked `[RULE:foo]` tags, internal skill names) as the primary explanation in a comment.
 
 **General lesson:** when you write a rule that says "don't do X", you must also model "do Y instead" with at least one concrete example. The agent will find a literal way to satisfy "don't X" that violates the spirit. This is a specific instance of the imperative-voice pattern: show the target state, not just the constraint.
+
+### Same word, two referents: the canonical-source ambiguity
+
+The module had two distinct things called **"category"**:
+
+| Referent | Where it lives | Used by |
+|---|---|---|
+| `KIND_CATEGORY` constant | in-memory Ruby map under the email registry | the email preview page only |
+| `<Entity>.category` column | the relational database, hydrated via the rules resolver | the production feature-flag gate |
+
+The agent grepped for `category`, hit `KIND_CATEGORY` first (it's the most grep-visible occurrence in the semantic email tree), and reasoned about the production gate from there. Several rounds of "why is this kind still rendering legacy?" debugging followed, until the user corrected: "the constant is preview-only; the database column is what the gate reads."
+
+The pattern generalizes anywhere a noun has a doppelgänger: `user.id` vs `user_id`; `tenant` (URL slug) vs `tenant` (DB document); `enabled?` (feature flag wrapper) vs `enabled?` (model attribute); the same column name appearing on two different tables. The agent has no way to know which referent you mean unless you name it.
+
+**General lesson:** when the same noun refers to two things in your codebase, name the winner explicitly — at kickoff or, better, in a `sources_of_truth:` block in the relevant rule. The fix is one sentence. The cost of not doing it is the entire debugging round-trip every time a new session touches the term.
 
 ### Rule space hadn't been audited against review feedback
 
@@ -299,6 +333,41 @@ Two indexes worth building:
 
 The point is **one file says what means what**. Without it, every consumer (a skill, a validator, a status dashboard) re-derives the mapping ad hoc and they drift apart. With it, there's a single failure point to update — and a single file to grep when you need to know whether a code / pattern / phase still applies.
 
+### L. Name canonical sources for ambiguous terms at kickoff (or in a rule)
+
+When the same noun refers to two different things in your codebase, the agent will pick the wrong one — silently, plausibly, and 30 minutes deep into a fix. The cheapest defense is one sentence at kickoff, or one block in a rule's front matter:
+
+> **`<X>` is the canonical source for `<concept>`, not `<Y>`.**
+
+A real example from this project: the word **"category"** referred to two distinct things in the same module (in-memory Ruby constant vs database column). See the "Same word, two referents" failure mode above for the full story. The kickoff statement "the database column is the canonical source for the LD gate; the in-memory constant is preview-only" would have saved the entire round-trip.
+
+This generalizes to any term with a doppelgänger: `user.id` vs `user_id`; `tenant` (URL slug) vs `tenant` (DB document); `enabled?` (feature flag wrapper) vs `enabled?` (model attribute); the same column name appearing on two different tables. The agent has no way to know which one you mean without being told.
+
+**How to operationalize it** (so you don't have to remember to say it every session):
+
+1. **In the front matter of the rule that governs the topic, add a `sources_of_truth:` block** listing `<concept>: <file-or-symbol>` pairs:
+
+   ```yaml
+   ---
+   description: MUST consult <Entity>.category (database column) — NOT KIND_CATEGORY (preview-only Ruby map) — when reasoning about the semantic_email_enabled_categories LD gate. Read whenever editing semantic email gating logic.
+   globs:
+     - "**/semantic_email_commands.rb"
+     - "**/semantic_email_preview.rb"
+   sources_of_truth:
+     category_for_ld_gate: web/common/notifications/rules/notification_rule.rb (column `category`)
+     category_for_preview_only: web/common/email/semantic/core/semantic_email_registry.rb (KIND_CATEGORY constant)
+   alwaysApply: false
+   ---
+   ```
+
+2. **If the ambiguity is system-wide, add a top-level `AGENTS.md` (or repo-level rule) with a "Canonical sources" table** listing every doppelgänger in the codebase. This file becomes the single place to grep when the agent confuses terms — and the front-matter `sources_of_truth:` blocks in individual rules can cross-reference it.
+
+3. **At kickoff for any session that touches an ambiguous concept, paste the canonical-source statement directly into the chat:** "Reminder: `<X>` is the canonical source for `<concept>`, not `<Y>`." This is cheap insurance for terms that aren't yet captured in any rule, and it lets you ratchet the rule library forward — each new doppelgänger you have to name in chat is a candidate for a permanent `sources_of_truth:` entry.
+
+**Why a one-liner beats prose:** the agent reads grep results first and rule prose second. If the wrong source is more grep-visible, you lose by default. A single declarative line — at kickoff or in front matter — names the winner before the search even happens.
+
+**Relationship to Pattern F.** Pattern F ("Anchor the mandate to source files") tells you to cite the file that *enforces* a constraint. Pattern L tells you to name the file that *defines* a concept when more than one file claims to. They compose: a rule with both points at the validator (F) and the source of truth (L), so the agent can't confuse "where the constraint lives" with "what the constraint is about".
+
 ---
 
 ## Authoring checklist
@@ -317,6 +386,7 @@ Before saving a new `.cursor/rules/*.mdc` or `.cursor/skills/*/SKILL.md`:
 - [ ] **Cross-references use imperative voice.** "MUST read X before writing Y" with the actual command inline, not passive prose ("for more, see X").
 - [ ] **Critical mandates are above the fold** — first 100 lines for skills, first section for rules.
 - [ ] **Evolving taxonomies have a source-of-truth index** (Pattern K). If your skill claims a `[RULE:*]` code or a phase letter, the mapping lives in one indexed file, not re-derived by each consumer.
+- [ ] **Doppelgänger terms named** (Pattern L). If the topic involves a noun that means two things in the codebase (e.g. two `category` fields, two `tenant` concepts, an attribute that shadows a method), the rule's front matter has a `sources_of_truth:` block naming which file is canonical for each.
 
 ---
 
@@ -391,9 +461,10 @@ If you're starting a `.cursor/rules/` or `.cursor/skills/` discipline on a new t
 3. **Imperative voice.** MUST / MUST NOT. Name the command. Describe the trigger.
 4. **Verify the globs.** A 5-line audit script is cheap insurance.
 5. **Anchor to source.** Every mandate cites a file path.
-6. **Verification inline.** Every rule ships a self-check command.
-7. **Commit-time hook for the load-bearing rules.** Audit scripts catch authoring-time decay; pre-commit hooks catch use-time violations. You need both.
-8. **Worklog with typed entries.** When something goes wrong, log a `post-mortem` entry with the *Prevention added* field naming the rule, hook, or test that would have caught it.
+6. **Name canonical sources.** Whenever a noun in your codebase has two referents (two `category` fields, two `tenant` concepts, an attribute that shadows a method), declare the winner in a `sources_of_truth:` front-matter block on the relevant rule, or in a top-level `AGENTS.md` canonical-sources table (Pattern L). If you don't, the agent will grep, land on the wrong one, and reason from there.
+7. **Verification inline.** Every rule ships a self-check command.
+8. **Commit-time hook for the load-bearing rules.** Audit scripts catch authoring-time decay; pre-commit hooks catch use-time violations. You need both.
+9. **Worklog with typed entries.** When something goes wrong, log a `post-mortem` entry with the *Prevention added* field naming the rule, hook, or test that would have caught it.
 
 The compounding return: every `post-mortem` entry's *Prevention added* line is a small ratchet forward in the team's safety net. Six months in, you'll have a body of rules and audit scripts shaped by your actual failure modes — not by a generic checklist a vendor handed you.
 
