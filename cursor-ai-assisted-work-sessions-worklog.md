@@ -5823,3 +5823,80 @@ The semantic builder's `approve_level` branch was a verbatim copy of `submit_for
 - ReadLints: clean.
 
 ---
+## 2026-05-18 - Normalize semantic-email skill bundle: Pattern↔RULE-code index + plan status front-matter
+
+**Repository:** ai-plugins (branch `add-nutella-semantic-email-migration`) + cursor-worklog + local `~/.cursor/`
+**Branch:** add-nutella-semantic-email-migration (ai-plugins), main (cursor-worklog)
+**Files Changed:**
+
+ai-plugins (commit `78c3d6a`):
+- nutella-semantic-email-migration/analyze-compare-report/pattern-rule-index.md (NEW, 191 lines)
+- nutella-semantic-email-migration/analyze-compare-report/SKILL.md (+37)
+
+cursor-worklog (commit `4555407`):
+- unified_notifications/notification_rules_master_plan.plan.md (front-matter + status section)
+- unified_notifications/notification_rule_schema_and_seeding.plan.md (front-matter)
+- unified_notifications/semantic_email_e2e_plan_057e0eb7.plan.md (front-matter)
+- unified_notifications/semantic_email_test_plan_0fe90847.plan.md (front-matter)
+- unified_notifications/separate_semantic_email_commands_a7292c5c.plan.md (new + front-matter)
+- unified_notifications/detailed_phase_plans_3-12_3bfed232.plan.md (new + front-matter)
+- unified_notifications/phase_2_notificationengine_a8edc09e.plan.md ... phase_12_test_automation.plan.md (11 new + front-matter)
+- unified_notifications/_status_rollup.sh (NEW)
+- unified_notifications/STATUS.md (NEW, generated)
+
+Local (untracked-by-design):
+- ~/.cursor/plans/_status_rollup.sh (NEW)
+- ~/.cursor/plans/STATUS.md (NEW, generated)
+- ~/.cursor/rules/sync-unified-notifications-plans.mdc (extended globs + Target 1 file list)
+
+**Summary:**
+Two normalization tasks (from the leverage-ranked sequence developed earlier in
+this session) executed end-to-end:
+
+1. **Pattern ↔ RULE-code index.** Built a single canonical lookup mapping all
+   body-copy Patterns A–J (taxonomic A–D in the active skill + symptom-keyed
+   E–J archived in the `.bak` skill) to the 27 `[RULE:*]` codes emitted by
+   `compare_email_previews.py`. Lives in the analyze-compare-report skill so
+   triage starts at "which RULE code fired?" and resolves to a concrete fix
+   recipe + file location in one hop, without re-deriving the map from the
+   validator each time.
+
+2. **Plan status front-matter + rollup.** Added `status:`, `phase:`, `prs:`,
+   `related_skills:` YAML keys to the 17 program-relevant plan files in
+   `~/.cursor/plans/`. Wrote `_status_rollup.sh` that scans front-matter and
+   emits `STATUS.md` (summary tile counts + sortable table + Mermaid Gantt).
+   Current snapshot: 5 complete / 4 in_progress / 0 blocked / 8 not_started /
+   3 unannotated (out of 20 plans total — 3 unrelated MCP/weekly plans left
+   alone). Master plan now opens with a "## Status" section linking STATUS.md.
+
+**Changes Made:**
+- ai-plugins: pushed `78c3d6a` with the new pattern-rule-index.md + SKILL.md
+  cross-link + an additive `[RULE:legacy_semantic_count_parity]` section that
+  had been sitting uncommitted (consistent with the new index — committed
+  together).
+- cursor-worklog: pushed `4555407` with all 4 originally-synced plans
+  updated + 13 newly-synced plans + the rollup script + the generated
+  STATUS.md. Single batch commit per the updated sync rule.
+- Local sync rule: extended the front-matter `globs:` and the Target 1 file
+  list in `~/.cursor/rules/sync-unified-notifications-plans.mdc` so future
+  edits to any phase plan, the rollup script, or STATUS.md auto-attach the
+  rule and trigger the sync. Also added Target 2 entries for the new
+  analyze-compare-report files and noted the user-skill-symlink layout.
+- Left `migrate-semantic-email-body-copy/SKILL.md` (large -1595 / +25 diff
+  from prior session) uncommitted — out of scope for this session, flagged
+  for separate review.
+
+**Notes:**
+- The `[RULE:legacy_semantic_count_parity]` prose in analyze-compare-report
+  SKILL.md was pre-existing uncommitted work — bundled with this commit
+  because it documents the same rule the new index catalogs.
+- STATUS.md is generated; treat it as derived state. Regenerate via
+  `bash ~/.cursor/plans/_status_rollup.sh` (also copies to cursor-worklog
+  on next sync).
+- Follow-up candidates from the "Suggested sequence" list (skipped for this
+  session): #2 archive the `.bak_` skill, #5 iidgen pre-commit hook, #6 split
+  the 2,827-line `migrate-semantic-email-body-copy/SKILL.md` into 6 focused
+  skills, #7 CI job running `compare_email_previews.py` on PR diff.
+
+---
+
