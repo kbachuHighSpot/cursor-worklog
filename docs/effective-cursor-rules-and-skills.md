@@ -2,6 +2,8 @@
 
 **Audience:** Engineers who author `.cursor/rules/*.mdc` or `.cursor/skills/*/SKILL.md` files in their team's repos.
 
+**Last updated:** 2026-05-18. The maintenance scripts referenced in this doc (`_audit_globs.sh`, `_audit_crossrefs.sh`, `_status_rollup.sh`) are committed at `~/.cursor/rules/` and `~/.cursor/plans/`. Patterns J and K (skill bundling + source-of-truth indexes) were extracted from the May 13 → May 18 follow-up work. See [`Follow-up status`](#follow-up-status) for what's been resolved since the original draft.
+
 A perfectly correct rule existed in our repo. It said exactly the right thing. The Cursor agent never read it. By the time we noticed, 150 i18n keys had been hand-crafted and shipped on a PR — every one of them violating the rule the rule existed to prevent.
 
 This is a post-mortem of how that happened, why it was nearly invisible, and the concrete patterns that prevent it next time. Examples are from the Nutella repo and the `Hspt::Intl.t` i18n key generation rule, but the failure modes are general — they apply to any rule or skill you write.
@@ -289,6 +291,36 @@ The Nutella i18n validator (`default_string_reader.rb#build_string`) logs `Inval
 
 State precisely what each validator does and does not catch.
 
+### J. Skill bundles instead of mega-skills
+
+When a single skill grows past ~300 lines or covers more than one symptom/topic, split it into a **bundle** — sibling skills under the same parent directory, each owning one trigger.
+
+The migration's `migrate-semantic-email-body-copy` skill grew to **2,827 lines** covering Patterns A through J. Even when it auto-attached, the agent's attention budget couldn't reliably parse all 10 sub-recipes; PM-review fixes that should have routed to Pattern H sometimes hit Pattern E's recipe instead. The split (May 18, 2026) replaced it with six focused skills:
+
+| Pattern | Sibling skill | Auto-attaches when |
+|---|---|---|
+| A–D | `migrate-semantic-email-body-copy` (active, slim) | Classifying *where* the body lives for a given kind |
+| E + G | `body-copy-card-anchor` | `[RULE:body_after_following_reference]` or `[RULE:following_missing_colon]` fires |
+| F | `entity-card-validity` | `[RULE:semantic_card_without_legacy_link]` fires |
+| H | `body-copy-link-preservation` | `[RULE:secondary_link_lost]` fires |
+| I | `entity-card-enrichment` | A card needs cosmetic rows via a sibling list-record collection |
+| J | `entity-card-thumbnails` | Wiring a thumbnail or hitting a `THUMBNAIL_*` `NameError` |
+
+Each new skill's `description:` is **imperative** and names the RULE code it resolves verbatim, so Cursor surfaces it as soon as the validation report mentions that code. The original v1 file was relocated to `~/.cursor/skills-archive/` (outside Cursor's auto-load path) and kept for reference until each new skill has been independently PM-review-validated.
+
+The cost of the split was one afternoon of mechanical extraction. The benefit is that each agent invocation now reads ~300–600 lines of single-topic prose instead of 2,827 lines of mixed-topic prose.
+
+### K. Build source-of-truth indexes for evolving taxonomies
+
+A skill called "Pattern H" is meaningful to humans; a validator code like `[RULE:secondary_link_lost]` is meaningful to a script. When both vocabularies exist for the same concept, drift is guaranteed unless one file commits to mapping them.
+
+The migration now has two such indexes:
+
+1. **Pattern ↔ RULE-code index** (`analyze-compare-report/pattern-rule-index.md`) — maps every `[RULE:*]` code emitted by `compare_email_previews.py` to the pattern letter (A–J) that owns the fix, plus the sibling skill where the fix recipe lives. When a new RULE code is added to the validator, it goes in this index in the same commit. When a sibling skill claims a RULE code, the claim is checked against this index.
+2. **Plan status rollup** (`~/.cursor/plans/STATUS.md`) — aggregates `status:`, `phase:`, `prs:`, and `related_skills:` from the front-matter of every `*.plan.md`. Regenerated on demand by `_status_rollup.sh`. The plans hold the prose; the rollup holds the state.
+
+The point is **one file says what means what**. Without it, every consumer (a skill, a validator, a status dashboard) re-derives the mapping ad hoc and they drift apart. With it, there's a single failure point to update — and a single file to grep when you need to know whether a code/pattern/phase still applies.
+
 ---
 
 ## Authoring checklist
@@ -296,45 +328,84 @@ State precisely what each validator does and does not catch.
 Before saving a new `.cursor/rules/*.mdc` or `.cursor/skills/*/SKILL.md`:
 
 - [ ] **Description is imperative.** Names the critical action verbatim. Uses MUST / MUST NOT, not "should".
-- [ ] **Globs point at paths that exist** in the current tree. Verified with `rg --files -g '<glob>' | head -1`.
+- [ ] **Globs point at paths that exist** in the current tree. Verified via `bash ~/.cursor/rules/_audit_globs.sh` (or for a single glob, `rg --files -g '<glob>' | head -1`).
 - [ ] **Scope matches the topic.** If the topic applies broadly (e.g. i18n keys, secrets, logging), use `alwaysApply: true` or `globs: ["**/*.<lang>"]`. Narrow globs are for genuinely file-shaped concerns.
-- [ ] **Single topic.** No `## Part N:` headings. If you have more than one topic, split into multiple files.
+- [ ] **Single topic.** No `## Part N:` headings. If you have more than one topic, split into multiple files. If a skill grows past ~300 lines or covers more than one symptom, split into a sibling bundle (Pattern J).
+- [ ] **Cross-references resolve.** `related_skills:` front-matter and markdown links to other skills/plans must name real targets. Verified via `bash ~/.cursor/rules/_audit_crossrefs.sh`.
 - [ ] **Mandates are anchored to source files.** Cite the validator, the generator, the existing call sites.
 - [ ] **At least one verification command** is included inline.
 - [ ] **Cost of violation is documented** inline so the consequence is impossible to miss.
 - [ ] **Commit-time enforcement is referenced if it exists.** If not, the rule notes the gap explicitly.
 - [ ] **Cross-references use imperative voice.** "MUST read X before writing Y" with the actual command inline, not passive prose ("for more, see X").
 - [ ] **Critical mandates are above the fold** — first 100 lines for skills, first section for rules.
+- [ ] **Evolving taxonomies have a source-of-truth index** (Pattern K). If your skill claims a `[RULE:*]` code or a phase letter, the mapping lives in one indexed file (e.g. `pattern-rule-index.md`), not re-derived by each consumer.
 
 ---
 
 ## Maintenance
 
-A small set of periodic hygiene checks keeps rules and skills from rotting:
+The ad-hoc bash snippets in earlier drafts of this doc have been promoted to two committed audit scripts. Run them periodically and whenever you rename a directory or add a new rule/skill.
+
+### 1. Dead globs
 
 ```bash
-# 1. Dead globs (rule attaches to nothing because directory was renamed).
-for f in .cursor/rules/*.mdc; do
-  globs=$(awk '/^globs:/,/^alwaysApply:|^---/' "$f" | grep -oE '"[^"]+"' | tr -d '"')
-  for g in $globs; do
-    count=$(rg --files -g "$g" 2>/dev/null | head -1 | wc -l)
-    [ "$count" -eq 0 ] && echo "DEAD-GLOB $f -> $g"
-  done
-done
-
-# 2. Rules with no globs and alwaysApply: false (will never auto-attach).
-for f in .cursor/rules/*.mdc; do
-  has_globs=$(grep -c '^globs:' "$f")
-  apply=$(grep -E '^alwaysApply:' "$f" | grep -oE 'true|false')
-  [ "$has_globs" -eq 0 ] && [ "$apply" = "false" ] \
-    && echo "INERT-RULE $f"
-done
-
-# 3. Rules that share stale paths (clustering signal).
-rg -l 'email_content_builder|some_other_renamed_dir' .cursor/rules/*.mdc
+bash ~/.cursor/rules/_audit_globs.sh             # human-readable report
+bash ~/.cursor/rules/_audit_globs.sh --strict    # exit 1 if any dead (CI-friendly)
+bash ~/.cursor/rules/_audit_globs.sh --json      # machine-readable
 ```
 
-When refactoring directories, run check 1 in the same PR as the rename. When auditing the rules folder periodically, run all three.
+Scans every `globs:` entry in `~/.cursor/rules/*.mdc` and reports any that match zero files. Implementation is Python-backed (bash `globstar` from `$HOME` recurses through every `~/Codebase/*` repo's `node_modules` / `.git` — bounded the wrong way). The script short-circuits `**/.cursor/...` patterns directly against `$HOME/.cursor/...` to stay fast.
+
+### 2. Cross-reference resolution
+
+```bash
+bash ~/.cursor/rules/_audit_crossrefs.sh             # report
+bash ~/.cursor/rules/_audit_crossrefs.sh --strict    # exit 1 if any broken
+```
+
+Checks that every cross-reference resolves to a real target. Catches:
+
+- Markdown links of the form `[...](../skill-name/SKILL.md)` whose target skill no longer exists.
+- Plan references (`<plan-name>.plan.md`) that point at a never-created or renamed plan.
+- `related_skills:` front-matter entries naming a non-existent skill.
+
+The catalog of valid targets is derived at run time by scanning `~/.cursor/skills/`, `~/Codebase/ai-plugins/nutella-semantic-email-migration/`, `~/.cursor/plans/`, and `~/Codebase/cursor-worklog/unified_notifications/`.
+
+### 3. Plan status rollup
+
+```bash
+bash ~/.cursor/plans/_status_rollup.sh           # regenerate STATUS.md
+```
+
+Aggregates the `status:` / `phase:` / `prs:` / `related_skills:` keys from every `*.plan.md` front-matter into a single `STATUS.md` (summary, sortable table, Mermaid Gantt). Use this when you advance a phase or close a PR; the prose body of the plan rarely needs to change, only the front-matter.
+
+### 4. When to run
+
+| Trigger | Run |
+|---|---|
+| Renaming a source directory | `_audit_globs.sh` in the same PR as the rename |
+| Adding a new rule or skill | `_audit_crossrefs.sh` after editing `related_skills:` |
+| Advancing a phase / closing a phase-level PR | `_status_rollup.sh` to refresh `STATUS.md` |
+| Weekly hygiene | all three |
+
+The point is to move from advisory ("here's a snippet you could run") to **named, committed, easy-to-invoke** tools. A snippet pasted in a doc doesn't run by itself; a script with a one-line invocation gets run.
+
+---
+
+## Worklog entry types
+
+Every entry appended to `cursor-ai-assisted-work-sessions-worklog.md` now starts with a `**Type:**` field naming one of four kinds. The type tells future readers (and the weekly-review skill) how to parse the entry:
+
+| Type | Use when | Required fields beyond the basics |
+|---|---|---|
+| `milestone` | Shipping a discrete unit of work — PR opened, plan accepted, feature complete | Repo, Branch, Files Changed (or PR link) |
+| `mid-session` | Capturing in-flight progress during a long session in case it gets interrupted | Status: in_progress; Pending list |
+| `investigation` | A diagnosis / spike that produced findings but no code change | Question being answered; Findings; Next steps |
+| `post-mortem` | After-action analysis of a bug, incident, or cascade — typically follows a `milestone` | Timeline; Root cause; Fix; Prevention added |
+
+A `post-mortem` entry's *Prevention added* field is the most important line in the entry — it names the rule, skill, validator code, pre-commit hook, or CI job that would have caught the issue. `(none — accepted residual risk)` is a valid value but must be documented. Without it, the post-mortem is just storytelling; with it, the team's defenses ratchet forward.
+
+This document's incidents (the i18n one and the seven follow-on cases) would all have been `post-mortem` entries under this scheme.
 
 ---
 
@@ -343,15 +414,36 @@ When refactoring directories, run check 1 in the same PR as the rename. When aud
 - The full incident: a PR on the Nutella repo where 150 hand-crafted i18n keys were generated, then regenerated via `./iidgen` once the rule was actually consulted. See `cursor-ai-assisted-work-sessions-worklog.md` for the day-by-day trace.
 - The new `i18n-keys.mdc` rule built as part of the fix: `nutella/.cursor/rules/i18n-keys.mdc`. Single-topic, broad globs, imperative description, verification command inline, anchored to `web/iidgen` and `web/hspt/intl/default_string_reader.rb`.
 - The user-level companion rule for future rule authoring: `~/.cursor/rules/effective-cursor-rules.mdc`. Auto-attaches when editing any `.cursor/rules/*.mdc` or `.cursor/skills/*/SKILL.md` file in any repo on this machine.
+- The artifact catalog for the migration as a whole — every plan, rule, skill, and validation script it touches: [`semantic-email-migration-artifacts.md`](semantic-email-migration-artifacts.md).
+- The split skill bundle (Pattern J applied): `~/Codebase/ai-plugins/nutella-semantic-email-migration/` — 13 skills total, six of them descended from the original `migrate-semantic-email-body-copy` mega-skill.
+- The Pattern ↔ RULE-code index (Pattern K applied): `~/Codebase/ai-plugins/nutella-semantic-email-migration/analyze-compare-report/pattern-rule-index.md`.
+
+---
+
+## Follow-up status
+
+Items called out in the original draft of this doc that have since been addressed:
+
+| Item from original "What this document does not solve" | Status |
+|---|---|
+| Maintenance scripts as ad-hoc bash snippets | ✅ Resolved — `_audit_globs.sh`, `_audit_crossrefs.sh`, `_status_rollup.sh` now committed and named |
+| The 2,827-line mega-skill is hard for the agent to parse | ✅ Resolved — split into 6 sibling skills, May 18 2026 (Pattern J above) |
+| No mapping between Pattern letters and RULE codes | ✅ Resolved — `pattern-rule-index.md` (Pattern K above) |
+| Sibling rules `semantic-email-builders.mdc` + `semantic-email-entity-parity.mdc` had identical stale globs | Still flagged. Will fix on the next sweep through their topics |
+| Other four repo-local Nutella skills (`nutella-pre-commit-quality-check`, etc.) remain invisible | Open. Open question whether each is critical enough to surface |
+| No commit-time enforcement (pre-commit hooks / RuboCop cops) | Open. Highest-leverage follow-up |
+| Padrino / Rails autoloader pitfall has no rule | Open. Worth authoring an `alwaysApply: true` Ruby rule |
+| PM-review-feedback-to-rule audit | Open. A proactive sweep is queued but not scheduled |
+| Mock-data drift root cause | Open. Today's fix is validation-time dedup; the underlying coupling remains |
+| Worklog entries have no machine-readable type | ✅ Resolved — `**Type:**` field + four templates added to `update-worklog/SKILL.md` |
 
 ---
 
 ## What this document does not solve
 
 - **Cursor product behavior around repo-local skill surfacing.** That's a feature-request / config-investigation question, not something a rule or doc can fix on its own.
-- **Retroactive fixes for already-stale globs.** A one-time sweep using the maintenance scripts above is still required. Specifically: sibling rules `semantic-email-builders.mdc` and `semantic-email-entity-parity.mdc` were identified as having the same stale globs as the i18n incident's rule, and remain unfixed.
-- **Commit-time enforcement.** Highest-leverage follow-up. Each check (i18n key length, descriptive-key pattern, mock-data drift, …) needs its own pre-commit hook or RuboCop cop. The rules will continue to be advisory until something at the git layer can block.
+- **Commit-time enforcement.** Highest-leverage follow-up. Each check (i18n key length, descriptive-key pattern, mock-data drift, …) needs its own pre-commit hook or RuboCop cop. The audit scripts above only catch authoring-time decay; a key violation at commit time still needs an `iidgen`-aware pre-commit hook or a RuboCop cop. The rules will continue to be advisory at the git layer until then.
 - **A framework-reload rule for Padrino / Rails autoloader pitfalls.** The Padrino autoloader silently broke Pattern E dispatch this session because lambda-registration in top-level `each` blocks doesn't reload. No rule warns about this. Worth authoring an `alwaysApply: true` Ruby rule with a one-line MUST as soon as someone has 15 minutes.
-- **PM-review-feedback-to-rule audit.** Recurring style feedback ("colons before reference lists", "no inline entity titles in body", "footer sentences below the card") is rule-shaped. The session built `[RULE:following_missing_colon]` reactively after PM review surfaced it. A proactive sweep of past PM-review threads would surface the next few rules before they're needed.
-- **Lifting the other four repo-local Nutella skills.** Only `nutella-intl-strings` got its critical mandate lifted into a surfaced location. `nutella-pre-commit-quality-check`, `nutella-polar-ui-usage`, `nutella-client-unit-tests`, `nutella-client-feature-workflow` remain invisible to agents — open question whether each is critical enough to lift or fine as human-only documentation.
+- **PM-review-feedback-to-rule audit.** Recurring style feedback ("colons before reference lists", "no inline entity titles in body", "footer sentences below the card") is rule-shaped. A proactive sweep of past PM-review threads would surface the next few rules before they're needed.
+- **Lifting the other four repo-local Nutella skills.** Only `nutella-intl-strings` got its critical mandate lifted into a surfaced location. `nutella-pre-commit-quality-check`, `nutella-polar-ui-usage`, `nutella-client-unit-tests`, `nutella-client-feature-workflow` remain invisible to agents.
 - **Mock-data drift root cause.** Today's fix was validation-time deduplication and renderer-error short-circuiting. The underlying coupling problem (validation script and runtime mock share a constant without enforcement) is still there. Long-term fix is either a shared source-of-truth file or a rule mandating co-update.
