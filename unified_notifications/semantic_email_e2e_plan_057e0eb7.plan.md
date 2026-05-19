@@ -12,6 +12,11 @@ todos:
     content: "Rake tasks: send_alert/send_alerts/send_email to mailpit"
     status: completed
 isProject: false
+phase: 0
+status: in_progress
+related_skills:
+  - email-migration-validation
+  - debug-email-rendering
 ---
 
 # Semantic Email E2E Test Plan (Mailinator + Playwright)

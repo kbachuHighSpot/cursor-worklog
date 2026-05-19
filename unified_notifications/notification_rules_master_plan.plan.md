@@ -3,17 +3,71 @@ name: Notification rules master plan
 overview: "Master deliverable plan for the notification rules and semantic email program: target architecture, phased delivery (Phases 0-12) with release criteria, and migration strategy."
 todos: []
 isProject: false
+status: in_progress
+related_skills:
+  - migrate-semantic-email-body-copy
+  - migrate-notification-kind
+  - add-notification-kind
+  - analyze-compare-report
+  - email-migration-validation
+  - debug-email-rendering
+  - semantic-email-review
 ---
 
 # Notification Rules and Semantic Email -- Master Plan
 
+## Status
+
+Live, machine-readable phase status is in [`STATUS.md`](STATUS.md), regenerated
+on demand by `bash _status_rollup.sh`. Each `*.plan.md` in this directory
+carries `status:`, `phase:`, `prs:`, and `related_skills:` keys in its YAML
+front-matter, which the script aggregates into the rollup table and Mermaid
+Gantt. Update the front-matter (not the prose) when a phase advances.
+
 ## Sub-plans
 
+### Foundation and Pre-existing
 - [Notification rule schema and seeding](notification_rule_schema_and_seeding.plan.md) -- schema definition, legacy field mappings, mapping scripts, rake task
 - [Semantic email E2E plan](semantic_email_e2e_plan_057e0eb7.plan.md) -- Mailinator / Playwright E2E verification
 - [Semantic email test plan](semantic_email_test_plan_0fe90847.plan.md) -- unit and integration test coverage
 - [Separate semantic email commands](separate_semantic_email_commands_a7292c5c.plan.md) -- SemanticEmailCommands extraction (completed)
 - [Extract ALERT_CONFIG](extract_alert_config_f6a45394.plan.md) -- move config to alert_config.rb
+
+### Detailed Phase Plans
+- [Phase 2: NotificationEngine](phase_2_notificationengine_a8edc09e.plan.md) -- dual-read architecture, rules-first with no legacy fallback, digest/direct email routing, foundational caching and channel tracking
+- [Phase 3: REST API - Manage Rules](phase_3_rest_api_manage_rules.plan.md) -- CRUD endpoints for rules and overrides, Padrino controller, presenters, auth, validation
+- [Phase 4: REST API - Send Notifications](phase_4_rest_api_send.plan.md) -- trigger endpoint for integrations, S2S auth, rate limiting, idempotency, async processing
+- [Phase 5: Admin UI (Magma Entities)](phase_5_admin_ui.plan.md) -- enhanced entities page filtering, cross-collection navigation, optional edit
+- [Phase 6: Group-Based Rules](phase_6_groups.plan.md) -- group_id scoping on overrides, group membership resolution, specificity ordering
+- [Phase 7: Email Content Overrides](phase_7_email_content_overrides.plan.md) -- subject/body/CTA customization via content_overrides, template interpolation, builder integration
+- [Phase 8: Delivery Guards + Batching](phase_8_delivery_guards_batching.plan.md) -- throttle, dedup, quiet hours, configurable digest aggregation windows
+- [Phase 9: Non-Email Content Overrides](phase_9_non_email_content_overrides.plan.md) -- push, Slack, MS Teams content customization via channel-scoped overrides
+- [Phase 10: Slim Config + Universal Records](phase_10_slim_config_universal_records.plan.md) -- remove legacy routing config, migrate direct emails to NotificationEngine, universal audit trail
+- [Phase 11: Performance](phase_11_performance.plan.md) -- Redis caching, index optimization, New Relic instrumentation, load testing
+- [Phase 12: Test Automation](phase_12_test_automation.plan.md) -- Playwright + Mailinator E2E tests, CI integration, notification scenarios
+
+### Cross-Phase Dependency Matrix
+
+```mermaid
+flowchart LR
+  P0["Phase 0\nSemantic Email"] --> P7["Phase 7\nEmail Overrides"]
+  P1["Phase 1\nSeed Rules"] --> P2["Phase 2\nNotificationEngine"]
+  P2 --> P3["Phase 3\nManage API"]
+  P2 --> P4["Phase 4\nSend API"]
+  P2 --> P5["Phase 5\nAdmin UI"]
+  P2 --> P8["Phase 8\nGuards + Batching"]
+  P3 --> P4
+  P3 --> P6["Phase 6\nGroups"]
+  P3 --> P7
+  P7 --> P9["Phase 9\nNon-Email Overrides"]
+  P8 --> P10["Phase 10\nSlim Config"]
+  P7 --> P10
+  P2 --> P10
+  P10 --> P11["Phase 11\nPerformance"]
+  P3 --> P12["Phase 12\nTest Automation"]
+  P4 --> P12
+  P8 --> P12
+```
 
 ---
 
@@ -278,6 +332,8 @@ resolve(kind, domain_id: nil, user_id: nil)
 
 ### Phase 2 -- NotificationEngine (dual-read, rules + legacy fallback)
 
+**Detailed plan:** [Phase 2: NotificationEngine](phase_2_notificationengine_a8edc09e.plan.md)
+
 **Goals:** Introduce `NotificationEngine.notify()` as the single entry point. Channel routing reads the resolved `NotificationRule` when enabled, with fallback to legacy config. Optional comparison logging detects mismatches before full cutover.
 
 **Key components:**
@@ -323,60 +379,6 @@ NotificationEngine.notify(:share_item, data, opts)
 - Existing `send_alerts` batch job picks up unsent alerts and sends the digest email
 - Digest behavior unchanged; only the routing decision moves to rule-driven
 
-**Advanced email options driven by the rule (rules-first, not deferred to Phase 10):**
-
-The rule's `delivery_strategy["email"]` block is the declarative source of truth for the seven per-kind advanced email behaviors that were previously sourced from `ALERT_CONFIG[kind][:options]`:
-
-| Field | Effect |
-|---|---|
-| `send_from` | Render the alert's `data["from"]` user as the email sender |
-| `send_one` | Send a single email to all recipients (sets `email_opts[:multi]`) |
-| `bcc_support` | Bcc Highspot support address |
-| `no_to` | Omit the To: header (recipients via bcc) |
-| `bcc_mode` | `"all"` / `"external"` / `nil` |
-| `from_support` | Send "from" the support address |
-| `account` | Account-scoped sender behavior |
-
-**Runtime wiring:**
-
-```
-AlertCommands.create
-  -> NotificationEngine.notify (resolves rule)
-  -> NotificationChannelRouter.route(alert, rule, opts)
-  -> deliver_email(alert, rule, ...)
-  -> SemanticEmailCommands.send_alert(to, cc, alert, opts, rule: rule)
-       -> merge_email_options(rule, alert, opts) ->
-       -> resolve_alert_from_user(alert, options) (uses options[:send_from])
-       -> build_alert_email_options(cc, tag, options) (multi/bcc/no_to)
-```
-
-`EmailCommands.send_alert` / `send_alerts` (entry points for callers that bypass `AlertCommands.create`) also resolve the rule via `EmailCommands.resolve_email_rule(rule_name, domain_id, user_id)` and pass it as `rule:` to the semantic dispatcher. `resolve_email_rule` returns the rule when active and includes "email"; the legacy boolean `rule_allows_email?` is preserved as a thin wrapper for `check_notification_rule` and existing test stubs.
-
-**Merge precedence (lowest -> highest):**
-
-```
-alert.options (legacy ALERT_CONFIG carry-over)
-  <- overridden by rule.email_options (declarative defaults)
-  <- overridden by call-site options (imperative runtime overrides)
-```
-
-This means the rule wins over `alert.options` (so seeded rule values become effective immediately, reducing dependence on `ALERT_CONFIG`), while call-site overrides such as `is_partner ? { send_from: false } : {}` continue to work.
-
-**Without a rule (rule resolution returns nil):**
-- `alert.options` (legacy semantics) is used as the fallback so unmodeled `ALERT_CONFIG` fields like `:send_immediately` and `:group_email` continue to work until Phase 10.
-
-**Phase boundary:**
-- Phase 2 (this phase) wires the rule's email block into the runtime so it governs immediate-alert behavior. ALERT_CONFIG is no longer the runtime source of truth for the seven fields above when a rule resolves.
-- Phase 10 will remove the now-redundant `ALERT_CONFIG[kind][:options]` fields and the legacy fallback merge.
-
-**Helpers added in Phase 2:**
-- `NotificationRule#email_options` -- exposes the email block as a symbol-keyed hash (always returns all seven keys with safe defaults).
-- `EmailCommands.resolve_email_rule(rule_name, domain_id, user_id)` -- returns the resolved rule (or nil).
-- `SemanticEmailCommands.merge_email_options(rule, alert, call_site_options)` -- private helper implementing the precedence above with key normalization (Mongo strings -> symbols).
-
-**Digest path:**
-- `SemanticEmailCommands.send_alerts` accepts a `rule:` kwarg for parity with `send_alert`. The digest path does not yet read advanced email options; the seeded digest rule's email block is all defaults today, so this is a no-op for behavior. The kwarg is reserved for future use without re-plumbing the call chain.
-
 **Files to create:**
 - `web/common/notification_engine.rb` -- `notify(kind, data, opts)` entry point
 - `web/common/notification_channel_router.rb` -- channel dispatch logic
@@ -389,10 +391,6 @@ This means the rule wins over `alert.options` (so seeded rule values become effe
 - `web/common/push_notification_channel_listener.rb` -- logic migrates to router (listener removed or delegated)
 - `web/common/slack/slack_commands.rb` -- `SLACK_ALERT_KINDS` set used only as legacy fallback
 - `web/common/ms_teams/ms_teams_commands.rb` -- `MS_TEAMS_ALERT_KINDS` set used only as legacy fallback
-- `web/common/models/entities/notification_rule.rb` -- adds `#email_options` exposing `delivery_strategy["email"]`
-- `web/common/email/email_commands.rb` -- adds `resolve_email_rule`; `send_alert`/`send_alerts` pass `rule:` to semantic dispatcher
-- `web/common/email/semantic_email_commands.rb` -- `send_alert` (and reserved `send_alerts`) accept `rule:` kwarg; merges options with rule-first precedence
-- `web/common/notifications/rules/notification_channel_router.rb` -- `deliver_email` forwards the resolved rule to `SemanticEmailCommands.send_alert`
 
 **Per-kind rollout:**
 - Feature flag can be scoped to specific kinds (e.g., `notification_rules_enabled_kinds: ["share_item", "feedback_item"]`)
@@ -408,6 +406,8 @@ This means the rule wins over `alert.options` (so seeded rule values become effe
 - Rollback plan: flag off reverts to legacy paths with zero data loss
 
 ### Phase 3 -- REST API: manage notification rules
+
+**Detailed plan:** [Phase 3: REST API - Manage Rules](phase_3_rest_api_manage_rules.plan.md)
 
 **Goals:** Resource-oriented REST API for rule CRUD, listing, filtering, and domain/user override management. Authentication, authorization, and audit logging for all mutations.
 
@@ -452,6 +452,8 @@ This means the rule wins over `alert.options` (so seeded rule values become effe
 
 ### Phase 4 -- REST API: send notifications
 
+**Detailed plan:** [Phase 4: REST API - Send Notifications](phase_4_rest_api_send.plan.md)
+
 **Goals:** Allow trusted callers (integrations, workflow engines, external systems) to trigger notification delivery via HTTP. Strong auth, rate limits, idempotency, audit.
 
 **Endpoints:**
@@ -491,105 +493,40 @@ This means the rule wins over `alert.options` (so seeded rule values become effe
 - Monitoring: metrics for send volume, latency, error rate per kind
 - Runbook: integration owners have documentation and example requests
 
-### Phase 5 -- Admin UI
+### Phase 5 -- Admin UI (Magma Entities Page)
 
-**Goals:** Make notification rules and overrides inspectable and editable from the admin tooling. Two coordinated deliverables:
+**Detailed plan:** [Phase 5: Admin UI (Magma Entities)](phase_5_admin_ui.plan.md)
 
-- **Step 1 (magma admin entities):** Register the new collections in the existing magma admin entities framework so ops, PM, and engineering can list, filter, and inspect rules and overrides immediately, without waiting for the custom UI. Read-only browse of the source-of-truth Mongo documents.
-- **Step 2 (custom React admin UI):** Channel-aware editor backed by the Phase 3 REST API for full CRUD, override management, and MJML email preview.
+**Goals:** Enhance the existing Magma admin entities page (`/entities`) for notification rules browsing and management. The collections (`notification_rules`, `notification_rule_overrides`) are already registered. This phase adds richer filtering, cross-collection navigation, and optionally edit capabilities.
 
-#### Step 1 -- Magma admin entities (read-only inspector)
+**What already exists:**
+- Collections registered in `entities.clj` `collections` map with `:find`, `:dates`, `:links`, `:relations`
+- List view with simple (per-field text input) and advanced (EDN Mongo filter) query modes
+- Document detail view with JSON rendering
+- Async download of query results
+- Access via `backend_engineer` role (and other operator roles with `:entities` right)
 
-> Field-level details, verified `:find` / `:links` / `:relations` syntax, and Magma-side risks for Step 1 are tracked in the sub-plan: [phase_5_admin_ui.plan.md](../../../.cursor/plans/phase_5_admin_ui.plan.md). Update both files together when columns or relations change.
+**What Phase 5 adds:**
 
-**Goals:** Surface `notification_rules` and `notification_rule_overrides` under the magma admin **Entities** view so the seeded documents are immediately browsable. No new UI, no new API -- just registration in the generic entities framework.
-
-**Magma changes:**
-
-| File | Change |
+| Enhancement | Description |
 |---|---|
-| `magma/api/src/main/clojure/api/controllers/entities.clj` | Add `notification_rules` and `notification_rule_overrides` to the entity map. Defines the projected fields, date-typed fields, and FK links. |
-| `magma/core/magma-commons/src/main/clojure/common/state/mongo.clj` | Add both collection names to `mongo-e-collections` so the magma mongo client routes their queries to the correct database. |
+| Richer `:find` fields | Add `delivery_strategy.channels`, `delivery_strategy.priority`, `trigger.alert_kind` as filterable fields on notification_rules |
+| Cross-collection `:links` | From override `rule_name` -> navigate to the rule document |
+| `:relations` | Viewing a rule shows its overrides; viewing a domain shows its overrides |
+| Edit capability (optional) | Add POST/PUT routes to `entities.clj` for admin rule mutations (currently read-only) |
 
-**Entity registrations (as shipped in [magma#8831](https://github.com/highspot/magma/pull/8831), HS-180223):**
-
-```clojure
-"notification_rules"
-{:find ["_id" "name" "version" "status" "type" "category"
-        "delivery_strategy.channels" "delivery_strategy.priority"
-        "created_at" "updated_at"]
- :dates #{"created_at" "updated_at"}
- :links {}
- :relations {"notification_rule_overrides" {"name" "rule_name"}}}
-
-"notification_rule_overrides"
-{:find ["_id" "rule_name" "scope.domain_id" "scope.user_id"
-        "delivery_strategy.channels" "delivery_strategy.priority"
-        "created_at" "updated_at"]
- :dates #{"created_at" "updated_at"}
- :links {"scope.domain_id" "domains" "scope.user_id" "users"}
- :relations {}}
-```
-
-- `:relations` on `notification_rules` builds a list-link from a rule's detail page to its overrides via `/entities/notification_rule_overrides?rule_name=<rule.name>` (verified against `entity-relation` in `entities.clj`).
-- `:links` on `notification_rule_overrides` keep `scope.domain_id` and `scope.user_id` clickable, jumping to the corresponding `domains` and `users` entity pages. `notification_rules` are global (no domain/user scope), so no FK links.
-- A reverse `:links {"rule_name" "notification_rules"}` is intentionally **omitted** -- Magma's `entity-simple-link` looks up the target by `_id`, so a `name`-keyed link would 404. Tracked as a follow-up in the sub-plan; manual workaround for now is the rules form-query view (`name=<rule_name>`).
-
-**Capabilities (out of the box once registered):**
-- List with column projection from `:find`
-- Filter by any indexed field (e.g., `name`, `category`, `status`, `type`)
-- View a single document's raw JSON
-- Date columns rendered as human-readable timestamps
-- Override rows link out to their owning domain/user
-
-**Out of scope for Step 1:**
-- Editing fields (read-only inspection)
-- Channel-aware tabs / MJML preview (Step 2)
-- Permission scoping by domain admin role (Step 2 / API-driven)
+**Files to modify:**
+- `magma/api/src/main/clojure/api/controllers/entities.clj` -- update `collections` map entries, optionally add mutation routes
 
 **Release criteria:**
-- Magma deploy includes the new entity registrations
-- Admin can navigate to Entities -> `notification_rules` and see all seeded rules
-- Admin can navigate to Entities -> `notification_rule_overrides` and see overrides with working domain/user link-throughs
-- No regression in other entity pages (entity map change is additive)
-
-#### Step 2 -- Custom React admin UI
-
-**Goals:** Admin interface backed by the Phase 3 REST API to list, filter, and edit notification rules. Channel-specific editing organized by destination tabs. Email tab supports rich MJML preview.
-
-**Views:**
-
-| View | Description |
-|---|---|
-| Rule list | Filterable table: category, channel, status, rule type. Links to detail view. |
-| Rule detail | Tabbed editor: **Routing** (channels, priority), **Email** (send_from, send_one, etc.), **In-App** (skip_toast), **Guards** (Phase 8), **Metadata** (read-only) |
-| Override list | Per-rule listing of domain/user overrides. Create/edit/delete. |
-| Override editor | Scope selector (domain, user). Sparse form -- only changed fields saved. |
-| Email preview | Renders semantic email for a rule using the Content Registry builder. Live preview with sample data. |
-
-**Technical approach:**
-- React components calling Phase 3 API endpoints
-- No direct database access -- all CRUD via API
-- Behind feature flag `notification_admin_ui_enabled`
-- Domain admins see only their domain's overrides; global admins see everything
-
-**Files to create:**
-- Frontend components (rule list, detail, override editor, preview)
-- API client layer
-- Feature flag integration
-
-**Release criteria:**
-- API-only UI: no shadow CRUD bypassing the API
-- UX sign-off from PM and design
-- Behind feature flag until release criteria met
-- Domain admin scoping verified
-
-#### Phase 5 sequencing
-
-- Step 1 ships independently of Step 2 -- it has no dependency on Phase 3 (REST API) and can land as soon as Phase 1 has seeded the collections.
-- Step 2 depends on Phase 3 (REST API) being live; Step 1 stays available afterward as a low-level fallback for engineers and SRE.
+- Filterable fields verified for both collections
+- Cross-collection navigation works (rule -> overrides, override -> rule)
+- Read access verified for `backend_engineer` role
+- If edit added: audit logging for mutations
 
 ### Phase 6 -- Groups (recipient scoping)
+
+**Detailed plan:** [Phase 6: Group-Based Rules](phase_6_groups.plan.md)
 
 **Goals:** Rules carry a `recipient_groups` concept. Router applies group-based filtering or expansion relative to call-site recipients.
 
@@ -630,6 +567,8 @@ end
 
 ### Phase 7 -- Email content overrides (semantic email first)
 
+**Detailed plan:** [Phase 7: Email Content Overrides](phase_7_email_content_overrides.plan.md)
+
 **Goals:** Domain admins override email text (subject, preheader, section titles, body text, CTA labels) without code changes. MJML layout and structure remain framework-aligned. Independent rollout via content-overrides flag.
 
 **Override fields (on `notification_rule_overrides.content_overrides`):**
@@ -668,9 +607,11 @@ end
 - Per-kind variable allowlist documented for admins
 - Integration tests: override applied -> email content matches expected
 
-### Phase 8 -- Delivery guards (suppression and limits)
+### Phase 8 -- Delivery guards (suppression and limits) + configurable batching windows
 
-**Goals:** Activate the guard fields seeded in Phase 1 (`throttling`, `deduplication`, `delivery_window`). Single evaluation pipeline before dispatch. Redis-backed state for throttle counters and dedup keys.
+**Detailed plan:** [Phase 8: Delivery Guards + Batching](phase_8_delivery_guards_batching.plan.md)
+
+**Goals:** Activate the guard fields seeded in Phase 1 (`throttling`, `deduplication`, `delivery_window`). Single evaluation pipeline before dispatch. Redis-backed state for throttle counters and dedup keys. Additionally, support configurable batching windows on the digest rule (e.g., every 4 hours, daily, weekly) instead of the hard-coded daily batch.
 
 **Guard evaluation order:**
 ```
@@ -685,6 +626,15 @@ NotificationChannelRouter.route(notification, rule)
        -> check recipient timezone; defer if outside start_hour-end_hour
   5. Dispatch to channel
 ```
+
+**Configurable batching windows:**
+
+Phase 2 digest routing is binary: immediate vs daily batch. Phase 8 introduces configurable `aggregation_window` on the digest rule's `delivery_strategy.batching`:
+- `"4h"` -- batch every 4 hours
+- `"daily"` -- current daily behavior (default)
+- `"weekly"` -- weekly digest
+
+The `send_alerts_job` is updated to read the window from the digest rule and adjust its query cutoff accordingly, replacing the hard-coded "previous day" logic in `AlertHelpers.email_alert?`.
 
 **State backends:**
 - Throttle counters: Redis sorted sets or counters with TTL matching the window
@@ -713,6 +663,8 @@ NotificationChannelRouter.route(notification, rule)
 - No guards enabled by default -- all seeded rules have `enabled: false`; admins opt in per rule
 
 ### Phase 9 -- Overrides for other destinations (in-app, push, Slack, Teams)
+
+**Detailed plan:** [Phase 9: Non-Email Content Overrides](phase_9_non_email_content_overrides.plan.md)
 
 **Goals:** Extend the Phase 7 override pattern to non-email channels. Domain admins can override in-app text, push notification text, Slack message format, and Teams card format.
 
@@ -751,9 +703,11 @@ NotificationChannelRouter.route(notification, rule)
 - Spot-check high-volume kinds per channel
 - Integration tests for each channel with and without overrides
 
-### Phase 10 -- Slim legacy config, dead code, Velocity templates
+### Phase 10 -- Slim legacy config, dead code, Velocity templates + universal notification records
 
-**Goals:** Remove routing and delivery fields from `ALERT_CONFIG` and `EmailCommands::SETTINGS`. Remove dead code paths including Velocity templates. Legacy config retains only in-app Proc-based content (`:message`, `:messages`, `:comment`, `:action`) until those are also migrated.
+**Detailed plan:** [Phase 10: Slim Config + Universal Records](phase_10_slim_config_universal_records.plan.md)
+
+**Goals:** Remove routing and delivery fields from `ALERT_CONFIG` and `EmailCommands::SETTINGS`. Remove dead code paths including Velocity templates. Legacy config retains only in-app Proc-based content (`:message`, `:messages`, `:comment`, `:action`) until those are also migrated. Additionally, migrate direct email call sites (password reset, welcome, pitch, etc.) to route through `NotificationEngine.notify` so that ALL notifications -- immediate, digest, and direct -- create a notification record in MongoDB.
 
 **What gets removed from ALERT_CONFIG:**
 
@@ -770,6 +724,15 @@ NotificationChannelRouter.route(notification, rule)
 | `:category` | `rule.category` | |
 | `:subject`, `:preheader`, `:custom_subject` | Content Registry builders + overrides | |
 
+**Universal notification records (direct emails):**
+
+All ~65 direct email types (currently sent via `EmailCommands.send_*` with no persistent document) are migrated to `NotificationEngine.notify`. This means:
+- Every direct email creates a notification document in MongoDB before sending
+- The Phase 2 rule-gating shim in `EmailCommands.send_email` is removed
+- Direct email `send_*` helpers become thin wrappers calling `NotificationEngine.notify` instead of `send_email` directly
+- Notification document gets `type: "direct"` and `channels_delivered: ["email"]` for tracking
+- Enables full audit trail, delivery status tracking, and unified notification history across all email types
+
 **What gets removed elsewhere:**
 - `SlackCommands::SLACK_ALERT_KINDS` constant -- replaced by `rule.channels` containing `"slack"`
 - `MsTeamsCommands::MS_TEAMS_ALERT_KINDS` constant -- replaced by `rule.channels` containing `"ms_teams"`
@@ -777,6 +740,7 @@ NotificationChannelRouter.route(notification, rule)
 - `PushNotificationChannelListener`, `SlackChannelListener`, `MsTeamsChannelListener` -- logic in router
 - Velocity `.vm` template files -- replaced by semantic MJML builders
 - Legacy email rendering paths for kinds fully migrated to semantic email
+- Phase 2 direct email rule-gating shim in `EmailCommands.send_email`
 
 **What stays in ALERT_CONFIG (in-app content):**
 - `:message`, `:messages` -- in-app notification text (Proc-based, i18n)
@@ -803,6 +767,8 @@ NotificationChannelRouter.route(notification, rule)
 - All alert kinds fully routed through `NotificationEngine` (feature flag fully on)
 
 ### Phase 11 -- Performance and scalability
+
+**Detailed plan:** [Phase 11: Performance](phase_11_performance.plan.md)
 
 **Goals:** Validate worker/queue sizing, batch job runtime, and service latencies (p50/p95/p99) for hot paths. Load testing for immediate, digest, and integration API send patterns.
 
@@ -840,6 +806,8 @@ NotificationChannelRouter.route(notification, rule)
 - No p99 regressions vs current alert pipeline
 
 ### Phase 12 -- Test automation with Mailinator
+
+**Detailed plan:** [Phase 12: Test Automation](phase_12_test_automation.plan.md)
 
 **Goals:** Automated end-to-end tests that trigger a notification through `NotificationEngine`, let it reach a Mailinator inbox, then programmatically retrieve and assert on the delivered email. Cover representative kinds across immediate, digest, and direct email sends.
 
@@ -886,15 +854,15 @@ NotificationChannelRouter.route(notification, rule)
 |-------|-------|------|------|
 | 0 | Legacy -> semantic email | MJML builders, previews, per-kind migration | - |
 | 1 | Notification rules | 377 rules seeded + resolver + overrides schema | `notification_rules`, `notification_rule_overrides` |
-| 2 | NotificationEngine | Single entry point + channel router + dual-read | `NotificationEngine.notify`, `NotificationChannelRouter` |
+| 2 | NotificationEngine | Single entry point + channel router + rules-first (no legacy fallback) | `NotificationEngine.notify`, `NotificationChannelRouter` |
 | 3 | REST API -- manage rules | CRUD + overrides + auth + audit | `GET/PUT/POST/DELETE /api/v1/notification_rules` |
 | 4 | REST API -- send | Trigger sends for integrations | `POST /api/v1/notifications/send` |
-| 5 | Admin UI | Step 1: magma entities registration (read-only inspector). Step 2: rule editor + override manager + email preview. | `entities.clj` + `mongo.clj` (magma); React components via Phase 3 API |
+| 5 | Admin UI (Magma entities) | Enhanced entities page filtering, cross-collection nav, optional edit | `entities.clj` collections map |
 | 6 | Groups | Group-based recipient scoping | `recipient_groups` field on rules |
 | 7 | Email overrides | Admin text overrides on semantic email | `content_overrides` on override docs |
-| 8 | Delivery guards | Throttle + dedup + delivery window | Redis state, `NotificationGuardEvaluator` |
+| 8 | Delivery guards + batching windows | Throttle + dedup + delivery window + configurable digest batching | Redis state, `NotificationGuardEvaluator` |
 | 9 | Other channel overrides | In-app, push, Slack, Teams text overrides | Extended `content_overrides` |
-| 10 | Slim config + dead code | Remove routing from ALERT_CONFIG; remove Velocity | CI lint enforces rules-only |
+| 10 | Slim config + dead code + universal records | Remove routing from ALERT_CONFIG; remove Velocity; all emails create notification documents | CI lint enforces rules-only |
 | 11 | Performance | Load testing, SLOs, worker sizing | k6 scripts, SRE runbooks |
 | 12 | Test automation | E2E email delivery assertions | Mailinator API, CI suite |
 
@@ -909,8 +877,7 @@ These capabilities are conceptually separate so they can roll out independently:
 
 ## Migration Risk Mitigation
 
-- **Feature flag** `unified_notification_system` gates the new path; when off, all existing code runs unchanged
-- **Dual-write validation**: In early phases, both old and new paths run; logs warn on mismatches
-- **Per-kind rollout**: Feature flag can be scoped to specific kinds, allowing gradual migration
+- **Feature flag** `notification_rules_enabled` gates the new path per domain; when off, all existing code runs unchanged; when on, rules path is authoritative (no legacy fallback)
+- **Per-domain rollout**: Feature flag is domain-scoped, allowing gradual rollout across domains
 - **Backward-compatible document**: Notification document extends Alert schema, so existing queries/indexes continue to work
 - **Seed idempotency**: Seed script is upsert-by-kind, safe to re-run

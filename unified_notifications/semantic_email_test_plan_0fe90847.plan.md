@@ -21,6 +21,11 @@ todos:
   - id: integration-direct-email
     content: "Add integration test for direct email conversion end-to-end"
 isProject: false
+phase: 0
+status: in_progress
+related_skills:
+  - email-migration-validation
+  - semantic-email-review
 ---
 
 # Semantic Email Workflow Test Plan

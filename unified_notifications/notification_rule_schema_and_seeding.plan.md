@@ -4,17 +4,25 @@ overview: NotificationRule schema definition aligned with the tech spec, legacy-
 todos:
   - id: rule-builders
     content: "Create rule builder modules: CALL_SITE_EMAIL_OPTS, PRIORITY_MAP, build_immediate_rule, build_digest_rule, build_in_app_rule, build_direct_email_rule -- all producing unified schema"
-    status: pending
+    status: completed
   - id: db-migration
     content: "Create database migration: web/db/migrate/<jira>_seed_notification_rules.rb using DatabaseMigration pattern with insert_many and existing-key filter"
-    status: pending
+    status: completed
   - id: db-migration-spec
     content: "Create integration spec: web/db/spec/integration/migrate/<jira>_seed_notification_rules_spec.rb -- count + idempotency assertions"
-    status: pending
+    status: completed
   - id: deploy-script
     content: Append migration line to web/tools/scripts/deployment/apply_data_migration.sh
-    status: pending
+    status: completed
 isProject: false
+phase: 1
+status: complete
+prs:
+  - highspot/nutella#69976
+  - highspot/nutella#70041
+  - highspot/nutella#70323
+related_skills:
+  - migrate-notification-kind
 ---
 
 # Notification Rule Schema and Seeding
@@ -539,197 +547,6 @@ collection.find({ "delivery_strategy.batching.aggregation_type" => "time_based" 
 - `web/db/migrate/<jira>_seed_notification_rules.rb` -- calls rule builders, does `insert_many` with existing-key filter
 - `web/db/spec/integration/migrate/<jira>_seed_notification_rules_spec.rb` -- count + idempotency assertions
 - Append to `web/tools/scripts/deployment/apply_data_migration.sh`
-
----
-
-## PR Sync Analysis (PR #69976)
-
-This section documents the discrepancies between this plan and the current PR implementation, and the changes needed on both sides to align them before the seeding PR.
-
-### Current PR Files
-
-- `map_alert_config_to_rules.rb` -- parses ALERT_CONFIG, builds immediate/digest rules
-- `map_email_settings_to_templates.rb` -- parses EMAIL_SETTINGS, builds direct email rules
-- `web/tasks/seed_notification_rules.rake` -- rake task to seed the collection
-
-### Discrepancy Summary
-
-| Field | Plan | PR Code | Decision |
-|-------|------|---------|----------|
-| `type` | Not present | `"immediate"` / `"digest"` / `"direct"` | **Keep in PR** -- useful for filtering/querying; add to plan |
-| `trigger` | `{ event_name, source_system }` | Not present | **Add to PR** -- needed for multi-system routing |
-| `priority` | String enum: `"informational"`, `"actionable"`, `"urgent"`, `"critical"` | Integer: `1` or `2` | **Change PR** -- use string enums per tech spec |
-| `created_at` | Under `metadata.created_at` | Top-level | **Keep top-level** -- MongoDB convention; update plan |
-| `created_by` | Under `metadata.created_by` | Top-level | **Keep top-level** -- MongoDB convention; update plan |
-| `metadata` | `{ source, legacy_email_type, has_variations, legacy_base_template }` | Not present | **Add to PR** -- needed for migration tracking |
-| `delivery_strategy.email` | `{ send_from, send_one, bcc_support, no_to, bcc_mode, from_support, account }` | `{ renderer, builder, multi, account }` | **Merge both** -- keep renderer/builder AND add delivery flags |
-| `delivery_strategy.in_app` | `{ skip_toast }` | Not present | **Add to PR** -- seed from ALERT_CONFIG `:options[:skip_toast]` |
-| `delivery_strategy.actor_suppression` | Present, default `false` | Not present | **Add to PR** -- seed as `false` |
-| `delivery_strategy.guards` | `{ throttling, deduplication, delivery_window }` | Not present | **Add to PR** -- seed all as `{ enabled: false, ... }` |
-| `delivery_strategy.send_from` | Under `email` sub-object | Top-level in `delivery_strategy` | **Move to `email`** in PR |
-| `eligible_alert_kinds` (digest) | Only kinds with `group_email: true` (~12) | All non-no_email kinds (~291) | **Change PR** -- should only include `group_email: true` kinds |
-
----
-
-### Changes Needed in PR Code
-
-#### 1. `map_alert_config_to_rules.rb`
-
-**Add `trigger` block:**
-```ruby
-"trigger" => {
-  "event_name" => alert_key,
-  "source_system" => "nutella-api"
-}
-```
-
-**Change `priority` to string enum:**
-```ruby
-# Replace:
-priority = level == "warning" ? 2 : 1
-
-# With:
-PRIORITY_MAP = {
-  "warning" => "actionable",
-  "info" => "informational"
-}.freeze
-
-priority = PRIORITY_MAP[level] || "informational"
-# Note: "urgent" requires checking options[:urgent] when level == "info"
-```
-
-**Add `metadata` block:**
-```ruby
-"metadata" => {
-  "source" => "ALERT_CONFIG",
-  "legacy_email_type" => options[:no_email] ? nil : "alert",
-  "has_variations" => alert_config[:has_variations]
-}
-```
-
-**Restructure `delivery_strategy.email`:**
-```ruby
-# Keep renderer/builder, add delivery flags:
-"email" => {
-  "renderer" => "semantic",
-  "builder" => alert_key,
-  "send_from" => options[:send_from] || false,
-  "send_one" => false,  # populated from call-site opts in seeding PR
-  "bcc_support" => false,
-  "no_to" => false,
-  "bcc_mode" => nil,
-  "from_support" => false,
-  "account" => false
-}
-```
-
-**Add `delivery_strategy.in_app`:**
-```ruby
-"in_app" => {
-  "skip_toast" => options[:skip_toast] || false
-}
-```
-
-**Add `delivery_strategy.actor_suppression`:**
-```ruby
-"actor_suppression" => false
-```
-
-**Add `delivery_strategy.guards`:**
-```ruby
-"guards" => {
-  "throttling" => { "enabled" => false, "max_per_window" => nil, "window" => nil },
-  "deduplication" => { "enabled" => false, "key" => nil, "window" => nil },
-  "delivery_window" => { "enabled" => false, "start_hour" => nil, "end_hour" => nil, "timezone_source" => "recipient" }
-}
-```
-
-**Fix `build_digest_rule` eligible_alert_kinds:**
-```ruby
-# Replace:
-eligible_kinds = alert_configs.reject { |_k, v| v[:options][:no_email] }.keys
-
-# With:
-eligible_kinds = alert_configs.select { |_k, v| v[:options][:group_email] }.keys
-```
-
-#### 2. `map_email_settings_to_templates.rb`
-
-**Add `trigger` block** (same as above)
-
-**Add `metadata` block:**
-```ruby
-"metadata" => {
-  "source" => "EMAIL_SETTINGS",
-  "legacy_email_type" => email_type,
-  "legacy_base_template" => async["base_template"]
-}
-```
-
-**Restructure `delivery_strategy.email`** to include all flags.
-
-#### 3. `seed_notification_rules.rake`
-
-**Move `created_at`/`created_by` handling** -- already at top level, which is correct. Plan will be updated.
-
----
-
-### Changes Needed in Plan
-
-#### 1. Add `type` field to schema
-
-Add to Identity section:
-```jsonc
-"type": "immediate",  // "immediate" | "digest" | "direct" -- rule type for filtering
-```
-
-#### 2. Move `created_at`/`created_by` to top level
-
-Change from `metadata.created_at` / `metadata.created_by` to top-level fields:
-```jsonc
-"created_at": "2026-04-08T00:00:00Z",
-"created_by": "system",
-```
-
-Update metadata to only contain migration-tracking fields:
-```jsonc
-"metadata": {
-  "source": "ALERT_CONFIG",
-  "legacy_email_type": "alert",
-  "has_variations": false,
-  "legacy_base_template": null
-}
-```
-
-#### 3. Add `renderer`/`builder` to email sub-object
-
-The plan's `delivery_strategy.email` should include:
-```jsonc
-"email": {
-  "renderer": "semantic",      // "semantic" | "legacy" (legacy for migration only)
-  "builder": "share_item",     // Semantic builder name from Content Registry
-  "send_from": true,
-  "send_one": false,
-  // ... other flags
-}
-```
-
-#### 4. Update seeding mapping table
-
-Add rows for:
-- `type` field mapping
-- `renderer`/`builder` fields
-- `created_at`/`created_by` at top level
-
----
-
-### Recommended Execution Order
-
-1. **PR #69976** (current): Merge as-is to create collection and basic structure
-2. **Sync PR**: Update mapping scripts to produce plan-aligned schema (changes above)
-3. **Seeding PR**: Run migration to seed all ~381 rules with full schema
-
-This allows the collection to exist and be tested before the full seeding migration runs.
 
 ---
 
