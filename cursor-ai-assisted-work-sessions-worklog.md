@@ -6033,3 +6033,78 @@ A team policy (`.gitignore: .cursor/**`) was applied as a blanket block when it 
 
 ---
 
+## 2026-05-22 - Add "Compare Preview Link" column to Email notifications migration sheet
+
+**Type:** milestone
+**Repository:** n/a (Google Sheets `1foVr-XFMd5QwtkQLr3SK2bRb5Cl39Vwd3IagvJhD9Qc` — "Email notifications migration data")
+**Branch:** n/a
+**PR:** n/a
+**Files Changed:**
+- Google Sheet "Email Index" tab — wrote `Email Index!E1:L313` (2504 cells, 313 rows × 8 cols)
+
+**Summary:**
+Inserted a new "Compare Preview Link" column at position E in the "Email Index" tab and shifted the existing E–K columns to F–L. Each non-digest row now has a `=HYPERLINK("https://localhost:8443/email_preview/legacy/<category>/<kind>","Compare")` formula in column E that opens the side-by-side legacy-vs-semantic email preview for that notification kind (route `legacy_immediate_kind` at `web/app/controllers/email_preview.rb:116`). Digest rows (rule.type=`digest`) intentionally left blank because the preview route for digests is per-category, not per-kind.
+
+**Changes Made:**
+- Identified the Nutella admin route powering the side-by-side compare page (`/email_preview/legacy/:category/:kind`) in `web/app/controllers/email_preview.rb`.
+- 313 data rows audited; 296 got HYPERLINK formulas (234 immediate + 62 direct), 16 digest rows left blank.
+- The MCP `user-workato-google-sheets` toolset has no `insert_dimension` primitive, so the column was inserted manually: built a 313×8 matrix in Python that combined the new column E with the shifted F–L columns and rewrote the existing `=$E$2 / =$E$11 / =$E$198` Batch-deployment inheritance formulas to `=$F$2 / =$F$11 / =$F$198` so they keep resolving to the correct Batch-1/Batch-2 anchors after the shift.
+- Single atomic `update_range_values` call against `Email Index!E1:L313`. First attempt 409'd on a stale revision_id (sheet had been touched in the 8-min window since the initial read); re-read showed zero substantive content diffs, so retried with the fresh revision_id and it landed.
+- Verified post-write by reading back rows 1–3, 10–13, 49–52, 196–199, and 309–312 with `effective_and_formula` and confirming (a) header row has E="Compare Preview Link" with F–L correctly shifted, (b) Batch anchor literals are at the right rows (Batch-1@2, Batch-2@11, Batch-2@198), (c) shifted formulas resolve correctly, (d) digest rows have blank E.
+
+**Notes:**
+- Base URL chosen by the user: `https://localhost:8443`. If they want a deployed env URL later, regenerating is straightforward — just rewrite the URL prefix in column E.
+- Direct-type kinds (62 of them, all in `email/*` category) currently get the immediate-kind compare URL. The controller doesn't restrict that route to immediate kinds, so the link should still produce a side-by-side render. If direct previews need a different route, swap the URL template for direct rows.
+- Conditional formatting / cell colors on the Batch rows should be preserved — `values.update` only changes values, not formatting. Worth a quick visual confirm by the user in case any color-coded cells in the old E column moved unexpectedly to F.
+
+---
+## 2026-05-22 - Merge Notification Prototype Review data into Email notifications migration sheet
+
+**Type:** milestone
+**Repository:** n/a (Google Sheets — destination `1foVr-XFMd5QwtkQLr3SK2bRb5Cl39Vwd3IagvJhD9Qc` "Email notifications migration data"; source `1DPUsmQtUkViZd_9J_Wc1Aoa2Fd8Rg5rKhHr6SGUF8sU` "Notification Prototype Review")
+**Branch:** n/a
+**PR:** n/a
+**Files Changed:**
+- Google Sheet "Email Index" tab — appended new columns at `Email Index!M1:O313` (313 × 3 = 939 cells, 210 filled / 87 intentionally blank)
+
+**Summary:**
+For each kind in the destination's column D (`rule.name`), looked up the source's column M (`ID`) on the `notifications_v2_spreadsheet` tab and appended three new columns to the destination: **M = Product Category, N = Priority, O = Batching Window**. Header named "Product Category" (not "Category") to avoid collision with the existing `rule.category` column in the destination, which is a different taxonomy.
+
+**Changes Made:**
+- Surveyed all 4 source tabs; `notifications_v2_spreadsheet` and `Copy for Design` have the same 189 IDs but differ on `Priority` and `Batching Window` for 2 kinds (`digital_room_collaborator_added` and `pitch_collaborator_added`). User chose `notifications_v2_spreadsheet` as authoritative.
+- Built a kind → {Category, Priority, Batching Window} lookup from the source tab.
+- For each of the destination's 312 data rows: 210 (71%) matched a source ID exactly; 87 had no match and were intentionally left blank. No `__variation` suffix-stripping fallback hits — these 87 were genuinely missing from source (`admin_message`, `single_assessment_completed`, `cloudservice_*`, `comments_*`, all `digest_*`, all training session variations, etc.).
+- Wrote in 2 atomic chunks (`M1:O160` and `M161:O313`). Note: a single-call write of all 939 cells failed with a JSON parse error at position 16323 in the tool argument stream even though the payload was valid JSON (16,128 chars); splitting into two ~8 KB calls worked cleanly. Worth remembering: keep `update_range_values` payloads under ~15K chars to avoid the JSON-argument parsing edge case.
+- Verified by reading back D + M:O for header, matched rows (2, 12, 67/68, 116, 197, 198), and unmatched rows (11, 67, 117, 310–313). Header correct; matched values correct including the comma-rich `Daily, Weekly, Monthly, Quarterly`; chunk boundary at 160/161 clean; all unmatched rows blank.
+
+**Notes:**
+- The 87 unmatched destination kinds are a real gap, not a bug: the source ("Notification Prototype Review") only covers 189 of the destination's 297 kinds. If the user wants those rows filled in, that's a separate data-collection task (likely human-curated since source covers a different scope).
+- The 2 source tabs disagree slightly. If `Copy for Design` ever becomes the source of truth instead, those 2 kinds (`digital_room_collaborator_added`, `pitch_collaborator_added`) would need an update — both would go from P3/Daily to P2/60 minutes.
+- The naming choice "Product Category" vs the existing "rule.category" matters: the existing `rule.category` is the YAML category (e.g. `access`, `training`, `email`), whereas the new "Product Category" is the higher-level Highspot product taxonomy (e.g. `Content`, `System`, `Learning, Training & Events`, `External Shares / Digital Room`, `Meeting & Deal Intelligence`, `Analytics & Reports`). Both kept for now; they answer different questions.
+
+---
+## 2026-05-22 - Fix Compare Preview Link URLs (wrong host + wrong category source)
+
+**Type:** bug-fix
+**Repository:** n/a (Google Sheets — `1foVr-XFMd5QwtkQLr3SK2bRb5Cl39Vwd3IagvJhD9Qc` "Email notifications migration data")
+**Branch:** n/a
+**PR:** n/a
+**Files Changed:**
+- Google Sheet "Email Index" tab — overwrote column E (`Compare Preview Link`) rows 1-313 (313 cells)
+
+**Summary:**
+The original Compare Preview Link column written earlier today was using a wrong host (`https://localhost:8443`) and a wrong category source (`rule.category` from sheet column G, e.g. `access`, `announcement`). The route `/email_preview/legacy/:category/:kind` (defined at `web/app/controllers/email_preview.rb:116`) actually expects the **semantic email category** (one of the `immediate_*` keys in `IMMEDIATE_CATEGORIES` in `web/common/email/semantic/preview/semantic_email_preview.rb`), not the rule category. For example, `admin_message` should resolve to `immediate_misc/admin_message`, not `announcement/admin_message`. User reported "none of the compare links are working" with the correct example: `http://localhost:3000/email_preview/legacy/immediate_misc/admin_message`.
+
+**Changes Made:**
+- Parsed `IMMEDIATE_CATEGORIES` from `web/common/email/semantic/preview/semantic_email_preview.rb` to build a definitive `kind → semantic_category` map (243 unique kinds across 10 immediate_* categories: `immediate_feedback_share`, `immediate_send_failed`, `immediate_request_access`, `immediate_ownership_collaborator`, `immediate_workflow`, `immediate_share_meeting`, `immediate_learning`, `immediate_sessions`, `immediate_misc`, `immediate_variations`).
+- For each of the 312 destination data rows, looked up the kind (column D) in that map:
+  - Match found → wrote `=HYPERLINK("http://localhost:3000/email_preview/legacy/<semantic_category>/<kind>","Compare")` (216 rows)
+  - No match → left blank (97 rows total: 80 direct kinds not in IMMEDIATE_CATEGORIES like `signup`/`welcome`/`pitch_viewed`/etc., 1 immediate kind without mapping, 16 digest rows, plus blank-kind rows)
+- Wrote in 3 chunks: A=rows 1-105 (header + first 104), B'=rows 104-210 (re-covered rows 104-105 to clear stale formulas), C'=rows 211-313.
+
+**Notes:**
+- **Google Sheets API trims trailing blank rows** in `update_range_values`. Discovered when chunk A reported `updated_range: E1:E103` for a requested E1:E105 — rows 104, 105 (which were `[""]`) were silently skipped, leaving the OLD wrong-host hyperlinks in place. Worked around by extending chunk B to start at row 104 with the blanks as non-trailing entries, sandwiched before non-blank data; that wrote them as expected. Lesson: never end a chunk with rows that need to become blank; pad with subsequent non-blank rows or do a separate non-trailing write.
+- Of the 80 immediate/direct kinds with no mapping: 62 are `direct`-type kinds living in `EMAIL_TYPE_PREVIEWS` (e.g. `signup`, `welcome`, `password_recovery`, `pitch_viewed`, `digital_room_viewed`), and `/email_preview/legacy/:category/:kind` only resolves the semantic side for kinds in `IMMEDIATE_CATEGORIES`, so a compare URL would render the legacy side but a blank semantic side. The remaining ~18 are immediate kinds whose only catalog entries are `__variation`-suffixed (e.g. destination has bare `assessment_submitted`, catalog only has `assessment_submitted__manager_review` etc.). Left blank rather than guessing a variation.
+- Digest kinds (16) intentionally left blank — they use a different route `/email_preview/legacy_digest/:category` that takes no kind in the URL, so a per-row compare link doesn't have a clean mapping yet.
+
+---
