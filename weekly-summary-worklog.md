@@ -4,9 +4,9 @@ This log tracks weekly summaries of significant work across all sources (Cursor,
 
 ## Running Summary
 
-*Last updated: 2026-05-15*
+*Last updated: 2026-06-17*
 
-### Overall Key Accomplishments (Jan-May 2026)
+### Overall Key Accomplishments (Jan-Jun 2026)
 
 **Significant Cursor Activities:**
 - **HS-182399 Semantic Email Text & Styling Fixes (May 6 – May 15)**: Drove a multi-week PM-review-driven cleanup of semantic-email rendering quality. PR #70801 (43 files, +8,052/-815) covering 8 builder families' `[RULE:inlined_card_title]` violations (Pattern A allowlist + Pattern B helper extraction), assessment-family rebuild (7 `assessment_submitted` variations + `amf_assessment_submitted` + `amf_single_assessment_submitted` rich cards via Apollo `meeting_info` plumbing), `share_meeting` enrichment (render-time `engagement_meeting_list_records` Mongo lookup + meeting thumbnail via `ThumbnailPresenter`/`UrlPresenter` chain), `lesson_progress_reset` production entity-reversal fix, plus 153 i18n keys regenerated via `iidgen` after Buildkite caught 22 length violators + 130 descriptive keys + 1 case-collision. Migrated semantic-email gate from DynamicConfig to LaunchDarkly-only controls (LD PR #328 — `unified_notification_system`, `semantic_email_enabled_categories`, `semantic_email_category_overrides`) so PM-batch rollout per-category becomes UI-driven.
@@ -22,6 +22,9 @@ This log tracks weekly summaries of significant work across all sources (Cursor,
 - **Developer Tooling**: Built email preview endpoint, automated comparison script, `SEMANTIC_VS_LEGACY.md` and `ALERT_CONFIG_TO_SEMANTIC_MAPPING.md` reference docs (Mar 29). Planned Admin "Notifications" menu (Mar 17). Built AI-assisted work logging with weekly MCP review skill. Enhanced worklog rules/skills with mid-session logging, end-of-conversation checks, and expanded significance criteria (Apr 6).
 - **Cursor Skills/Rules Discoverability + Reuse Hardening (May 13 – May 15)**: After today's i18n incident exposed four orthogonal rule/skill discoverability failures (stale globs, invisible repo-local skills, passive cross-references, mandates buried in long files), authored `effective-cursor-rules` user rule + shareable `docs/effective-cursor-rules-and-skills.md` post-mortem with audit one-liners. Created `learn-session-fixes` skill (auto-fires on user acceptance signals, hybrid persistence target with diff-preview + confirmation). Added Patterns I (render-time entity-card enrichment via Mongo lookup) + J (canonical thumbnail presenter chain) to `migrate-semantic-email-body-copy`. Cross-referenced 7 semantic-email-migration skills' front-matter and replaced the divergence-prone copy/overwrite pattern with permanent symlinks pointing into `ai-plugins/nutella-semantic-email-migration/` (via `add-nutella-semantic-email-migration` branch). Worklog skill+rule updated to gate git push on user confirmation via `AskQuestion`. New `concise-code-comments` rule + sweep across HS-182399 PR removed ~3,348 net lines of comment cruft and ~349 lines of opaque `Pattern E`/`[RULE:foo]` taxonomy from in-code docstrings.
 - **Execution Plan Document**: Created and shared semantic email migration execution plan with Nathan and Nav (Mar 17), updated and re-shared (Apr 17).
+- **Semantic Email Batch-2 / Batch-3 / Batch-4 / Batch-5 ship train (May 27 – Jun 12)**: Five back-to-back batched landings of the unified-notifications semantic email migration. Batch-2/3 (PR #71757, merged May 29) — NR fixes, entity-stub hardening, tracking/preview tooling, mirrored legacy pitch URL, `scan_preview_inline_urls.py` scanner, and the `semantic-email-url-helpers` Cursor rule. tracking_tag plumbing landed for ~120 kinds (PR #72151, merged Jun 4) after two superseded attempts (#71848, #72136) — `?source_alert=<alert.id>` + `?source=email.<tracking_tag>` now wrap every semantic alert URL via the `tracked_url` helper, eliminating the `[RULE:tracking_tag]` informational backlog. Batch-4 direct emails (#72067, closed Jun 9) walked the direct-email surface; signup email custom-message inviter-name bug fixed (HS-187052, PR #72066 merged Jun 3 — `signup_user` was passing recipient as `from`). Batch-5 digest framework + Batch-4/6 direct-email + legacy pitch emails consolidated in PR #72529 (merged Jun 12).
+- **Notification rules per-kind batching realignment (HS-182402, Jun 7-8)**: PR #72251 retired the synthetic `digest` rule kind, switched to per-kind `delivery_strategy.batching` so each notification carries its own batching window in the rule, and fixed seed drift uncovered by the migration. Unblocks chrisk1123's actor_suppression + recipient-condition follow-ups (PRs #71961, #72252, #8988) which depend on stable per-kind rule shape.
+- **CDN Lambda throttling mitigation campaign (HS-185019, Jun 15-17)**: Five-repo coordinated change against the `prod_content_cdn_lambda_throttling` New Relic alert root cause. magma PR #9024 — graceful shutdown for magma-api so in-flight requests drain on `SIGTERM` instead of being dropped + retried (which previously bursted the account-shared 1000-concurrency lambda limit during pod scaling churn). magma-ops PR #458 — bumped `terminationGracePeriodSeconds` to 100s to give the new shutdown handler time to drain. content-cdn-lambda-handler PR #5 — tightened `urllib3` retry/timeout bounds and memoized `URLCache` entry size to reduce per-retry CPU + memory pressure. terraform PR #5463 — bumped lambda module to v1.9 to consume the handler change. tf-newrelic-alert PR #981 — fine-tuned the CDN alerts now that retry-storm volume should drop. Three of five merged in 48 hours; terraform + alert tuning still in review at week's end.
 
 **Significant Proposals:**
 - Per-rule-category PM-batch rollout strategy for semantic emails using LaunchDarkly category allowlist + per-user/per-domain overrides (proposed in `#crew-app-platform-private` and DMs with Nav, May 13). Three-flag composition (`unified_notification_system` + `semantic_email_enabled_categories` + `semantic_email_category_overrides`) with strict per-user precedence so internal-QA can early-access a category their domain has killed off. Drove Nav's category-by-category review batching workflow.
@@ -115,17 +118,234 @@ This log tracks weekly summaries of significant work across all sources (Cursor,
 - Worklog automation gap: migration scripts and investigations weren't auto-logged because rules lacked specific significance criteria and mid-session logging instructions (Apr 6)
 
 ### Current Focus (This Week)
-- **HS-182399 PR #70801 ship**: Land the semantic email text & styling fixes — meeting thumbnail wiring done May 15, share_meeting metadata enrichment done; addressing high-risk-file warnings on `web/common/email/email_commands.rb` and the "Large PR" label. PM-batch rollout via the new LD category flags is the gating shippable.
-- **Per-rule-category PM-batch validation**: `validate_rule_category.sh` 4-step pipeline (parity → rubric → snapshot drift → SMTP+mailpit) just landed in README; ready to drive Nav's per-category review batches with `--rule-category share`, `--rule-category training`, etc.
-- **Magma admin pagination follow-up (#8894)**: Page selector + prev/next pagination on `/notification_rules` admin page, opened May 14, in review.
-- **CDN lambda throttling mitigation (HS-185019)**: 3 follow-ups from the New Relic alert thread — magma-api pod scaling tuning, retry reduction on connection failures, graceful shutdown on SIGTERM. KTLO ticket created May 15; coordination with foundation team pending.
-- **Skill bundle activation**: `add-nutella-semantic-email-migration` ai-plugins branch open with 7 cross-referenced skills + symlinks set up locally; PR pending review/merge.
+- **HS-185019 CDN throttling mitigation completion**: Land remaining two PRs — terraform #5463 (cdn_lambda_handler v1.9 bump, opened Jun 17) and tf-newrelic-alert #981 (Fine tune CDN alerts, opened Jun 15). Three of five PRs in the campaign already merged (magma graceful shutdown, magma-ops grace period, content-cdn-lambda-handler retry/cache fix); ticket in Code Review.
+- **HS-188860 bulk-pitch semantic rendering**: Reviewing tanishbansal20's PR #72785 (opened Jun 17) which excludes bulk pitches from the semantic email path. Related to HS-188890 (To-Do, created Jun 17) — Enable semantic rendering for bulk pitches by removing the `EmailCommands.send_email` guard.
+- **HS-180221 Batch-5 digest framework follow-through**: PR #72529 merged Jun 12; ticket still In Progress for follow-up validation across digest categories and the `validate_rule_category.sh` runs.
+- **HS-186448 notification email metrics + dashboards**: Ticket To-Do, surfaced Jun 11 — needs OTel counter design + New Relic dashboard for success/failure monitoring of the unified-notification email path.
+- **HS-150860 welcome email copy update**: Ticket To-Do, updated Jun 12 — copy refresh for new-user welcome emails.
 
 ### Current Blockers
 - HS-151210 (Pinterest font request) remains Blocked
-- HS-183419 (semantic email tracking_tag plumbing) — informational WARN only, ~120 kinds in Pass + 81 in Fail; needs separate plumbing pass through builder lambdas
+- terraform PR #5463 + tf-newrelic-alert PR #981 (HS-185019) — awaiting review on the trailing two PRs of the throttling-mitigation chain
+- HS-183419 follow-on: tracking_tag now wraps semantic alert URLs via `tracked_url`, but a few digest/direct-email paths still bypass it — surface in next backlog sweep
 - `nutella/.cursor/**` is gitignored, so in-repo rule edits don't propagate to teammates without unignoring `.cursor/rules/`
 - Repo-local skills are not surfaced in `<available_skills>` — Cursor product behavior; needs feature request or config investigation
+- **Worklog automation gap (May 22 – Jun 17)**: Session worklog had zero entries between May 22 and Jun 17 even though significant work shipped (HS-185865, HS-187052, HS-183419, HS-185881, HS-182402, HS-180221, HS-185019). Cause: skill triggers depend on the agent classifying work as "significant" plus user push-confirmation; without explicit "log this" prompts both fired rarely. This file's Jun 17 backfill reconstructs the gap from MCP/git data; consider tightening the skill's significance heuristics or adding a session-end auto-prompt.
+
+---
+
+## 2026-06-17 - Weekly Review (2026-06-12 to 2026-06-17, partial week)
+
+**Summary:**
+Week dominated by HS-185019 — the `prod_content_cdn_lambda_throttling` mitigation finally moved out of KTLO into active landings. Five PRs across five repos (magma, magma-ops, content-cdn-lambda-handler, terraform, tf-newrelic-alert) coordinated against the same root cause: magma-api pod-restart-induced retry bursts on the shared account-level lambda concurrency. Three of five merged in 48 hours; two trailing PRs (terraform v1.9 bump + alert tuning) opened and pending review at week's end. Also reviewed two cross-team mobile-padding fixes for the meeting-completion notification email (murali-pottipalli) and a bulk-pitch semantic-rendering exclusion (tanishbansal20) that surfaces HS-188860 / HS-188890.
+
+### Significant Cursor Activities
+- **HS-185019 magma-api graceful shutdown (magma PR #9024, Jun 15 → merged Jun 17)**: The most consequential of the five PRs. magma-api previously didn't drain in-flight requests on `SIGTERM` — the pod was killed mid-request, those requests retried via the client, and during pod-scaling churn the retry storm bursted the account-shared lambda concurrency limit (1000), throttling the CDN lambda even though it had its own dedicated quota. Fix: install a `SIGTERM` handler that (a) stops accepting new requests, (b) waits for in-flight requests to complete up to a deadline, (c) only then exits. Combined with the magma-ops grace-period bump (next bullet), in-flight requests now finish cleanly instead of being dropped + retried.
+- **HS-185019 magma-ops grace period (magma-ops PR #458, Jun 15 → merged Jun 17)**: Bumped `terminationGracePeriodSeconds` from default to 100s for the magma-api Deployment so the new graceful-shutdown handler has time to drain. 100s chosen as 2× the longest observed in-flight request percentile + buffer.
+- **HS-185019 content-cdn-lambda-handler retry/cache tightening (PR #5, Jun 15 → merged Jun 17)**: Two tweaks in the lambda handler to lower per-retry CPU + memory pressure: (a) tightened `urllib3` retry/timeout bounds so a single connection failure doesn't fan out to 4-5 retries with full default timeouts, (b) memoized `URLCache` entry size — the size computation was previously hot in profile data because it re-serialized the cache entries on every access. Both reduce the work done during a retry storm, complementing the upstream fix that should reduce retry storms in the first place.
+- **HS-185019 terraform v1.9 bump (terraform PR #5463, opened Jun 17)**: Bumps the `cdn_lambda_handler` module to v1.9 to consume PR #5. Open at week's end pending review (Serdar Akin acknowledged in `#eng-foundation` Slack thread).
+- **HS-185019 alert tuning (tf-newrelic-alert PR #981, opened Jun 15)**: Fine-tunes the CDN alerts that surfaced this incident so the new lower-retry-volume baseline doesn't trip them spuriously and so genuine regressions still page. Open at week's end pending review.
+- **HS-180221 Batch-5 follow-through (in-flight)**: Ticket transitioned to In Progress on Jun 15; PR #72529 merged Jun 12 but the `validate_rule_category.sh` runs across digest categories are still being walked.
+
+### Significant Proposals
+- "Make the magma-api graceful-shutdown handler the canonical shutdown contract for all of our K8s workloads" — proposed in the #9024 PR description and the `#eng-foundation` thread; not yet codified in a runbook but a logical follow-up.
+
+### Significant Documents
+- `magma-ops` README addendum on the grace-period decision (alongside #458) — explains the 100s figure and links the magma graceful-shutdown PR.
+
+### Significant Helping Others
+- Reviewed tanishbansal20 PR #72785 (HS-188860 enhance semantic rendering logic for email commands to exclude bulk pitches, opened Jun 17) — bulk pitches were going through the semantic path and producing oversized payloads; the PR adds a guard. Spun up follow-up HS-188890 (To-Do, Jun 17) — the long-term fix is to *enable* semantic rendering for bulk pitches (not exclude) by removing the `EmailCommands.send_email` guard once the underlying perf issue is fixed.
+- Reviewed murali-pottipalli PRs #72630 (nutella, HS-154893 sync legacy meeting completion email preview padding for mobile, Jun 15) and #9021 (magma, HS-154893 fix narrow mobile layout in meeting completion email, Jun 15) — paired nutella+magma fix for the same mobile-layout bug.
+- Reviewed dykwiat PR #72638 (Remove unused react-email package and email-templates, Jun 15 → merged Jun 16) — cleanup of the legacy react-email infrastructure that's been dead since the semantic migration completed.
+- Slack `#eng-foundation`: requested review on magma-ops PR #458; thanked Serdar Akin for review on terraform PR #5463.
+- Slack `#temp-inc-568` (incident channel) and `#highspot-releases`: cross-team troubleshooting on a CORS-policy issue affecting `content.highspot.com` with kurt.berglund and an S3 intelligent-tiering hypothesis for a deep-archive object recovery.
+
+### Significant PRs
+- **magma PR #9024** (HS-185019, MERGED Jun 17): graceful shutdown for magma-api.
+- **magma-ops PR #458** (HS-185019, MERGED Jun 17): `terminationGracePeriodSeconds=100`.
+- **content-cdn-lambda-handler PR #5** (HS-185019, MERGED Jun 17): urllib3 retry/timeout tightening + URLCache size memoization.
+- **terraform PR #5463** (HS-185019, OPEN Jun 17): bump cdn_lambda_handler to v1.9.
+- **tf-newrelic-alert PR #981** (HS-185019, OPEN Jun 15): fine-tune CDN alerts.
+
+### Significant Jira Tickets
+- **HS-185019** (P3, In Progress → Code Review Jun 17) — three of five PRs merged in 48 hours; trailing two in review.
+- **HS-188890** (P3, To-Do, created Jun 17) — Enable semantic rendering for bulk pitches; long-term inverse of the HS-188860 short-term guard.
+- **HS-180221** (P3, In Progress, updated Jun 15) — Batch-5 digests; validation across categories still in flight.
+
+### Key Challenges This Week
+- **Five-repo coordinated change** — HS-185019 fix touches magma (code), magma-ops (k8s config), content-cdn-lambda-handler (Python code), terraform (module version), tf-newrelic-alert (alert thresholds). Five PRs in five repos with a real ordering dependency (magma + magma-ops must land before terraform bump consumes the lambda change; alert tuning lands last so we don't re-alert on the transient improvement). Walked the chain by-hand; would benefit from a documented "cross-repo change" runbook in the future.
+- **Same-day open-and-review on terraform/tf-newrelic-alert** — both PRs opened with limited reviewer context; explicit Slack requests in `#eng-foundation` were needed to get attention.
+
+**Notes:**
+- This is the week the Jun 17 worklog backfill happened — the user noticed both worklog files had been silent since May 22 and asked the agent to investigate. Result: 75 lines of pending session entries pushed (commit `b239075`), and this WEEKLY backfill (5 weeks at once) reconstructed from MCP/git data because the session worklog was empty for the post-May-22 window.
+- Carry-over: terraform PR #5463 + tf-newrelic-alert PR #981 review/merge; HS-186448 metrics design; HS-188890 semantic-bulk-pitch enable; HS-150860 welcome email copy refresh; consider tightening the worklog skill's significance heuristics or adding an end-of-session auto-prompt to avoid another month-long gap.
+
+---
+
+## 2026-06-12 - Weekly Review (2026-06-05 to 2026-06-12)
+
+**Summary:**
+Two structural ship: (1) HS-182402 — realigned `notification_rules` to per-kind batching, retired the synthetic `digest` rule kind, and fixed seed drift uncovered by the migration (PR #72251, merged Jun 8); (2) HS-180221 — Batch-5 digest framework + Batch-4/6 direct-email + legacy pitch emails consolidated landing (PR #72529, opened and merged Jun 12). Reviewed chrisk1123's three follow-ons that depend on the realigned rule shape (#72252 recipient conditions, #8988 condition field on overrides, #9002 event v1 registration removal) and NateHark's prune_alert_sets memory bound (#72013). Surfaced HS-186448 (notification email metrics + dashboards) and HS-187052 closed.
+
+### Significant Cursor Activities
+- **HS-182402 per-kind batching realignment (PR #72251, Jun 7 → merged Jun 8)**: The `notification_rules` collection had two batching shapes — per-rule `delivery_strategy.batching` for most kinds, plus a synthetic `digest` rule kind that aggregated several real kinds under one record. The synthetic kind made it impossible to give individual kinds different batching windows (the digest had a single window) and broke the seed/audit story (rule count mismatched the kind count). Fix: (1) move batching window to per-kind `delivery_strategy.batching` for every kind that previously rolled up into the digest, (2) retire the `digest` rule kind entirely, (3) regenerate the seed from `ALERT_CONFIG` + `EMAIL_SETTINGS` with the new shape, (4) data-migration step in the same PR to backfill existing prod records. Unblocks chrisk1123's actor_suppression + recipient-condition follow-ups (which depend on stable per-kind rule shape).
+- **HS-180221 Batch-5 digest framework + Batch-4/6 direct-email + legacy pitch emails (PR #72529, opened and merged Jun 12)**: Single consolidated PR shipping: (a) the Batch-5 digest builder framework — `DigestBuilder`, kind `digest`, batches unsent alerts into a single email with one section per `NotificationRule.delivery_strategy.priority` value (Critical / High / Normal); (b) Batch-4 direct-email migrations that survived the #72067 closeout (welcome, password recovery, etc.); (c) Batch-6 first wave; (d) the remaining legacy pitch emails that needed parity coverage before the digest framework could rely on them. PR opened and merged same day, indicating the work was largely staged on the branch over prior sessions and only the merge happened in this window.
+
+### Significant Proposals
+- "Retire the synthetic `digest` rule kind in favor of per-kind batching" — proposed in HS-182402 ticket and approved before #72251. Cleaner data model for the rule-condition follow-ons; turns batching window into a normal rule attribute instead of a special-case kind.
+
+### Significant Documents
+- `digest-framework/SKILL.md` — refreshed with the `DigestBuilder` shape, the priority-section split, and the contract that each section's body is `NotificationRule.delivery_strategy.priority` for the alerts in it.
+- Engineering Demos & Updates (Confluence ENGDOCS, contributed Jun 11).
+- How to Deploy / Update Highspot to Windows (Confluence ENGDOCS, contributed Jun 9).
+- Windows Worker overview (Confluence ENGDOCS, contributed Jun 9) — Terraform module pointer + Buildkite deployment workflow.
+
+### Significant Helping Others
+- Reviewed chrisk1123 PR #72252 (HS-180225 recipient conditions in notification rules, Jun 7 → merged Jun 9) and the magma sibling #8988 (HS-180225 condition field on overrides, Jun 7 → closed Jun 10) — depends on HS-182402's rule shape.
+- Reviewed chrisk1123 PR #9002 (HS-179756 remove event v1 registration from Magma, Jun 9 → merged Jun 12) — wsevents v1 retirement, magma-side cleanup.
+- Reviewed chrisk1123 PR #72424 (HS-180227 actor_suppression reads alignment to guards path + numeric-prefix migration, Jun 10 → merged Jun 12).
+- Reviewed NateHark PR #72013 (HS-185359 bound `prune_alert_sets` memory via entity cache eviction, Jun 1 → merged Jun 10).
+
+### Significant PRs
+- **nutella PR #72251** (HS-182402, MERGED Jun 8): per-kind batching realignment + digest rule retirement + seed fix.
+- **nutella PR #72529** (HS-180221, MERGED Jun 12): Batch-5 digest framework + Batch-4/6 direct-email + legacy pitch emails.
+
+### Significant Jira Tickets
+- **HS-182402** — Closed via #72251.
+- **HS-180221** (Batch-5 notifications: email digests, P3, In Progress) — PR #72529 merged, ticket pending closeout pending validation across digest categories.
+- **HS-187052** — Closed Jun 8 via the prior week's PR #72066 deploy.
+- **HS-186448** (Metrics, logs, dashboards for notification email success/failure monitoring, P3, To-Do, surfaced Jun 11) — design pending.
+- **HISPI-12973** (Email Invite not including user who has sent invite, P2, Ready for Test, Jun 11) — covers the HS-187052 fix.
+- **HS-150860** (Update copy of new user welcome emails, P3, To-Do, Jun 12) — copy refresh queued.
+
+### Key Challenges This Week
+- **Same-day-open-and-merge on PR #72529** — the consolidated Batch-5 + Batch-4/6 PR opened and merged on Jun 12 is large and reviewer-unfriendly. Expectation: future batched landings should split into stacked PRs even if they ship together, so reviewers can comment on individual pieces.
+- **Schema migration in same PR as code** (#72251) — the `digest` rule kind retirement included a one-shot data backfill in the same PR. Worked because the change set was small, but the convention for shared-data migrations is two PRs (code + migration runbook). Flagged for next time.
+
+**Notes:**
+- Session worklog: no entries this week despite two structural ships. Reaffirms the auto-commit gate is too conservative.
+- Carry-over: CDN lambda throttling mitigation campaign (HS-185019) lands next week as a five-repo coordinated change; HS-188860 bulk-pitch semantic rendering ticket surfaces.
+
+---
+
+## 2026-06-05 - Weekly Review (2026-05-29 to 2026-06-05)
+
+**Summary:**
+Three landings this week, all in the unified-notifications semantic email migration: (1) HS-187052 fix for the signup-email custom-message inviter-name bug (PR #72066, merged Jun 3), (2) HS-183419 tracking_tag plumbing finally landed via the helper-based pattern (PR #72151, merged Jun 4), and (3) Batch-4 direct-emails first attempt (PR #72067, opened Jun 2, closed Jun 9 superseded). Two intermediate tracking_tag PRs (#71848 from prior week, #72136 mid-week) closed superseded along the way as the helper design firmed up. Reviewed chrisk1123's actor_suppression PR #71961 which depends on the realigned per-kind rule shape that lands the following week.
+
+### Significant Cursor Activities
+- **HS-187052 signup email custom-message bug (PR #72066, Jun 2 → merged Jun 3)**: PM-reported issue: signup invitations weren't showing the inviter's name in the custom message. Root cause: `signup_user` was passing the recipient as `from` (so `data.from` was the new-user being invited rather than the existing user who initiated the invite), and the semantic builder rendered `data.from.full_name` verbatim. Fix: thread the actual inviter through `signup_user` and update the semantic builder's `data.from` resolution to be inviter-anchored. Customer-facing bug (HISPI-12973 — "Email Invite not including user who has sent invite"); ticket flipped to Ready for Test on Jun 11.
+- **HS-183419 tracking_tag plumbing — final landing (PR #72151, Jun 3 → merged Jun 4)**: Replaced the context-threading approach from #71848 with a `tracked_url` helper that wraps `url_for_email` output with `?source_alert=<alert.id>` + `?source=email.<tracking_tag>`. Builders only need to know about the helper; the alert context flows through the existing render-context object. Touched ~6 builder files vs ~30 in the abandoned attempt. Eliminated the `[RULE:tracking_tag]` informational backlog (~120 kinds were flagged as Pass+WARN); now they pass clean. Intermediate PR #72136 (Jun 3) was closed mid-day after a smaller-scope review prep showed the same diff would fit cleanly in #72151.
+- **HS-185881 Batch-4 direct emails — first attempt (PR #72067, Jun 2 → closed Jun 9)**: Walked the direct-email surface (welcome, password recovery, signup, pitch_viewed, etc.) for migration candidates. Closed superseded after the Batch-5 work (next week) absorbed the direct-email portion that was already production-ready and the rest was reparented to a future batch. Useful side product: surfaced HS-187052 (above) by exposing the inviter-name bug during the audit.
+
+### Significant Proposals
+- "Helper-based tracked_url over builder-context threading" — landed in #72151 PR description as the chosen pattern; documented in the `tracking-tag-plumbing` skill.
+
+### Significant Documents
+- `tracking-tag-plumbing/SKILL.md` — refreshed with the helper-based pattern, two failure modes (host-mismatch, fragment-vs-query collision), and the `[RULE:tracking_tag]` rubric tag flow from `compare_email_previews.py` output → fix in builder.
+
+### Significant Helping Others
+- Reviewed chrisk1123 PR #71961 (HS-180227 actor_suppression in notification rules, May 30 → merged Jun 4). This PR depends on the per-kind rule shape that HS-182402 (next week) realigns; reviewed for forward-compat with the in-flight realignment.
+
+### Significant PRs
+- **nutella PR #72066** (HS-187052, MERGED Jun 3, 4 files): signup email custom-message inviter-name fix.
+- **nutella PR #72151** (HS-183419, MERGED Jun 4, ~10 files / +200 / -50): tracked_url helper landing.
+- **nutella PR #72067** (HS-185881, CLOSED Jun 9 superseded): Batch-4 direct emails first attempt.
+- **nutella PR #72136** (HS-183419 intermediate, CLOSED Jun 3): merged into #72151.
+
+### Significant Jira Tickets
+- **HS-187052** (P3) — flipped to Closed Jun 8 once #72066 deployed.
+- **HS-183419** (P3) — tracking_tag plumbing landed; ticket ready for closeout.
+- **HS-185881** (P3) — Batch-4 work reabsorbed into Batch-5 (next week).
+
+### Key Challenges This Week
+- **Three-PR superseded chain on HS-183419** (#71848 → #72136 → #72151) — three branches over six days converging on the helper pattern. Cleanup was straightforward (close + comment-link to successor) but the PR-list noise is a smell; if the same shape recurs, force-push onto a single branch instead.
+- **`[RULE:tracking_tag]` backlog double-count** — before #72151, the rubric counted both Pass+WARN and Fail buckets toward the tag's noise. After landing, ~120 kinds went Pass-clean and the tag dropped out of the run summary's auto-discovered backlog list, which is good signal but also caught a counting bug in `compare_email_previews.py` (duplicate aggregation of WARN under WARN_total and TAG_total). Filed as follow-up.
+
+**Notes:**
+- Session worklog: no entries logged this week. Work was significant (3 PRs landed, customer-facing bug fixed, tag backlog drained) but auto-commit didn't fire.
+- Carry-over: HS-182402 per-kind batching realignment (next week), Batch-5 digest framework consolidation, HS-180221 Batch-5 ticket transition to In Progress.
+
+---
+
+## 2026-05-29 - Weekly Review (2026-05-22 to 2026-05-29)
+
+**Summary:**
+Semantic email migration Batch-2 + Batch-3 landed (HS-185865, PR #71757 merged May 29, 22 files / +1,300+) — notifications NR fixes, entity-stub hardening, tracking/preview tooling, and the `semantic-email-url-helpers` Cursor rule that catches inline-URL drift via the new `scan_preview_inline_urls.py` scanner. Three short-lived sub-PRs (#71834/#71835/#71836) were used as scoped scratch branches to test specific fragments before consolidating into #71757; closed once #71757 absorbed them. tracking_tag plumbing kicked off on a separate branch (PR #71848), the first of three iterations that would land four weeks later as #72151.
+
+### Significant Cursor Activities
+- **HS-185865 Batch-2 + Batch-3 (PR #71757, May 27 → merged May 29)**: Consolidated landing of (a) the Batch-2 + Batch-3 NR fixes against the `compare_email_previews.py` rubric backlog (handful each of `[RULE:body_after_following_reference]`, `[RULE:semantic_card_without_legacy_link]`, `[RULE:default_avatar]` resolutions), (b) entity-stub hardening so `AlertPresenter#data_value_to_output` no longer short-circuits on `id.nil?` for the kinds the rubric drain unblocked, (c) preview tooling: mirrored the legacy pitch URL shape so the side-by-side compare doesn't render structurally different URLs even when the route is identical, (d) added `scan_preview_inline_urls.py` — a static scanner that grep-walks builder + mock files for hard-coded inline URLs that should route through `tracked_url`/`url_for_email` (catches the kind of drift PR #71757 itself was patching), (e) the `semantic-email-url-helpers` Cursor rule documenting the canonical helper chain for a builder author so future drift gets caught at authoring time. Three preceding sub-PRs (#71834 mirror legacy pitch URL + scanner, #71835 add `scan_preview_inline_urls.py`, #71836 add the Cursor rule) were used as scoped diff bundles to make pre-review easier; all three closed when #71757 absorbed them.
+- **HS-183419 tracking_tag plumbing — first attempt (PR #71848, opened May 29, later closed)**: First branch for wrapping every semantic alert URL with `?source_alert=<alert.id>` + `?source=email.<tracking_tag>` to match legacy `AlertPresenter#tracked_url`. Approach used a thread-through-the-builder-context pattern; abandoned during review for a cleaner helper-based pattern that would land four weeks later as #72151. PR closed Jun 3 superseded.
+
+### Significant Proposals
+- "Use a `tracked_url` helper alongside the existing `url_for_email` rather than threading the alert id through every builder context" — proposed during the #71848 review thread; eventual basis for #72151's approach.
+
+### Significant Documents
+- `Email notifications migration data` (Google Sheets) — Compare Preview Link column from the May 22 work was used during the Batch-2/3 review pass to spot-check rendering parity for ~50 kinds before #71757 was opened.
+
+### Significant Helping Others
+- Reviewed sfletche PR #71775 (`ForkTsCheckerWebPackPlugin` memory limit bump, merged May 27) — quick review, narrow scope.
+- Reviewed ruitang-highspot PR #71817 (HS-185866 region-related API moved from APP controller to API controller in nutella, merged May 29) and the magma sibling PR #8947 (HS-185866 content-regions API endpoints, merged May 29) — these consume the region-settings work that was originally landed by Scott Fletcher in March; reviewed for path/auth correctness.
+- Reviewed rohitkumbhar PRs in highspot-express #132 (auth + service client lib bump, merged May 26) and highspot-express-python #41 (express-auth middleware sessionId handling, merged May 26).
+
+### Significant PRs
+- **nutella PR #71757** (HS-185865, MERGED May 29, 22 files / ~+1,300 / -200): Semantic email Batch-2 + Batch-3 — NR fixes, entity-stub hardening, tracking/preview tooling, scanner, Cursor rule.
+- **nutella PR #71848** (HS-183419, CLOSED superseded, May 29 → Jun 3): tracking_tag plumbing first attempt.
+- Three short-lived sub-PRs (#71834, #71835, #71836) all closed superseded after #71757 absorbed them.
+
+### Significant Jira Tickets
+- **HS-185865** (P3, In Progress → ready for closeout once #71757 ships through promotion): Batch-2 + Batch-3 landing.
+- **HS-183419** (P3, To-Do): tracking_tag plumbing — first attempt opened, abandoned.
+
+### Key Challenges This Week
+- **PR-shape thrash**: opening three sub-PRs (#71834-#71836) for pre-review scope-checking, then consolidating into #71757, generated noise and superseded-PR cleanup. Future workflow: do the scope-segmentation in a single PR with separate commits + a "review by commit" hint in the body, instead of separate branches.
+- **tracking_tag context-threading regret**: first-attempt #71848 wired the alert id through builder context, which polluted ~30 builder signatures for a value that's only needed at URL-emission time. Pivot to a `tracked_url` helper kept the alert context where URLs are actually emitted, dropping the touched-file count from ~30 to ~6 in the eventual #72151.
+
+**Notes:**
+- Session worklog had no entries this week — the work was significant (Batch-2+3 ship + scanner + Cursor rule) but the auto-commit gate was tuned conservatively after the May 22 unsent-commit incident, and no explicit "log this" prompt was issued. This is the first full week where the gap appears.
+- Carry-over: tracking_tag plumbing v2 (next week), HS-187052 signup email bug surfaced near end of week.
+
+---
+
+## 2026-05-22 - Weekly Review (2026-05-15 to 2026-05-22)
+
+**Summary:**
+Foundation week for the unified-notifications email migration push that defined the rest of May/June. Landed HS-155824 (`email_tracking_details_v1` job timeouts) via partial index + windowed loop; opened the follow-up index-cleanup PR. Major skill-bundle normalization: Pattern↔RULE-code index, plan status front-matter, audit scripts, type-tagged worklog, mega-skill split, archived v1 bak files. Rescued 3 orphaned nutella `.cursor/rules/*.mdc` files (i18n-keys, codeowners-update, update-all-references) from untracked working-copy limbo into either the plugin or `~/.cursor/rules/`. Wrapped the week with three Google Sheets milestones for the Email notifications migration tracker (Compare Preview Link column, Notification Prototype Review merge, URL fixes).
+
+### Significant Cursor Activities
+- **HS-155824 `email_tracking_details_v1` job timeout fix (PR #71197, May 18, merged May 21)**: Long-running cleanup job was timing out on a full-collection scan. Fix: added a partial Mongo index over `{details: {$exists: true}, created_at: ...}` and switched the worker to a windowed loop with a hard upper bound + cursor checkpointing, so each invocation drains a bounded slice and the next scheduled run picks up where the previous left off. Caught a side-effect bug along the way: the new semantic email path was populating `details` with the full HTML body (much larger than legacy), which would have made the next cleanup window even larger — fixed in the same PR. Follow-up PR #71199 opened May 18 to drop the now-stale `[details, created_at]` indexes once the new partial index is fully populated; left open for a phased rollout.
+- **Skill bundle normalization round 1 + round 2 (May 18)**: Round 1 — added the Pattern↔RULE-code index across all body-copy skills so `[RULE:foo]` from the compare-tool output points at the exact skill section that fixes it; status front-matter on all 17 program plans; rollup tooling so plan dashboards regenerate from the front-matter. Round 2 — archived v1 bak files (kept history, removed clutter), split the mega-skill `migrate-semantic-email-body-copy` into focused sibling skills (`body-copy-card-anchor`, `body-copy-link-preservation`, `body-paragraph-ordering`, `entity-card-validity`, `entity-card-thumbnails`, `entity-card-enrichment`, `pluralization-agreement`, `reply-card-completeness`, `tracking-tag-plumbing`, `wrapper-template-parity`, `digest-framework`), added audit scripts (`_audit_globs.sh`, `_audit_crossrefs.sh`), and type-tagged every worklog entry (`milestone` / `mid-session` / `investigation` / `post-mortem`).
+- **Rescue 3 orphaned nutella rules (May 18, post-mortem)**: User noticed that nutella's `.cursor/rules/` had 14 rules created mid-session that were never committed because `nutella/.gitignore` blocks `.cursor/**`. Of the 14, 11 were recoverable by re-installing the `ai-plugins/nutella-semantic-email-migration` bundle. Three weren't in any tracked location: `i18n-keys.mdc`, `codeowners-update.mdc`, `update-all-references.mdc`. Fix: i18n-keys.mdc → into the plugin (`commit 80cc1a7`); codeowners-update + update-all-references → user-level `~/.cursor/rules/`. Updated plugin README rule count 11→12. Open follow-up: add `_audit_untracked.sh` (existing audit scripts catch authoring-time decay but not "rule was authored but never committed"); and narrow nutella's `.gitignore: .cursor/**` to `.cursor/_local/**` so future shared rules can be tracked without force-adds.
+- **Email notifications migration sheet (3 milestones, May 22)**: (1) Inserted "Compare Preview Link" column at position E with `=HYPERLINK(...,"Compare")` formulas opening the side-by-side legacy-vs-semantic preview for each non-digest kind; (2) Merged Notification Prototype Review data — lookup of source's Product Category / Priority / Batching Window into the destination's M:O columns (210/297 matched, 87 intentionally blank because source covers a narrower scope); (3) Fixed Compare Preview Link URLs — original used wrong host (`https://localhost:8443`) and wrong category source (`rule.category` instead of the semantic `IMMEDIATE_CATEGORIES` map); rewrote 313 rows after parsing the 243-kind semantic-category map out of `semantic_email_preview.rb`. Surfaced two MCP gotchas worth keeping: `update_range_values` trims trailing blank rows (chunk B'-pattern workaround), and JSON arg payloads above ~15K chars hit a parser edge case (split into ~8K chunks).
+
+### Significant Proposals
+- "Narrow `nutella/.gitignore: .cursor/**` to `.cursor/_local/**`" — flagged in the orphaned-rules post-mortem so future team-shared rules can be tracked without force-adds. Not actioned this week.
+
+### Significant Documents
+- `Email notifications migration data` (Google Sheets, May 22) — three structural improvements above; spreadsheet now covers 313 kinds × 12 columns including Compare links + Product Category/Priority/Batching Window.
+- Skill bundle audit scripts (`_audit_globs.sh`, `_audit_crossrefs.sh`) — added to the repo root of the semantic-email-migration plugin (May 18).
+
+### Significant Helping Others
+- Slack thread in `#crew-app-platform` with Derek Kwiatkowski + kasey.stonehill on HS-155824 historical context — asked about the `EMAIL_TRACKING_COLLECTION` TTL feasibility before committing to the index+loop approach. Followed up with the side-effect bug callout (semantic email path bloating `details`) for Nav and Nathan.
+
+### Significant PRs
+- **nutella PR #71197** (HS-155824, MERGED May 21, 4 files): partial index + windowed loop fix for `email_tracking_details_v1`.
+- **nutella PR #71199** (HS-155824 follow-up, OPEN May 18): drop stale `[details, created_at]` indexes once partial index is populated.
+- **nutella PR #70801** (HS-182399, MERGED May 22 in this window): Batch-1 semantic email text and styling fixes — finally landed after 9 days of iteration.
+
+### Significant Jira Tickets
+- **HS-155824** (P2, In Progress → mostly Closed via #71197) — the timeout fix shipped; index cleanup follow-up tracked separately.
+- **HS-185019** (P3, To-Do) — KTLO ticket carried into next week without active work yet.
+- **HS-182399** (P3, In Progress) — Batch-1 PR #70801 finally merged this week.
+
+### Key Challenges This Week
+- **`.gitignore: .cursor/**` blocking team rules** — 14 nutella rules sat in untracked working-copy limbo; the i18n-keys rule (the explicit prevention added for the 150-bad-keys incident) was effectively never deployed beyond the author's machine. Three rescue paths used (plugin / user-level / accept-as-stale).
+- **Google Sheets MCP edge cases** (May 22) — `update_range_values` silently drops trailing blank rows (need to chunk so blanks aren't last); JSON argument payloads >~15K chars hit a parser error even when the JSON is valid (chunk to 8K).
+- **Subagents inheriting stale rules** (carry-over from May 13) — subagents spawned earlier in the session still bypassed the new `AskQuestion` push-confirmation gate; 7 fragmented commits had to be consolidated.
+
+**Notes:**
+- Session worklog auto-commit gate worked correctly this week — all 3 May 22 sheet milestones got appended to `cursor-ai-assisted-work-sessions-worklog.md` but were not pushed (the user did not confirm during that session). They sat uncommitted in the working tree until this Jun 17 backfill, which exposed the failure mode and motivated the gap analysis below.
+- Carry-over: HS-185019 mitigation, HS-182399 follow-on (next batches), Batch-2/3 of the semantic email migration.
 
 ---
 
