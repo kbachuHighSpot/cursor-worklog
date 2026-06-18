@@ -6108,3 +6108,28 @@ The original Compare Preview Link column written earlier today was using a wrong
 - Digest kinds (16) intentionally left blank — they use a different route `/email_preview/legacy_digest/:category` that takes no kind in the URL, so a per-row compare link doesn't have a clean mapping yet.
 
 ---
+
+## 2026-06-18 - Pitch `mail_v2` job failing with SendGrid 421 "max messages per connection" (investigation)
+
+**Type:** investigation
+**Repository:** hex / magma (JVM mail layer)
+**Files Read:**
+- magma/workflow/core/src/main/java/com/highspot/workflow/mail/SmtpSend.java
+- magma/workflow/core/src/main/java/com/highspot/workflow/mail/SmtpEmailService.java
+- magma/workflow/core/src/main/java/com/highspot/workflow/mail/SendgridSmtpSend.java
+- magma/workflow/mail/src/main/java/com/highspot/workflow/mail/MailWorker.java
+
+**Question:**
+A `mail_v2` job (https://api.highspot.com/jobs/6a2b136bf11306b8ea8d70db) for an Aetna pitch with a ~100+ broker BCC list failed all 3 retries with `SMTPSendFailedException: 421 Reached maximum number of messages sent per connection`. User asked whether the fix belongs in email infrastructure or in pitch-sending code, so the bug could be routed to the right team.
+
+**Findings:**
+- Root cause is in `SmtpSend.sendWithUnsubscribeLink()`. Pitches set `unsubscribe_header` in the data map, which forces them down this path (vs. the `togetherBulk()` path that uses SendGrid personalizations and avoids the issue). The method opens **one** `SMTPTransport`, then iterates over every TO/CC/BCC recipient and reuses that single connection for each `MAIL FROM` / `RCPT TO` / `DATA` via `SmtpEmailService.sendEmail()` (which calls `smtpTransport.sendMessage(...)` on the shared transport at `SmtpEmailService.java:30`).
+- SendGrid enforces a per-SMTP-session message cap (~100). Around the 100th `MAIL FROM`, SendGrid returns `421` and the exception bubbles up through `MailWorker.run()` line 188 as a `RuntimeException`. The bulk path used by `togetherBulk()` avoids this because it uses SendGrid's personalizations API, not one SMTP RCPT per recipient.
+- **Verdict: email-infrastructure bug, not pitch.** Capping the BCC list on the pitch side would only paper over the fact that any caller with >100 recipients (digest, share-with-many, future bulk notifications) hits the same wall. The 421 is a documented recoverable SMTP condition; honouring it is the SMTP client's responsibility. The fix is local to `SmtpSend.sendWithUnsubscribeLink()` and invisible to callers.
+- Filed [HS-189038](https://highspot.atlassian.net/browse/HS-189038) (Bug, To-Do, Feature Crew = App Platform, Repro Environment = Production) under epic [HS-185127](https://highspot.atlassian.net/browse/HS-185127) (KTLO - App Platform Fall Preview 26.5.0). Assignee defaulted to Triage User (HS project rejects truly unassigned tickets — same handling as the parent epic).
+- Side-finding worth calling out in the ticket: when retry 2/3 fires, `MailWorker.together()` re-sends to the **entire** recipient set including ones that already received before the 421 — so brokers near the front of the BCC list can receive duplicates today. Recycling the transport every N messages eliminates that whole class of partial-failure double-send as a side effect of the 421 fix.
+
+**Next Steps:**
+- Owned by App Platform via HS-189038. Two suggested remediation options in the ticket: (a) recycle the SMTPTransport every ~90 messages, or (b) catch `SMTPSendFailedException` with code 421 and reconnect+retry the failing recipient inside the loop.
+
+---
