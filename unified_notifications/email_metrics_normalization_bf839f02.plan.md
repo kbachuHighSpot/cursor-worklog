@@ -1,6 +1,6 @@
 ---
 name: Email Metrics Normalization
-overview: Ship four operator-facing signals for the brand-new unified-notifications subsystems — notification rules engine, notification channel router, and semantic email rendering — as one coordinated change so the `otel-collector-ops` exclude update and the nutella metric renames land together (a phase-1-only anchored wildcard would have silently dropped the new `email_render_*` / `email_batch_*` Phase 2 names — the same bug we're fixing, reproduced in the new namespace). Phase 1 (combined): delete `su0`'s unanchored `- email_(.*)` exclude line entirely (parity with the other 11 overlays; cardinality audit cleared the 7 legacy gauges since none carry `domain_id` and the Prometheus-mirror rationale is obsolete) + ship `email_render_duration_ms`, `email_render_fallback_total`, `email_batch_capped_out_total`, and `notification_rules_engine_delivered_total{channel, delivery_mode}` (direct rename — no dual-emit). Phase 1.5 (combined): suffix-normalize the remaining 5 surviving in-scope counters to `_total` per OTel convention — `notification_rules_{alert,email,condition_eval_error}_count` → `_total`, and the 2 cross-mode metrics drop the misleading `alert_email_*` prefix (`alert_email_send_count` → `email_send_total`, `alert_email_base_url_fallback_count` → `email_base_url_fallback_total`). Phase 1.6 (combined): retire two redundant counters now rather than after rollout — `alerts_create_count` (fully duplicates `sum(notification_rules_alert_total)` since every alert hits exactly one outcome branch) and `semantic_email_flag_check_total` (`notification_rules_alert_total{outcome=skipped_flag_disabled}` covers rollout-%; the 11-value `reason` enum's other reasons were noise). `SemanticEmailCommands.enabled?` refactored to return raw booleans, dropping the `emit_and_return` + `category_gated` private helpers. Phase 2 (combined into Phase 1 — shipped): strip `domain_id` from `notification_rules_alert_total`, `notification_rules_email_total` after a clean NR audit (no `NrDashboardWidget` references, no log-text matches, rollout still at `su0`-only blast radius). Phase 2 also folded in the recipient-gauges-to-histogram conversion (4 `email_total/to/cc/bcc_recipients` gauges → 1 `email_dispatch_recipients{type, header}` histogram). Phase 4 (follow-up): direct-builder dispatch instrumentation.
+overview: Ship four operator-facing signals for the brand-new unified-notifications subsystems — notification rules engine, notification channel router, and semantic email rendering — as one coordinated change so the `otel-collector-ops` exclude update and the nutella metric renames land together (a phase-1-only anchored wildcard would have silently dropped the new `email_render_*` / `email_batch_*` Phase 2 names — the same bug we're fixing, reproduced in the new namespace). Phase 1 (combined): delete `su0`'s unanchored `- email_(.*)` exclude line entirely (parity with the other 11 overlays; cardinality audit cleared the 7 legacy gauges since none carry `domain_id` and the Prometheus-mirror rationale is obsolete) + ship `email_render_duration_ms`, `email_render_fallback_total`, `email_batch_capped_out_total`, and `notification_rules_engine_delivered_total{channel, delivery_mode}` (direct rename — no dual-emit). Phase 1.5 (combined): suffix-normalize the remaining 5 surviving in-scope counters to `_total` per OTel convention — `notification_rules_{alert,email,condition_eval_error}_count` → `_total`, and the 2 cross-mode metrics drop the misleading `alert_email_*` prefix (`alert_email_send_count` → `email_send_total`, `alert_email_base_url_fallback_count` → `email_base_url_fallback_total`). Phase 1.6 (combined): retire two redundant counters now rather than after rollout — `alerts_create_count` (fully duplicates `sum(notification_rules_alert_total)` since every alert hits exactly one outcome branch) and `semantic_email_flag_check_total` (`notification_rules_alert_total{outcome=skipped_flag_disabled}` covers rollout-%; the 11-value `reason` enum's other reasons were noise). `SemanticEmailCommands.enabled?` refactored to return raw booleans, dropping the `emit_and_return` + `category_gated` private helpers. Phase 1.7 (combined): naming-consistency pass on the surviving names — `notification_rules_engine_delivered_total` → `notification_rules_delivery_total` (drop redundant `engine_` + verb→noun), `notification_rules_condition_eval_error_total` → `notification_rules_error_total` (`stage` attribute distinguishes evaluators), `EmailMetrics.emit_alert_send` → `emit_send` (method-name catchup with Phase 1.5 metric rename), `email_base_url_fallback_total` → `email_base_url_unresolved_total` (disambiguate from `email_render_fallback_total`), `email_batch_capped_out_total` → `email_batch_dropped_total{reason}` (drop jargon + add extensibility attribute). Phase 2 (combined into Phase 1 — shipped): strip `domain_id` from `notification_rules_alert_total`, `notification_rules_email_total` after a clean NR audit (no `NrDashboardWidget` references, no log-text matches, rollout still at `su0`-only blast radius). Phase 2 also folded in the recipient-gauges-to-histogram conversion (4 `email_total/to/cc/bcc_recipients` gauges → 1 `email_dispatch_recipients{type, header}` histogram). Phase 4 (follow-up): direct-builder dispatch instrumentation.
 todos:
   - id: phase-1-otel-remove-exclude
     content: "Phase 1 [DONE]: delete the unanchored `- email_(.*)` exclude line entirely from `overlays/latest/latest0/su0/stdplat-a-1-latest0-su0/config_map.yaml`. The original rationale (mirror to Prometheus, which is broken for `alert_email_*` anyway) is obsolete, and a cardinality audit confirmed all 7 legacy `email_*` gauges carry only closed-enum attributes (no `domain_id`). The other 11 overlays already let `email_*` flow; `su0` now matches. The intermediate explicit-list approach was abandoned in favor of one-line removal."
@@ -31,6 +31,9 @@ todos:
     status: completed
   - id: phase-1.6-retire-redundant-counters
     content: "Phase 1.6 (retire redundant counters) [DONE — folded into Phase 1 PR]: `alerts_create_count` retired (fully duplicates `sum(notification_rules_alert_total)` since every alert hits exactly one outcome branch). `semantic_email_flag_check_total` retired (rollout-% covered by `notification_rules_alert_total{outcome=skipped_flag_disabled}` and `notification_rules_email_total{reason=flag_disabled}`; niche `category_disabled` + `error` sub-reasons accepted as loss). `SemanticEmailCommands.enabled?` refactored to return raw booleans, dropping the `emit_and_return` and `category_gated` private helpers. Touch points: 2 method removals in `notification_metrics.rb` + `email_metrics.rb`, 4 emit-site deletions in `notification_engine.rb`, `alert_commands.rb`, `alert_helpers.rb`, `enabled?` rewrite + 2 helper deletions in `semantic_email_commands.rb`, error-message update in `semantic_email_preview.rb`. 11 specs trimmed across 4 spec files."
+    status: completed
+  - id: phase-1.7-naming-consistency
+    content: "Phase 1.7 (naming consistency cleanup) [DONE — folded into Phase 1 PR]: 5 fixes to make the surviving in-scope names consistent and meaningful. (1) `notification_rules_engine_delivered_total` -> `notification_rules_delivery_total` — dropped redundant `engine_` token (already lives in NotificationMetrics) and verb->noun (`delivered`->`delivery`). Method `emit_engine_delivered` -> `emit_delivery`. (2) `notification_rules_condition_eval_error_total` -> `notification_rules_error_total` — collapsed `condition_eval_error` (verb stutter) to `error`; the existing `stage` attribute (now `condition`/`recipient_context`) distinguishes evaluators. Method `emit_condition_eval_error` -> `emit_error`. Stage value `:evaluate` renamed to `:condition` for noun-noun symmetry with `:recipient_context`. (3) Method `EmailMetrics.emit_alert_send` -> `emit_send` — drops misleading `alert_` prefix to match the metric name (Phase 1.5 already dropped the prefix on the metric). Description updated to reflect cross-pipeline scope. (4) Method `EmailMetrics.emit_alert_base_url_fallback` -> `emit_base_url_unresolved` AND metric `email_base_url_fallback_total` -> `email_base_url_unresolved_total` — disambiguates from `email_render_fallback_total` (different fallback concept). (5) Method `emit_batch_capped_out` -> `emit_batch_dropped(reason: \"cap\")` AND metric `email_batch_capped_out_total` -> `email_batch_dropped_total{reason}` — drops jargon `capped_out`, adds `reason` attribute for extensibility. 181/181 specs pass."
     status: completed
   - id: phase-4-direct-builder-wiring
     content: "Phase 4 (follow-up): instrument direct-builder dispatch paths (`EmailCommands.send_<kind>_email` family) to call `EmailMetrics.emit_render_duration(..., \"direct\", ...)` and `EmailMetrics.emit_render_fallback(..., delivery_mode: \"direct\")`. Today direct-builder MJML latency and fallback emits are not instrumented. Requires deciding what `rule` and `channel` mean for non-rule-backed direct sends (likely `rule: nil`, `channel: \"email\"`)."
@@ -106,7 +109,8 @@ Phase 1 fixes both. Phases 2-4 are cardinality / post-rollout cleanup that follo
 | 2.1 Recipient gauges → histogram | **shipped (local diff)** | `email_total/to/cc/bcc_recipients` (4 gauges) → `email_dispatch_recipients{type, header}` (1 histogram). |
 | 1.5 Counter-suffix normalization | **shipped (local diff)** | 6 in-scope counters renamed to `_total` per OTel convention; 2 of them also drop the misleading `alert_email_*` prefix. |
 | 1.6 Retire redundant counters | **shipped (local diff)** | `alerts_create_count` retired (fully duplicates `sum(notification_rules_alert_total)`). `semantic_email_flag_check_total` retired (`notification_rules_alert_total{outcome=skipped_flag_disabled}` covers rollout-%; the 11-value `reason` enum eliminated). `SemanticEmailCommands.enabled?` refactored to return raw booleans; private helpers `emit_and_return` + `category_gated` removed. |
-| Spec + README updates | **shipped (local diff)** | 6 spec files + `README_SEMANTIC_EMAIL.md` + `PROJECT.md` Metrics tables + Troubleshooting rows updated. 166/166 affected specs pass. |
+| 1.7 Naming consistency cleanup | **shipped (local diff)** | 5 fixes: `engine_delivered` -> `delivery` (drop redundant token + verb->noun); `condition_eval_error` -> `error` (drop verb stutter; `stage` attribute distinguishes); `emit_alert_send` -> `emit_send` (method-name catchup with Phase 1.5); `base_url_fallback` -> `base_url_unresolved` (disambiguate from `render_fallback`); `batch_capped_out` -> `batch_dropped{reason}` (drop jargon + extensibility). |
+| Spec + README updates | **shipped (local diff)** | 8 spec files + `README_SEMANTIC_EMAIL.md` + `PROJECT.md` Metrics tables + Troubleshooting rows updated. 181/181 affected specs pass. |
 | Phase 4 — direct-builder dispatch instrumentation | not started | Requires deciding `rule: nil`, `channel: "email"`, `delivery_mode: "direct"` shape. |
 
 ## Architecture (current state)
@@ -179,13 +183,13 @@ SELECT count(*) FROM Metric
 WHERE metricName IN (
   'otel_email_render_duration_ms',
   'otel_email_render_fallback_total',
-  'otel_email_batch_capped_out_total',
-  'otel_notification_rules_engine_delivered_total',
+  'otel_email_batch_dropped_total',
+  'otel_notification_rules_delivery_total',
   'otel_email_send_total',
   'otel_notification_rules_alert_total',
   'otel_notification_rules_email_total',
-  'otel_notification_rules_condition_eval_error_total',
-  'otel_email_base_url_fallback_total',
+  'otel_notification_rules_error_total',
+  'otel_email_base_url_unresolved_total',
   'otel_email_dispatch_recipients'
 )
 FACET metricName, scale_unit
@@ -379,9 +383,9 @@ After this PR, the in-scope set is 9 metrics (down from 12; two retired in Phase
 | Metric | Type | Attributes |
 |---|---|---|
 | `notification_rules_alert_total` | counter | `outcome` (`routed`/`skipped_no_rule`/`skipped_user_opted_out`/`skipped_actor_suppressed`/`skipped_condition_not_met`/`skipped_flag_disabled`), `kind`, optional `rule` |
-| **`notification_rules_engine_delivered_total`** *(Signal #1)* | counter | `kind`, `rule`, **`channel`** (singular), **`delivery_mode`** (`immediate`/`batched`/`direct`) |
+| **`notification_rules_delivery_total`** *(Signal #1)* | counter | `kind`, `rule`, **`channel`** (singular), **`delivery_mode`** (`immediate`/`batched`/`direct`) |
 | `notification_rules_email_total` | counter | `outcome` (`allowed`/`blocked`/`skipped`/`error`), `type`, optional `reason`, optional `rule` |
-| `notification_rules_condition_eval_error_total` | counter | `stage` (`evaluate`/`recipient_context`) |
+| `notification_rules_error_total` | counter | `stage` (`condition`/`recipient_context`) — fail-open exceptions during rule evaluation |
 
 `sum(notification_rules_alert_total)` is the total-alerts denominator (every alert hits exactly one outcome branch); no separate creation counter needed.
 
@@ -391,24 +395,24 @@ After this PR, the in-scope set is 9 metrics (down from 12; two retired in Phase
 |---|---|---|
 | **`email_render_duration_ms`** *(Signal #2)* | histogram | `pipeline`, `delivery_mode` (`immediate`/`batched`/`direct`), `kind` |
 | **`email_render_fallback_total`** *(Signal #3)* | counter | `kind?`, `reason`, `delivery_mode`, `scope?` (`digest`) |
-| **`email_batch_capped_out_total`** *(Signal #4)* | counter | `pipeline`, `kind` |
+| **`email_batch_dropped_total`** *(Signal #4)* | counter | `pipeline`, `kind`, `reason` (`cap` today; extensible) |
 | `email_send_total` | counter | `pipeline`, `delivery_mode`, `kind`, `outcome` |
-| `email_base_url_fallback_total` | counter | `reason` (`nil_alert`/`nil_domain_id`/`domain_not_found`/`exception`) |
+| `email_base_url_unresolved_total` | counter | `reason` (`nil_alert`/`nil_domain_id`/`domain_not_found`/`exception`) |
 
 ### Renamed / merged / retired
 
 | Was | Disposition | Successor / replacement |
 |---|---|---|
-| `notification_rules_engine_delivered_count` | reshaped (Signal #1) | `notification_rules_engine_delivered_total` |
+| `notification_rules_engine_delivered_count` | reshaped (Signal #1) then renamed (Phase 1.7) | `notification_rules_delivery_total` |
 | `alert_email_render_latency` | renamed (Signal #2) | `email_render_duration_ms` |
 | `alert_email_immediate_fallback_count` | merged (Signal #3) | `email_render_fallback_total{delivery_mode="immediate"}` |
 | `alert_email_digest_fallback_count` | merged (Signal #3) | `email_render_fallback_total{delivery_mode="batched"}` (or `scope="digest"` for envelope failures) |
-| `alert_email_digest_capped_out_count` | renamed (Signal #4) | `email_batch_capped_out_total` |
+| `alert_email_digest_capped_out_count` | renamed (Signal #4) then renamed again (Phase 1.7) | `email_batch_dropped_total{reason="cap"}` |
 | `notification_rules_alert_count` | suffix-normalized (Phase 1.5) | `notification_rules_alert_total` |
 | `notification_rules_email_count` | suffix-normalized (Phase 1.5) | `notification_rules_email_total` |
-| `notification_rules_condition_eval_error_count` | suffix-normalized (Phase 1.5) | `notification_rules_condition_eval_error_total` |
+| `notification_rules_condition_eval_error_count` | suffix-normalized (Phase 1.5) then renamed (Phase 1.7) | `notification_rules_error_total` |
 | `alert_email_send_count` | renamed (Phase 1.5) | `email_send_total` (drops `alert_` prefix; cross-mode metric) |
-| `alert_email_base_url_fallback_count` | renamed (Phase 1.5) | `email_base_url_fallback_total` (drops `alert_` prefix) |
+| `alert_email_base_url_fallback_count` | renamed (Phase 1.5) then renamed (Phase 1.7) | `email_base_url_unresolved_total` |
 | `alerts_create_count` | retired (Phase 1.6) | `sum(notification_rules_alert_total)` covers it |
 | `semantic_email_flag_check_count` / `_total` | retired (Phase 1.6) | `notification_rules_alert_total{outcome="skipped_flag_disabled"}` + `notification_rules_email_total{reason="flag_disabled"}` |
 
@@ -445,6 +449,7 @@ These belong in **logs** (which `EventLogger` already captures with full context
 | 1 | Low — direct rename (no dual-emit). Old metric names disappear from NR immediately; the four new names appear. No external dashboards depend on the old names yet (rollout is at su0 only). | Revert both PRs (otel-collector-ops + nutella); old methods + metric names reappear; new ones disappear. No data loss. |
 | 1.5 | Low — pure string replacements; NRQL audit pre-cleared (0 dashboard / 0 log references). | Revert the nutella PR. |
 | 1.6 | Low — retired metrics had complete successors emitting today; no signal loss for rollout-% / total-alerts denominator. Two niche sub-signals (`category_disabled`, FF-lookup `error`) accepted as cost. | Revert the nutella PR; re-add `emit_alert_created` + `emit_semantic_email_flag_check` and their call sites. |
+| 1.7 | Low — pure renames (constants, methods, metric names, attribute values). NRQL audit pre-cleared for all four touched metrics and the `stage` attribute values. | Revert the nutella PR. |
 | 2 | Medium — per-metric audit gates each `domain_id` strip. | Reversible via otel-collector-ops revert. |
 | 4 | Low — additive; direct-builder paths gain instrumentation they don't have today. | Revert the wiring PR. |
 
