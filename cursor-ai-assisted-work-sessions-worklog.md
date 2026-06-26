@@ -6178,3 +6178,49 @@ Combined Phase 1 + Phase 2 of the unified-notifications email-metrics normalizat
 - **Jira:** HS-186448 (selected by user; umbrella references HS-184923, HS-184956/957, HS-180590, HS-185865, HS-185447).
 
 ---
+
+## 2026-06-26 - Email metrics normalization: Phase 1.5-1.8 (suffix normalize, retire 2 redundant counters, naming cleanup, operator-question coverage + failure-path logging)
+
+**Type:** milestone
+**Repository:** nutella + cursor-worklog
+**Branch:** `email-metrics-normalization` (nutella, same branch as the Phase 1+2 milestone earlier today)
+**PR:** https://github.com/highspot/nutella/pull/73245 (same PR — extended with 4 additional commits)
+**Files Changed:**
+- nutella: `web/common/email/{email_metrics.rb,email_commands.rb,semantic_email_commands.rb,semantic/builders/base.rb,README_SEMANTIC_EMAIL.md,PROJECT.md}`
+- nutella: `web/common/notifications/rules/{notification_metrics.rb,notification_engine.rb,notification_channel_router.rb,notification_rule_conditions.rb}`
+- nutella: `web/common/models/commands/alerts/alert_commands.rb`
+- nutella: 9 spec files (notifications + email + alert commands + builder base)
+- `cursor-worklog/unified_notifications/email_metrics_normalization_bf839f02.plan.md` (4 status rows + Phase 1.8 section)
+
+**Summary:**
+Extended the Phase 1+2 PR with four follow-on phases before merge. After the operator (the user) asked whether the 9-metric set could answer a specific list of operational questions — channel failure rate, FF-vs-category split during rollout, semantic-vs-legacy send counts, opt-out suppression, envelope render latency — the audit surfaced 7 gaps. All closed in this PR rather than deferred. Six logging fixes shipped alongside to give failure paths the triage context that metrics alone don't carry.
+
+**Changes Made:**
+- **Phase 1.5 — counter suffix normalization (`_count` → `_total`, drop misleading `alert_` prefixes):** 6 counters renamed in one pass — `notification_rules_alert_count`, `notification_rules_email_count`, `notification_rules_condition_eval_error_count`, `alert_email_send_count`, `alert_email_base_url_fallback_count`, plus `semantic_email_flag_check_count`. The `alert_` prefix was misleading because the underlying metric is cross-pipeline (semantic + legacy both emit) — disambiguated via the `pipeline` attribute instead. Direct rename, no dual-emit.
+- **Phase 1.6 — retire 2 redundant counters now (vs. deferring):** Removed `alerts_create_count` (every alert hits exactly one outcome branch in `notification_rules_alert_total`, so `sum(notification_rules_alert_total)` is the total-alerts denominator — no separate creation counter needed) and `semantic_email_flag_check_total` (the `notification_rules_alert_total{outcome="skipped_flag_disabled"}` outcome covers FF-disabled cases; the `reason` attribute added in Phase 1.8 covers the niche `category_disabled` / `unsupported` / `exception` branches that the retired counter previously distinguished). `SemanticEmailCommands.enabled?` rewritten to return raw booleans; the `emit_and_return` and `category_gated` private helpers (which only existed to thread the metric `reason` through the return path) dropped. The Phase 1.8 `enabled_with_reason` method later reintroduced the `reason` channel where it was actually needed.
+- **Phase 1.7 — naming consistency cleanup on the surviving 9 metrics:** 5 fixes — `engine_delivered` → `delivery` (drop redundant token + verb→noun for symmetry with `alert_total` / `email_total`); `condition_eval_error` → `error` (drop verb stutter; `stage` attribute already distinguishes `condition` vs `recipient_context`); `emit_alert_send` method-name catchup with Phase 1.5; `base_url_fallback` → `base_url_unresolved` (disambiguate from `render_fallback` — two `_fallback_` metrics measured different fallback paths); `batch_capped_out` → `batch_dropped{reason}` (drop jargon, add extensible reason enum).
+- **Phase 1.8 — operator-question coverage (7 metric additions, A-G):**
+  - **A. Per-channel failure outcome.** `NotificationChannelRouter.route` now returns `[delivered, failed]` tuple instead of a single delivered array. The per-channel exception rescue appends to the `failed` collector so the engine can emit `notification_rules_delivery_total{outcome="failed",channel}` — channel failure rate is now aggregable in NRQL via `sum{outcome=failed} / sum{*}` per channel, not just spelunkable in logs.
+  - **B. FF-vs-category split on `skipped_flag_disabled`.** New public `SemanticEmailCommands.enabled_with_reason` method returns `{enabled:, reason:}` where `reason` ∈ `{ff_off, category_disabled, unsupported, exception}`. `AlertCommands.create` uses the wrapped form so `notification_rules_alert_total{outcome="skipped_flag_disabled"}` carries the `reason` attribute. The pre-existing `enabled?` delegates to the wrapped form for backward compat.
+  - **C. `delivery_mode` on `routed` outcome.** Derived from `rule.aggregation_type` (`"time_based"` → `"batched"`, else `"immediate"`) and computed before the metric emit, so dashboards can split immediate-vs-batched routing intent.
+  - **D. Legacy `email_send_total` emit.** `EmailCommands.send_alert` (legacy immediate) and `send_alerts` (legacy batched, per entry) now emit `email_send_total{pipeline="legacy",outcome,delivery_mode,kind}`. `send_alerts` snapshots `per_entry_kinds` from the update-timestamp result before the send so the kind is available in both success and failure branches. Semantic-vs-legacy send counts can now be answered with a single faceted query.
+  - **E. `delivery_mode "digest" → "batched"`** normalization in `SemanticEmailCommands.send_semantic_digest` so semantic + legacy batched share one mode value.
+  - **F. Envelope render latency.** `email_render_duration_ms` gains optional `scope` attribute. `Benchmark.measure` now wraps the digest framework's MJML envelope render and emits `scope="envelope", kind="digest"`. Per-entry observations keep the default (scope omitted). Full digest render time = sum of per-entry observations + matching envelope observation.
+  - **G. Opt-out suppression outcome.** `email_send_total{outcome="suppressed"}` now fires when `EmailCommands.disable_email?` short-circuits in both semantic (`SemanticEmailCommands.send_alert`) and legacy (`EmailCommands.send_alert`) immediate paths.
+- **Phase 1.8 — failure-path logging fixes (L1-L6):**
+  - **L1.** `EmailContentBuilder::Base#alert_base_url` rescue: `EventLogger.debug` → `EventLogger.warn` with `alert_id` / `kind` / `domain_id` context. Silent brand-URL degradation (recipients landing on `app.highspot.com` instead of their tenant subdomain — a real production-grade failure mode) was previously DEBUG-only and invisible in standard log streams. Now grep-able.
+  - **L2/L3.** `NotificationRuleConditions#{evaluate,recipient_context}` rescues add `rule` (and `condition_keys` for `evaluate`) to the existing `EventLogger.error` payloads.
+  - **L4.** `SemanticEmailCommands.send_alert` opt-out short-circuit now logs `EventLogger.info` (was silent). Pairs with metric G.
+  - **L5.** `SemanticEmailCommands.send_alert` send-failure (nil return from `EmailCommands.send_email`) now logs `EventLogger.warn` with `alert_id` / `kind` / `to_user_id` / `pipeline` alongside the metric emit.
+  - **L6.** `SemanticEmailCommands.{flag_enabled_for_user?,rollout_flag_enabled_for_domain?}` rescues now log `EventLogger.warn` with the exception (was silent swallow defaulting to `false`). LD-client exceptions previously left zero signal — defaulted to "FF off" with no indication anything had broken.
+- **Spec coverage:** 382/382 affected specs pass across the 9 spec files (NotificationMetrics, NotificationChannelRouter, NotificationEngine, NotificationRuleConditions, EmailMetrics, AlertCommands+NotificationEngine integration, EmailContentBuilder::Base#alert_base_url, SemanticEmailCommands, EmailCommands). All RuboCop / pre-commit hooks pass.
+- **Plan doc:** Phase 1.5/1.6/1.7/1.8 rows added to the status table. Phase 1.8 section added inline (operator-question × metric coverage matrix, 7 metric additions A-G, 6 logging fixes L1-L6, rollback row). Routing-layer and rendering-layer metric tables updated with new attributes.
+- **README + PROJECT.md:** `README_SEMANTIC_EMAIL.md` Metrics + Troubleshooting tables note the new attributes (`outcome` on delivery, `reason` on alert, `scope` on render duration, `suppressed` outcome on send), new dashboards (per-channel failure rate, semantic-vs-legacy pipeline split, opt-out suppression rate, FF-vs-category gap), and new log greps. `PROJECT.md` §6 metric pointers list the full Phase 1.8 attribute set.
+
+**Notes:**
+- **Why close these gaps in this PR vs. defer.** Three of the seven additions (A, C, D) require persistent attribute shapes that future dashboards will assume. Adding them after a dashboard set goes live forces a dual-emit migration. Cheaper to land the contract before the dashboards exist. The other four (B, E, F, G) are local consistency / new-emit-from-silent-path fixes with no migration cost.
+- **One signature change worth flagging on review.** `NotificationChannelRouter.route` now returns `[delivered, failed]` tuple instead of a single array. The only caller is `NotificationEngine` (same PR). Tests updated.
+- **L1 is the most operationally costly fix.** Silent brand-URL degradation (legacy DEBUG log) manifests as recipients clicking through to the wrong tenant subdomain — a class of bug that's currently invisible without enabling DEBUG logging in production. The fallback path also increments `email_base_url_unresolved_total{reason}`, but the metric only tells you it's happening — the log now tells you which alert / kind / domain triggered it.
+- **Jira:** HS-186448 (same ticket as the Phase 1+2 milestone earlier today).
+
+---
