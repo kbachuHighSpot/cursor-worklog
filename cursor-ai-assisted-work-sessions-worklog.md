@@ -6133,3 +6133,48 @@ A `mail_v2` job (https://api.highspot.com/jobs/6a2b136bf11306b8ea8d70db) for an 
 - Owned by App Platform via HS-189038. Two suggested remediation options in the ticket: (a) recycle the SMTPTransport every ~90 messages, or (b) catch `SMTPSendFailedException` with code 421 and reconnect+retry the failing recipient inside the loop.
 
 ---
+
+## 2026-06-26 - Email metrics normalization: Phase 1+2 (4 signals + domain_id strip + recipient histogram)
+
+**Type:** milestone
+**Repository:** nutella + otel-collector-ops + cursor-worklog (multi-repo)
+**Branch:** `email-metrics-normalization` (nutella), `email-metrics-unblock` (otel-collector-ops)
+**PR:**
+- nutella: https://github.com/highspot/nutella/pull/73245
+- otel-collector-ops: https://github.com/highspot/otel-collector-ops/pull/385
+**Files Changed:**
+- `nutella/web/common/email/{email_metrics.rb,email_commands.rb,semantic_email_commands.rb,README_SEMANTIC_EMAIL.md}`
+- `nutella/web/common/notifications/rules/{notification_metrics.rb,notification_engine.rb}`
+- `nutella/web/common/models/commands/alerts/{alert_commands.rb,alert_helpers.rb}`
+- 6 spec files (email + notifications + alert commands)
+- `otel-collector-ops/overlays/latest/latest0/su0/stdplat-a-1-latest0-su0/config_map.yaml`
+- `cursor-worklog/unified_notifications/email_metrics_normalization_bf839f02.plan.md`
+
+**Summary:**
+Combined Phase 1 + Phase 2 of the unified-notifications email-metrics normalization plan, shipped as a multi-repo coordinated change. The four new operator-facing signal names land in the `email_*` namespace at the same time the `su0` collector overlay deletes the unanchored `- email_(.*)` exclude line, so neither side silently drops the other. Folded in the `domain_id` strip on three new-engine counters after a clean NR audit, plus the recipient-gauges-to-histogram conversion (originally deferred to a follow-up plan, but the audit surfaced it as low-hanging cardinality work).
+
+**Changes Made:**
+- **Phase 1 (4 signal renames, direct rename):**
+  - `notification_rules_engine_delivered_count{channels="email,push,toast"}` → `notification_rules_engine_delivered_total{channel, delivery_mode}` (per-channel emit; caller loops over `channels_delivered` and derives `delivery_mode` from `rule.aggregation_type`)
+  - `EmailMetrics.emit_alert_render_latency` → `emit_render_duration` (metric `email_render_duration_ms`)
+  - `emit_alert_immediate_fallback` + `emit_alert_digest_fallback` → `emit_render_fallback(reason:, delivery_mode:, kind:, scope:)` (one counter `email_render_fallback_total`; `scope: "digest"` replaces the `kind="all"` sentinel)
+  - `emit_alert_digest_capped_out` → `emit_batch_capped_out` (metric `email_batch_capped_out_total`)
+- **Phase 2 (domain_id strip on 3 NotificationMetrics counters):**
+  - Stripped from `emit_alert`, `emit_alert_created`, `emit_email`, plus the `EmailCommands.emit_rule_metric` wrapper.
+  - 11 production emit sites updated across `notification_engine.rb`, `alert_commands.rb`, `alert_helpers.rb`, `email_commands.rb`.
+  - Cardinality justification: at `su0`-only rollout the counters show 31 distinct domain_id values; at full rollout (5,000+ tenants) this would inflate ~150×. The cardinality contract bans `domain_id`; stripping now is cheaper than walking back later.
+  - NR audit pre-clearance: zero NrDashboardWidget exposure, zero log-text matches for the 3 metric names over 7 days, rollout still at `su0`-only blast radius.
+- **Phase 2 (recipient histogram):**
+  - 4 last-write-wins gauges (`email_total/to/cc/bcc_recipients`) → 1 `email_dispatch_recipients{type, header}` histogram with buckets `[1, 2, 5, 10, 25, 50, 100, 500, 1000]`. The gauge shape was wrong for a per-send recipient count question.
+- **Collector overlay:**
+  - Deleted the entire `- email_(.*)` exclude line from `su0` (not replaced with an explicit per-name list — the intermediate approach was implemented and rolled back once the audit cleared the 7 legacy `email_*` gauges and confirmed the Prometheus-mirror rationale was obsolete). All 11 other overlays already let `email_*` flow; `su0` now matches.
+- **Spec coverage:** 250/250 affected specs pass across the 4 affected spec files. All RuboCop / pre-commit hooks pass on nutella.
+- **Plan doc:** Updated `email_metrics_normalization_bf839f02.plan.md` overview, todos, implementation status table, architecture diagram (after-shipped), Phase 1.0 section (rewrote as one-line removal), Phase 2 section (rewrote as "shipped — folded into Phase 1"), canonical metric set table notes, deferred follow-up appendix (removed recipient-gauges entry, since they shipped).
+
+**Notes:**
+- **Deploy order matters.** Nutella PR ships first (start emitting under new metric names; old names disappear immediately, no dual-emit). Then otel-collector-ops PR ships second (removes the exclude that was blocking the new `email_*` namespace from reaching NR). Reverse order would briefly drop new metrics for the duration of the gap.
+- **Risk profile:** Low. The four operator-facing signals were already invisible to NR before this change (the exclude blocked them since the OTel cutover), so there are no external dashboards depending on old names. Cardinality strip pre-clearance was deliberately performed against the current `su0`-only rollout to give the conservative ceiling on domain count.
+- **Follow-up plan stays in scope of its own file.** Legacy `EmailCommands.send_email` instrumentation cleanup (SendGrid StatsD → OTel, BulkPitch success/failure pair collapses, dispatch-counter merge, `email_event_count` rename, `domain_id` strip on the remaining 14 legacy metrics) is explicitly out of scope here and remains in the "Deferred follow-up" appendix of the plan.
+- **Jira:** HS-186448 (selected by user; umbrella references HS-184923, HS-184956/957, HS-180590, HS-185865, HS-185447).
+
+---
