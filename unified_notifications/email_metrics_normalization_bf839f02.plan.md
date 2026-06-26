@@ -35,6 +35,9 @@ todos:
   - id: phase-1.7-naming-consistency
     content: "Phase 1.7 (naming consistency cleanup) [DONE — folded into Phase 1 PR]: 5 fixes to make the surviving in-scope names consistent and meaningful. (1) `notification_rules_engine_delivered_total` -> `notification_rules_delivery_total` — dropped redundant `engine_` token (already lives in NotificationMetrics) and verb->noun (`delivered`->`delivery`). Method `emit_engine_delivered` -> `emit_delivery`. (2) `notification_rules_condition_eval_error_total` -> `notification_rules_error_total` — collapsed `condition_eval_error` (verb stutter) to `error`; the existing `stage` attribute (now `condition`/`recipient_context`) distinguishes evaluators. Method `emit_condition_eval_error` -> `emit_error`. Stage value `:evaluate` renamed to `:condition` for noun-noun symmetry with `:recipient_context`. (3) Method `EmailMetrics.emit_alert_send` -> `emit_send` — drops misleading `alert_` prefix to match the metric name (Phase 1.5 already dropped the prefix on the metric). Description updated to reflect cross-pipeline scope. (4) Method `EmailMetrics.emit_alert_base_url_fallback` -> `emit_base_url_unresolved` AND metric `email_base_url_fallback_total` -> `email_base_url_unresolved_total` — disambiguates from `email_render_fallback_total` (different fallback concept). (5) Method `emit_batch_capped_out` -> `emit_batch_dropped(reason: \"cap\")` AND metric `email_batch_capped_out_total` -> `email_batch_dropped_total{reason}` — drops jargon `capped_out`, adds `reason` attribute for extensibility. 181/181 specs pass."
     status: completed
+  - id: phase-1.8-operator-question-coverage
+    content: "Phase 1.8 (operator-question coverage) [DONE — folded into Phase 1 PR]: close the gaps surfaced by an audit of the 9 canonical metrics against operator questions (channel failure rates, FF-vs-category split, batched-vs-immediate skips, legacy send count, opt-out suppression, envelope render). 7 metric additions + 6 logging fixes. Metrics: (A) `notification_rules_delivery_total` gains `outcome ∈ {delivered, failed}`; router rescue threads channel into a `failed` accumulator the engine emits as `outcome=failed`. (B) `notification_rules_alert_total{outcome=skipped_flag_disabled}` gains `reason ∈ {ff_off, category_disabled, unsupported, exception}`; new `SemanticEmailCommands.enabled_with_reason` exposes the gate's decision tuple; `enabled?` delegates. (C) `notification_rules_alert_total{outcome=routed}` gains `delivery_mode` derived from `rule.aggregation_type`. (D) `email_send_total{pipeline=legacy}` now emitted from `EmailCommands.send_alert` (immediate) and `EmailCommands.send_alerts` (digest); the per-entry kind list is snapshotted before send so the rescue branch still attributes per-kind failure outcomes. (E) `delivery_mode=\"digest\"` -> `\"batched\"` at the per-entry digest emit (consistency with the rest of the cardinality contract). (F) `email_render_duration_ms` gains optional `scope` attribute; the digest envelope MJML render is now timed and emitted with `scope=\"envelope\", kind=\"digest\"` so per-entry sum + envelope time = full digest render cost. (G) `email_send_total{outcome=\"suppressed\"}` emitted on `disable_email?` short-circuit in both `SemanticEmailCommands.send_alert` and the legacy `EmailCommands.send_alert` path. Logging: (L1) `alert_base_url` DomainQueries rescue bumped from `EventLogger.debug` to `EventLogger.warn` with `alert_id`/`kind`/`domain_id` payload (silent brand-URL degradation now visible). (L2) `NotificationRuleConditions#evaluate` rescue gains `rule` + `condition_keys` payload. (L3) `recipient_context` rescue gains `rule` payload. (L4) opt-out short-circuit gains `EventLogger.info` with `kind`/`alert_id`/`to_user_id`. (L5) `send_email` returning nil now logs `EventLogger.warn` with `kind`/`alert_id`/`to_user_id`/`pipeline` alongside the existing `email_send_total{outcome=failure}` (metric + log triage parity). (L6) `flag_enabled_for_user?` and `rollout_flag_enabled_for_domain?` rescues bumped from silent swallow to `EventLogger.warn` with the exception + `user_id`/`domain_id` (FF client exceptions no longer invisible). 455/455 affected specs pass."
+    status: completed
   - id: phase-4-direct-builder-wiring
     content: "Phase 4 (follow-up): instrument direct-builder dispatch paths (`EmailCommands.send_<kind>_email` family) to call `EmailMetrics.emit_render_duration(..., \"direct\", ...)` and `EmailMetrics.emit_render_fallback(..., delivery_mode: \"direct\")`. Today direct-builder MJML latency and fallback emits are not instrumented. Requires deciding what `rule` and `channel` mean for non-rule-backed direct sends (likely `rule: nil`, `channel: \"email\"`)."
     status: not_started
@@ -110,7 +113,8 @@ Phase 1 fixes both. Phases 2-4 are cardinality / post-rollout cleanup that follo
 | 1.5 Counter-suffix normalization | **shipped (local diff)** | 6 in-scope counters renamed to `_total` per OTel convention; 2 of them also drop the misleading `alert_email_*` prefix. |
 | 1.6 Retire redundant counters | **shipped (local diff)** | `alerts_create_count` retired (fully duplicates `sum(notification_rules_alert_total)`). `semantic_email_flag_check_total` retired (`notification_rules_alert_total{outcome=skipped_flag_disabled}` covers rollout-%; the 11-value `reason` enum eliminated). `SemanticEmailCommands.enabled?` refactored to return raw booleans; private helpers `emit_and_return` + `category_gated` removed. |
 | 1.7 Naming consistency cleanup | **shipped (local diff)** | 5 fixes: `engine_delivered` -> `delivery` (drop redundant token + verb->noun); `condition_eval_error` -> `error` (drop verb stutter; `stage` attribute distinguishes); `emit_alert_send` -> `emit_send` (method-name catchup with Phase 1.5); `base_url_fallback` -> `base_url_unresolved` (disambiguate from `render_fallback`); `batch_capped_out` -> `batch_dropped{reason}` (drop jargon + extensibility). |
-| Spec + README updates | **shipped (local diff)** | 8 spec files + `README_SEMANTIC_EMAIL.md` + `PROJECT.md` Metrics tables + Troubleshooting rows updated. 181/181 affected specs pass. |
+| 1.8 Operator-question coverage | **shipped (local diff)** | 7 metric additions (A: `outcome` on `delivery_total` + failed-channel emit; B: `reason` on `skipped_flag_disabled`; C: `delivery_mode` on `routed` outcome; D: legacy `email_send_total` emit; E: `digest`->`batched` normalization; F: `scope=envelope` render observation; G: `outcome=suppressed` on opt-out) + 6 logging fixes (L1: base_url DEBUG->WARN with context; L2-L3: condition-eval rule context; L4: opt-out log; L5: send-failure log; L6: FF rescue logs). 455/455 affected specs pass. |
+| Spec + README updates | **shipped (local diff)** | 9 spec files + `README_SEMANTIC_EMAIL.md` + `PROJECT.md` Metrics tables + Troubleshooting rows updated. |
 | Phase 4 — direct-builder dispatch instrumentation | not started | Requires deciding `rule: nil`, `channel: "email"`, `delivery_mode: "direct"` shape. |
 
 ## Architecture (current state)
@@ -370,6 +374,43 @@ Both can be re-added as targeted log-based metrics if they ever become operation
 
 Removed: `EmailMetrics.emit_semantic_email_flag_check`, the `emit_and_return` and `category_gated` private helpers in `SemanticEmailCommands`, and the 8 wrapper call sites inside `enabled?` (which now returns raw booleans). Error-message reference in `semantic_email_preview.rb` updated to point at LD flags + the NotificationRule instead of the dead metric.
 
+## Phase 1.8 — Operator-question coverage [SHIPPED]
+
+An audit of the 9 canonical metrics against the operational questions the rollout needs to answer surfaced six gaps. Closed within this PR rather than deferred. Six logging fixes ride along so failure paths have triage context that metrics alone don't carry.
+
+### Operator questions × metric coverage (after Phase 1.8)
+
+| Question | Coverage |
+|---|---|
+| Semantic render latency per kind (per-entry + envelope for batched) | `email_render_duration_ms{pipeline=semantic, delivery_mode, kind, scope?}` — per-entry (`scope` omitted) + envelope (`scope=envelope`, `kind=digest`) |
+| Render failures immediate vs batched | `email_render_fallback_total{delivery_mode, reason, scope?}` |
+| Notifications routed vs skipped (by reason) | `notification_rules_alert_total{outcome, reason?, delivery_mode?}` — 6 outcome values; `reason` splits `skipped_flag_disabled` into `ff_off`/`category_disabled`/`unsupported`/`exception` |
+| Semantic vs legacy email send counts | `email_send_total{pipeline, delivery_mode, kind, outcome}` — `pipeline=legacy` now fires from `EmailCommands.send_alert` + `send_alerts` legacy fallback paths |
+| Deliveries per channel | `notification_rules_delivery_total{channel, outcome}` — `outcome=delivered` and `outcome=failed` |
+| Per-channel failure rate | `sum{outcome=failed} / sum{*}` on `notification_rules_delivery_total` — channel-router rescue now feeds the engine via `(delivered, failed)` tuple |
+| Opt-out / suppressed sends | `email_send_total{outcome=suppressed}` from `disable_email?` short-circuit (both semantic + legacy paths) |
+| Batched routed by reason | `notification_rules_alert_total{outcome=routed, delivery_mode=batched}` |
+| Batched cap-drop rate | `email_batch_dropped_total / notification_rules_delivery_total{delivery_mode=batched}` per kind |
+
+### Why these closed now (not deferred)
+
+Three of the seven additions (A, C, D) require persistent attribute shapes that future dashboards will assume. Adding them after a dashboard set goes live forces a dual-emit migration. Better to land the contract before the dashboards exist. The other four (B, E, F, G) are local consistency fixes with no migration cost.
+
+### Logging — failure-path triage parity (L1–L6)
+
+Metrics give aggregable counts; logs give triage context. Six gaps closed:
+
+| ID | Location | Before | After |
+|---|---|---|---|
+| L1 | `EmailContentBuilder::Base#alert_base_url` rescue | `EventLogger.debug(message: <exception>)` | `EventLogger.warn(message, e, alert_id:, kind:, domain_id:)` |
+| L2 | `NotificationRuleConditions#evaluate` rescue | `EventLogger.error(message, e)` | `EventLogger.error(message, e, rule:, condition_keys:)` |
+| L3 | `NotificationRuleConditions#recipient_context` rescue | `EventLogger.error(message, e, user_id:)` | `EventLogger.error(message, e, user_id:, rule:)` |
+| L4 | `SemanticEmailCommands.send_alert` opt-out short-circuit | (silent — no log) | `EventLogger.info("suppressed by disable_email?", kind:, alert_id:, to_user_id:)` |
+| L5 | `SemanticEmailCommands.send_alert` send-failure return | metric-only | `EventLogger.warn("send_email returned nil", kind:, alert_id:, to_user_id:, pipeline:)` + metric |
+| L6 | `SemanticEmailCommands.{flag_enabled_for_user?,rollout_flag_enabled_for_domain?}` rescues | `rescue StandardError; false` (silent swallow) | `EventLogger.warn("...exception", e, user_id:/domain_id:)` |
+
+L1 fixes the most operationally costly gap — silent brand-URL degradation manifests as recipients landing on `app.highspot.com` instead of their tenant subdomain, and was previously DEBUG-only (invisible in production log streams). L6 closes a similar invisible-failure mode: LD client exceptions silently default to "FF off" without any signal that the LD evaluation broke.
+
 ## Phase 4 — Direct-builder dispatch instrumentation (follow-up)
 
 Today `delivery_mode: "direct"` is reserved in the cardinality contract but not emitted — only `"immediate"` and `"batched"` actually appear on `engine_delivered_total`, `email_render_duration_ms`, and `email_render_fallback_total`. Direct-builder dispatch paths (`EmailCommands.send_<kind>_email` family — Share, Comment, BulkPitch coordinator emails, etc.) need to be wrapped with the same `Benchmark.measure` + `emit_render_duration(..., "direct", ...)` and `emit_render_fallback(..., delivery_mode: "direct")` shape. Requires deciding what `rule` means for non-rule-backed direct sends (likely `rule: nil`, `channel: "email"`).
@@ -382,21 +423,21 @@ After this PR, the in-scope set is 9 metrics (down from 12; two retired in Phase
 
 | Metric | Type | Attributes |
 |---|---|---|
-| `notification_rules_alert_total` | counter | `outcome` (`routed`/`skipped_no_rule`/`skipped_user_opted_out`/`skipped_actor_suppressed`/`skipped_condition_not_met`/`skipped_flag_disabled`), `kind`, optional `rule` |
-| **`notification_rules_delivery_total`** *(Signal #1)* | counter | `kind`, `rule`, **`channel`** (singular), **`delivery_mode`** (`immediate`/`batched`/`direct`) |
+| `notification_rules_alert_total` | counter | `outcome` (`routed`/`skipped_no_rule`/`skipped_user_opted_out`/`skipped_actor_suppressed`/`skipped_condition_not_met`/`skipped_flag_disabled`), `kind`, optional `rule`, optional `delivery_mode` (on `routed`), optional `reason` (on `skipped_flag_disabled`: `ff_off`/`category_disabled`/`unsupported`/`exception`) |
+| **`notification_rules_delivery_total`** *(Signal #1)* | counter | `kind`, `rule`, **`channel`** (singular), **`delivery_mode`** (`immediate`/`batched`/`direct`), `outcome` (`delivered`/`failed`) |
 | `notification_rules_email_total` | counter | `outcome` (`allowed`/`blocked`/`skipped`/`error`), `type`, optional `reason`, optional `rule` |
 | `notification_rules_error_total` | counter | `stage` (`condition`/`recipient_context`) — fail-open exceptions during rule evaluation |
 
-`sum(notification_rules_alert_total)` is the total-alerts denominator (every alert hits exactly one outcome branch); no separate creation counter needed.
+`sum(notification_rules_alert_total)` is the total-alerts denominator (every alert hits exactly one outcome branch); no separate creation counter needed. `outcome=failed` on `delivery_total` is the per-channel failure rate signal — `failed / (delivered + failed)` per channel.
 
 ### Semantic rendering layer (`EmailMetrics`) — 5 metrics
 
 | Metric | Type | Attributes |
 |---|---|---|
-| **`email_render_duration_ms`** *(Signal #2)* | histogram | `pipeline`, `delivery_mode` (`immediate`/`batched`/`direct`), `kind` |
+| **`email_render_duration_ms`** *(Signal #2)* | histogram | `pipeline`, `delivery_mode` (`immediate`/`batched`/`direct`), `kind`, optional `scope` (`envelope` — only set for the digest framework's MJML wrap; default per-entry observation omits scope) |
 | **`email_render_fallback_total`** *(Signal #3)* | counter | `kind?`, `reason`, `delivery_mode`, `scope?` (`digest`) |
 | **`email_batch_dropped_total`** *(Signal #4)* | counter | `pipeline`, `kind`, `reason` (`cap` today; extensible) |
-| `email_send_total` | counter | `pipeline`, `delivery_mode`, `kind`, `outcome` |
+| `email_send_total` | counter | `pipeline` (`semantic`/`legacy`), `delivery_mode` (`immediate`/`batched`/`direct`), `kind`, `outcome` (`success`/`failure`/`suppressed`) |
 | `email_base_url_unresolved_total` | counter | `reason` (`nil_alert`/`nil_domain_id`/`domain_not_found`/`exception`) |
 
 ### Renamed / merged / retired
@@ -450,6 +491,7 @@ These belong in **logs** (which `EventLogger` already captures with full context
 | 1.5 | Low — pure string replacements; NRQL audit pre-cleared (0 dashboard / 0 log references). | Revert the nutella PR. |
 | 1.6 | Low — retired metrics had complete successors emitting today; no signal loss for rollout-% / total-alerts denominator. Two niche sub-signals (`category_disabled`, FF-lookup `error`) accepted as cost. | Revert the nutella PR; re-add `emit_alert_created` + `emit_semantic_email_flag_check` and their call sites. |
 | 1.7 | Low — pure renames (constants, methods, metric names, attribute values). NRQL audit pre-cleared for all four touched metrics and the `stage` attribute values. | Revert the nutella PR. |
+| 1.8 | Low — additive (new attributes, new emits from previously-silent code paths, log-level bumps). One signature change: `NotificationChannelRouter.route` now returns `[delivered, failed]` tuple instead of a single array; only one caller (`NotificationEngine`). One new public method: `SemanticEmailCommands.enabled_with_reason` (the existing `enabled?` delegates). | Revert the nutella PR; channel-router returns to single-array, FF reason attribute disappears, legacy emit stops. |
 | 2 | Medium — per-metric audit gates each `domain_id` strip. | Reversible via otel-collector-ops revert. |
 | 4 | Low — additive; direct-builder paths gain instrumentation they don't have today. | Revert the wiring PR. |
 
