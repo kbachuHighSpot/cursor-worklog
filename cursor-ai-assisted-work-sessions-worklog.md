@@ -6294,3 +6294,39 @@ Retired the `is_bulk_pitch` short-circuit from PR #72785 (HS-188860) and taught 
 - **Sibling ticket:** PR #72785 (HS-188860) landed the stop-gap guard this PR removes; that ticket is now safe to close-superseded once HS-188890 merges.
 
 ---
+
+## 2026-07-02 - [HS-191017] Retire type=direct from EMAIL_SETTINGS-backed notification rules
+
+**Type:** milestone
+**Repository:** highspot/nutella
+**Branch:** `kbachu-hs-191017-retire-direct-notification-rule-type`
+**PR:** [#73512](https://github.com/highspot/nutella/pull/73512) (draft)
+**Jira:** [HS-191017](https://highspot.atlassian.net/browse/HS-191017)
+**Files Changed:**
+- `CODEOWNERS`
+- `web/common/email/email_commands.rb`
+- `web/db/notification_rules_shape.rb`
+- `web/db/migrate/HS-191017_reclassify_direct_notification_rules.rb` (new)
+- `web/db/migrate/180230_seed_missing_notification_rules.rb`
+- `web/db/spec/integration/migrate/HS-191017_reclassify_direct_notification_rules_spec.rb` (new)
+- `web/spec/unit/db/notification_rules_shape_spec.rb` (new)
+
+**Summary:**
+PR 1 of the HS-191017 series. Reclassifies every `notification_rules` document seeded from `EmailCommands::SETTINGS` with `type: "direct"` into one of three buckets so all email dispatch can flow through the rules engine on a uniform shape. Runtime-inert for email delivery — this PR only rewrites the persisted `type` field and adds shape helpers; no dispatcher, controller, or builder consults `rule.type` for direct kinds today.
+
+**Changes Made:**
+- **`NotificationRulesShape`**: Added `managed_externally` to `TYPES`; added `MANAGED_EXTERNALLY_KINDS` (16 entries: 15 externally-scheduled SETTINGS kinds + the `digest` envelope singleton owned by `AlertsSendJob`), `DEAD_CONFIG_KINDS` (`new_user`, `user_deleted`), `MANAGED_BY_VALUES`, `MANAGED_EXTERNALLY_AGGREGATION_TYPES`, `CADENCE_DEFAULTS`. Added helpers: `default_cadence`, `build_managed_externally_rule`, `valid_type?`, `validate_rule`, `validate_managed_externally`, `expected_immediate_direct_kinds`.
+- **`HS-191017` migration**: Three-step apply — (1) flip 16 kinds to `managed_externally` with cadence block populated from `MANAGED_EXTERNALLY_KINDS`, nulling `batching_window` + `aggregation_type`; (2) flip the remaining 40 SETTINGS-backed direct kinds to `immediate` + `aggregation_type=immediate`; (3) delete the 2 dead-config rules. All steps filter on `type == "direct"` so the migration is idempotent. `verify!` asserts four post-state invariants and raises on drift.
+- **HS-180230**: Widened `seed_digest_direct_rule!`'s guard to accept both `direct` and `managed_externally` as valid pre-existing shapes via new `DIGEST_STABLE_TYPES` constant. Preserves idempotency after HS-191017 flips the digest doc.
+- **`EmailCommands::SETTINGS`**: Removed `:new_user` and `:user_deleted` entries (dead-config).
+- **CODEOWNERS**: Added the new HS-191017 spec + the shape unit spec under `@highspot/app-platform`.
+- **Tests**: 40 new shape unit examples (constants, helpers, `validate_rule` invariants) + 19 new migration integration examples (per-step behavior, idempotency, `verify!` post-state assertions). All 59 green.
+
+**Notes:**
+- **Digest reclassification decision.** Initially planned to leave the `digest` envelope singleton as `type: "direct"` to minimize scope, but analysis showed it would be the last surviving direct rule from `EMAIL_SETTINGS` sources. User approved reclassifying it to `managed_externally` (its runtime consumer, `AlertsSendJob`, is an externally-scheduled rubyjob). This lets `verify!` enforce a clean "zero direct rules survive" invariant without an allow-list.
+- **Runtime safety.** Every SETTINGS-backed direct kind carries dispatch metadata (renderer, builder, unsubscribe support, etc.) on `delivery_strategy.email`, not on `type`. Re-bucketing to `managed_externally` or `immediate` does not change what any user receives — verified by tracing the `EmailCommands` dispatch paths.
+- **Google Sheet MCP used for classification.** Consulted the "All Direct Kinds" tab of the Direct Email Kinds sheet (via the Workato Google Sheets MCP after auth) to lock the 15 externally-scheduled + `bulk_pitch_status_report` + 40 immediate + 2 deleted classification. The persisted cadence source strings on each `managed_externally` rule now describe *what* the external scheduler is (e.g. `AlertsSendJob (rubyjobs.yaml send_alerts_v1)`) rather than referencing the sheet — per the concise-code-comments rule.
+- **Follow-ups (PR 2/3 of this series).** PR 2 will make `NotificationChannelRouter` the single source of truth for all email dispatch. PR 3 will refactor the Apollo controller so all direct-type triggers flow through the rules engine with `Alert` records.
+- **Regression check.** `180217_seed_notification_rules_spec.rb` (16/16), `180221_realign_notification_rules_spec.rb` (33/33), and `180230_seed_missing_notification_rules_spec.rb` (24/24) all pass with `--order defined`. Random-order flake is pre-existing and unrelated to these changes.
+
+---
