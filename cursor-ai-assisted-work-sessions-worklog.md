@@ -6224,3 +6224,40 @@ Extended the Phase 1+2 PR with four follow-on phases before merge. After the ope
 - **Jira:** HS-186448 (same ticket as the Phase 1+2 milestone earlier today).
 
 ---
+
+## 2026-07-01 - Notification dedup + throttling: spec drafts posted to HS-180228 + HS-191506
+
+**Type:** milestone
+**Repository:** n/a (Jira spec work; no code changes)
+**Branch:** n/a
+**PR:** n/a
+**Files Changed:**
+- Jira description on [HS-180228](https://highspot.atlassian.net/browse/HS-180228) — "Support deduplication in the Rule definition" (In Progress, Chris Kwok)
+- Jira description on [HS-191506](https://highspot.atlassian.net/browse/HS-191506) — "Support throttling in the Rule definition" (To-Do, Chris Kwok)
+- Both under Epic [HS-183484](https://highspot.atlassian.net/browse/HS-183484) *"Notifications CS1 - Foundations (UX + Rules Engine)"*
+
+**Summary:**
+Design conversation about email-notification throttling ideas in the semantic path, ending with two PM-ready spec drafts posted as the descriptions of the paired dedup + throttling tickets (both had `description: null` before). The core split — dedup = **identity** (same recipient, same kind, same entity), throttling = **volume** (total emails to a recipient regardless of subject) — locks a clean boundary so the two tickets can be scoped, estimated, and reviewed independently without stepping on each other.
+
+**Changes Made:**
+- **Boundary rule locked.** Every proposed use case belongs on exactly one side. Litmus test written into both descriptions: *"If I sent 20 different-topic emails in an hour, would this feature suppress any of them?"* — yes ⇒ throttling; no ⇒ dedup.
+- **HS-180228 (Dedup) description:** Summary, Problem, Boundary vs sibling, In/Out scope, 6 use cases (repeated lesson edits, pitch reply thread flood, approval-status flapping, bulk-assign retry, re-share, `EmailReplay` misfire safety net), proposed schema (`delivery_strategy.guards.dedup.{cooldown_minutes, key, honor}`), 3 PM-visible knobs, 8 acceptance criteria, unit + integration + metric test cases, 6-step rollout plan (kill-switch FF `notification_dedup_enabled`, index migration verification, latest0 → 5% → 100%), 5 open PM questions with recommendations.
+- **HS-191506 (Throttling) description:** Summary, Problem, Boundary vs sibling, In/Out scope split into v1 (recipient_cap only) and v2 (actor_cap + domain_cap + user-level `max_emails_per_hour`), 6 use cases (bulk-import fanout, domain-wide role-change pager event, power-user fanout, engaged recipient, misfiring webhook loop, SCIM bulk-add), proposed schema with `on_exceed: defer_to_digest | drop` + `exempt_priorities`, 11 acceptance criteria, unit + integration (including `NotificationEngine` + `DigestBuilder`) test cases, 7-step rollout plan with an explicit **shadow-metric-only** phase on latest0 before enforcement, 6 open PM questions with recommendations.
+- **Composition matrix (in HS-191506, referenced from HS-180228):** Full truth table for the 7 combinations of `(dedup fires, throttle fires, honor flags)`. Evaluation order locked: **dedup first, throttle second** — cheaper short-circuit, and prevents duplicates from double-charging the throttle counter.
+- **Chokepoints named in the specs** (grounded in the actual codebase, not hypothetical):
+  - Dedup guard: `NotificationEngine.notify` after `NotificationRuleConditions.satisfied?`, before `AlertHelpers.create`.
+  - Throttle guard: `NotificationEngine.notify` after dedup, before `NotificationChannelRouter.route`.
+  - Throttle counter increment: `NotificationChannelRouter.deliver_email` on successful dispatch only, so failed sends don't consume budget.
+  - Throttle deferral path: `AlertHelpers.create_without_event` with a new `deferred_reason: "throttled"` field so `SendAlertsJob` picks the alert up on its next tick via the existing `Alert.batched_unsent_cutoff` scan — no scheduler changes required.
+- **Storage decisions per ticket** (avoids inventing new infra where existing precedent applies):
+  - Dedup: reuse the `alerts` collection. Requires compound index `(user_id, kind, created_at)` — verify before adding.
+  - Throttle: Redis tumbling-window counter, mirroring the shape of `nutella/web/common/models/commands/bulk_pitch/bulk_pitch_rate_limit_helper.rb`. Fail-open on Redis outage, with a loud `NotificationMetrics.emit_error(stage: :throttle)` signal.
+
+**Notes:**
+- **Why the description was set rather than posted as a comment.** Both tickets had `description: null`, so no PM-authored content was overwritten. Descriptions become the canonical spec that the engineer implementing (Chris Kwok, assigned on both) reads first; a comment would compete with automation comments and be harder to find. User confirmed this framing via `AskQuestion` before the write.
+- **HS-180228 is already "In Progress" but had no description.** Worth flagging on the next PM sync — implementation may already be underway without an agreed spec.
+- **Recommended follow-up.** Add a Jira "relates to" link between HS-180228 and HS-191506 so the pair is navigable from the Epic view. Prose cross-references exist in both descriptions but a formal link is cheaper to click. Not done in this session (out of scope for the ask); surfaced to the user.
+- **Semantic-path scope only.** Both specs explicitly exclude the legacy (Velocity) email path. The `NotificationEngine` / `NotificationRule` layer already governs semantic-path delivery via `NotificationChannelRouter`, so the guards land naturally there without touching legacy.
+- **Skill self-check.** Both specs use imperative acceptance criteria ("`NotificationEngine.notify` evaluates …", "Counter is incremented from … only on successful email dispatch") rather than descriptive prose, so an implementing engineer can walk down the AC list as an implementation checklist.
+
+---
