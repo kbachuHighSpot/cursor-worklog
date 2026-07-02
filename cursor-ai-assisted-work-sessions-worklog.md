@@ -6261,3 +6261,36 @@ Design conversation about email-notification throttling ideas in the semantic pa
 - **Skill self-check.** Both specs use imperative acceptance criteria ("`NotificationEngine.notify` evaluates …", "Counter is incremented from … only on successful email dispatch") rather than descriptive prose, so an implementing engineer can walk down the AC list as an implementation checklist.
 
 ---
+
+## 2026-07-01 - [HS-188890] Enable semantic rendering for bulk pitches
+
+**Type:** milestone
+**Repository:** highspot/nutella
+**Branch:** `kbachu-hs-188890-enable-semantic-bulk-pitches`
+**PR:** [#73468](https://github.com/highspot/nutella/pull/73468)
+**Jira:** [HS-188890](https://highspot.atlassian.net/browse/HS-188890)
+**Files Changed:**
+- `web/common/email/email_commands.rb`
+- `web/common/email/semantic/builders/direct/pitch_email_builder.rb`
+- `web/common/bulk_pitch/mail_dispatcher.rb`
+- `web/spec/unit/common/email/email_commands_spec.rb`
+- `web/spec/unit/common/email/direct_email_builder_spec.rb`
+- `web/spec/unit/common/bulk_pitch/mail_dispatcher_spec.rb`
+
+**Summary:**
+Retired the `is_bulk_pitch` short-circuit from PR #72785 (HS-188860) and taught the bulk dispatcher + `PitchEmailBuilder` to carry the semantic payload end-to-end. Existing semantic FF layer (`unified_notification_system` + `semantic_email_enabled_categories`) is the sole ramp control per-domain — no new FF. Investigation of magma revealed that `bulk_sendgrid` already short-circuits on `data.body_html` and already auto-maps `personalizations[i].unsubscribe_recipient_url` to the SendGrid substitution `{{unsubscribe_recipient_url}}`, so zero magma changes were required.
+
+**Changes Made:**
+- `check_notification_rule`: dropped the `is_bulk_pitch` branch (the retired `TODO(HS-188890)`). Also dropped the now-unused `opts` parameter.
+- `send_email`: allow `render_unsubscribe_footer` on bulk pitches; set `data[:is_bulk_pitch] = true` so the builder can pick the right unsubscribe URL token.
+- `PitchEmailBuilder`: new `MAGMA_UNSUBSCRIBE_URL_TOKEN` (`{{unsubscribe_recipient_url}}`); `build_unsubscribe_footer_html(bulk:)` swaps the sentinel for the magma-native SendGrid token when bulk. Fan-out per TO is untenable at bulk scale, so magma binds per-recipient via personalizations instead.
+- `BulkPitch::MailDispatcher`: split `MAIL_PAYLOAD_SCHEMA` into `LEGACY_*` and `SEMANTIC_*` variants. Added `schema_for(mail_payload)` that dispatches on `data[:body_html].present?`. Extended `SHARED_CONFIG_KEYS` with `body_html`, `subject`, `preheader`, `paragraph_style`, `external_recipient_email`, `preheader_self_derived`, `skip_header_footer` so semantic payload fields survive `data.slice` in `build_shared_config`. `MAIL_PAYLOAD_SCHEMA` remains as a backward-compat alias to the legacy variant.
+- Tests: 13 new dispatcher examples (semantic schema branch + `SHARED_CONFIG_KEYS` + semantic `enqueue_dispatch_plan` + per-recipient unsubscribe wiring), 2 new builder examples (magma-token path + sentinel default), 5 flipped `email_commands` examples (bulk now asserted to run semantic when FF gate allows).
+
+**Notes:**
+- **All 708 examples across 6 affected spec files pass** (dispatcher 64, builder 175, email_commands 191, notification_rules 34, semantic integration+commands 198, bulk_email_send_job 46).
+- **Magma is a no-op.** Full magma-side investigation confirmed `MailWorker.togetherBulk` calls the same `getMailParameters()` that short-circuits on `body_html`, and `BulkMailPersonalizationBuilder.addPersonalizationFields` auto-maps every personalization key to `{{field}}` substitutions. Documented the flow in the PR body.
+- **Rollout shape.** No new FF was introduced per PM direction to reuse existing semantic FFs. Adoption is entirely LaunchDarkly-driven via `unified_notification_system` + `semantic_email_enabled_categories`. Ticket step 5 (delete guard) is effectively done up-front since the existing FF layer is the ramp control.
+- **Sibling ticket:** PR #72785 (HS-188860) landed the stop-gap guard this PR removes; that ticket is now safe to close-superseded once HS-188890 merges.
+
+---
