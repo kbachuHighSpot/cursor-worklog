@@ -6330,3 +6330,45 @@ PR 1 of the HS-191017 series. Reclassifies every `notification_rules` document s
 - **Regression check.** `180217_seed_notification_rules_spec.rb` (16/16), `180221_realign_notification_rules_spec.rb` (33/33), and `180230_seed_missing_notification_rules_spec.rb` (24/24) all pass with `--order defined`. Random-order flake is pre-existing and unrelated to these changes.
 
 ---
+
+## 2026-07-02 - HS-191017 PR 2 draft opened (prepared-alert engine path: create_many + idempotency index)
+
+**Type:** milestone
+**Repository:** nutella
+**Branch:** `kbachu-hs-191017-pr2-engine-foundation` (stacked on `kbachu-hs-191017-retire-direct-notification-rule-type`, PR 1)
+**PR:** [#73513](https://github.com/highspot/nutella/pull/73513) (draft; base = PR 1's branch)
+**Jira:** [HS-191017](https://highspot.atlassian.net/browse/HS-191017)
+**Files Changed:**
+- `CODEOWNERS`
+- `web/common/models/entities/alert.rb`
+- `web/common/stores/database/mongo/alert.rb`
+- `web/common/stores/database/commands/database_commands.rb`
+- `web/common/models/commands/alerts/alert_commands.rb`
+- `web/common/models/queries/alert_queries.rb`
+- `web/common/notifications/rules/notification_engine.rb`
+- `web/spec/unit/common/models/commands/alerts/alert_commands_create_many_spec.rb` (new)
+- `web/spec/unit/common/notifications/rules/notification_engine_spec.rb`
+- `web/spec/unit/common/stores/database/commands/database_commands_spec.rb`
+
+**Summary:**
+PR 2 of the HS-191017 series (rollout step 2). Adds the engine-level infrastructure that subsequent per-caller PRs will consume to route `managed_externally` and `immediate` kinds through the rules engine — parity with the existing immediate/batched path. No callers are touched; direct-type dispatch continues to flow through `EmailCommands.send_<kind>` unchanged until PRs 3+ start migrating callsites one Apollo controller / action at a time.
+
+**Changes Made:**
+- **`Alert` entity + `Mongo::Alert.from_mongo`**: Added `source` and `source_event_id` accessors and hydration. `source` names the dispatch origin (e.g. `"rubyjobs.bulk_pitch_finalize"`, `"controllers.pitch_actions.record_open"`) so ops can trace how an alert got created. `source_event_id` is the external caller's event id; combined with the new sparse-unique index it makes at-least-once retries safe.
+- **Idempotency index** on `alerts.(kind, user_id, source_event_id)` — unique + sparse. Sparse so pre-existing alerts (no `source_event_id`) are excluded from the unique constraint.
+- **`AlertCommands.create_many(recipients, kind:, domain_id:, source:, data:, options:, source_event_id: nil, ts:, notification_rule_name:, notification_priority:)`** — single-domain bulk-insert of alert docs for a shared payload. When `source_event_id` is provided the method pre-checks `AlertQueries.for_source_event` and filters out already-dispatched recipients before insert. `options[:skip_toast]` routes through `AlertHelpers.create_multiple_without_event`.
+- **`AlertQueries.for_source_event(kind:, source_event_id:, user_ids:)`** — backs the idempotency pre-check; `O(recipients)` index scan against the new unique sparse index.
+- **`NotificationEngine.route_prepared_alert(alert, rule)`** — routes a pre-persisted alert through `NotificationChannelRouter.route`, records `channels_delivered`, and emits routing + delivery metrics (parity with `.notify`). Accepts `immediate` and `managed_externally` rules; rejects `batched` (→ `:invalid_rule_type`) and rejects `managed_externally` rules with `aggregation_type: "time_based"` (→ `:aggregation_forbidden`, the ticket's "double-fire foot-gun" invariant).
+- **Tests**: 19 new `create_many` examples + 18 new `route_prepared_alert` examples + 1 new index-shape assertion = 38 new. Regression: `alert_commands_spec.rb` (210), `alert_commands_notification_engine_spec.rb` (27), `alert_queries_spec.rb` (2), `notification_channel_router_spec.rb` (31) all green. Total: 353 examples across new + touched files, 0 failures.
+
+**Notes:**
+- **Foundation-only scope confirmed by user via `AskQuestion` before any code was written.** The two other options ("foundation + one representative kind" or "foundation + all 16 managed_externally kinds") would have made review + revert harder without unlocking anything the follow-up PRs can't. Matches the ticket's "each handler PR is independently rollable + revertable" preference.
+- **Stacked-PR flow.** PR 2's branch was cut off PR 1's HEAD (`baff103e09e`); the PR base was retargeted from `main` to PR 1's branch so the GitHub diff shows only PR 2's ~600 lines instead of PR 1's ~1400 too. Once PR 1 merges, GitHub auto-retargets to `main`.
+- **Router legacy fallback deferred.** Reviewing the Jira ticket's step 5 confirmed the engine path "hands off to the existing semantic builder path" — the router stays semantic-only for PR 2. Legacy fallback would be a separate concern if a callsite ever routes through the engine with the semantic FF off (not planned in PRs 3+; they'll be gated behind the FF).
+- **Best-effort failure mode documented in code, not enforced yet.** `create_many` propagates insert errors; the ticket calls out flipping to strict once volume + write reliability are proven. Deliberately deferred.
+- **Idempotency pre-check chosen over `insert_many` + `ordered: false`.** Pre-check gives the caller a clean "already dispatched, skipped" signal per recipient; the `BulkWriteError`-parse alternative would require plumbing `ordered: false` through `Storage::Batch.create_entities` (touches more layers) and is harder to reason about at each callsite.
+- **`PREPARED_ALERT_RULE_TYPES` intentionally accepts `immediate` too.** So the same entry point works for the eventual immediate-kind migration in PRs 5a…5e without a second engine method.
+- **RuboCop auto-corrected argument alignment in the new specs on first commit attempt (Layout/ArgumentAlignment).** Re-staged the auto-fixed files; second attempt landed cleanly.
+- **Follow-ups.** PR 3 = first kind end-to-end (ticket recommends `bulk_pitch_status_report` or `retention_host_notification` — both have `batching_window: (absent)` on the sheet so the migration story is unambiguous). PRs 4a…4g = remaining 16 `managed_externally` kinds, one Apollo handler per PR. PRs 5a…5e = 33 `immediate` kinds, batched by callsite. PR 6 = preview page (4 buckets) + admin UI (cadence columns).
+
+---
