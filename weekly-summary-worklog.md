@@ -4,7 +4,7 @@ This log tracks weekly summaries of significant work across all sources (Cursor,
 
 ## Running Summary
 
-*Last updated: 2026-06-26*
+*Last updated: 2026-07-06*
 
 ### Overall Key Accomplishments (Jan-Jun 2026)
 
@@ -119,11 +119,11 @@ This log tracks weekly summaries of significant work across all sources (Cursor,
 - Worklog automation gap: migration scripts and investigations weren't auto-logged because rules lacked specific significance criteria and mid-session logging instructions (Apr 6)
 
 ### Current Focus (This Week)
-- **HS-186448 unified-notifications metrics + dashboards**: Land paired PRs #73245 (nutella) + #385 (otel-collector-ops) in deploy order (nutella first → collector second). Post-deploy: verify the 4 new operator-facing signals in NR via the post-deploy NRQL; build the success/failure dashboard the ticket scopes.
-- **HS-191017 Direct emails through the rules engine**: Planning the next structural piece — bring direct sends (welcome, password recovery, etc.) onto the same rules-engine + Alert-record path that immediate and batched already use. Unblocks Phase 4 of the metrics plan (direct-builder dispatch instrumentation).
-- **HS-191072 Pitch unsubscribe link missing under semantic rendering**: Triage — surfaced Jun 26. Affects the pitch family when `unified_notification_system` is on; needs render-path inspection.
-- **HS-180221 Batch-5 digest framework**: PR #72914 merged Jun 24 with cap enforcement + sampler set + immediate/batched recategorization. Ticket still In Progress for follow-up validation across digest categories.
-- **HS-150860 welcome email copy update**: Ticket To-Do — copy refresh queued behind direct-email rules-engine routing.
+- **HS-191718 Notification-coverage CI delta gate**: Draft PR #73598 opened Jul 6 — Buildkite step that fails PRs which add a new `ALERT_CONFIG` / `EmailCommands::SETTINGS` kind without a rule seed, semantic production path, AND preview row. Delta-only + baseline-safe. Awaiting review; smoke-tested locally on all three surfaces + the `:no_email` escape hatch.
+- **HS-191017 Direct emails through rules engine — resolved "Working As Designed"**: The 3-PR stacked series (#73512 / #73513 / #73543) was closed without merge on Jul 6 after the ticket resolved as "Working As Designed" — the current EmailCommands dispatch path was deemed correct. Follow-on PR #73589 (Add semantic builders for `retention_host_notification` + `bulk_pitch_status_report`, opened Jul 6) narrows to just the two kinds that actually needed semantic builders.
+- **HS-191129 AlertRuntimeValidations framework**: Planning framework for pre-flight validation of batched-alert send jobs (recipient shape, rule shape, delivery-strategy consistency). To-Do; queued after HS-191718 lands.
+- **HS-191429 latest-env email feedback (BCC dynamic config)**: In Progress. Follow-on to the debug-BCC surface that shipped in HS-186448 (#73129) — wiring the BCC target list to a dynamic config knob so per-domain observation can flip without a deploy.
+- **HS-180228 notification rule dedup guard** (reviewing PR #73490): Enforcement layer preventing duplicate-recipient alert emission across rules for the same event.
 
 ### Current Blockers
 - HS-151210 (Pinterest font request) remains Blocked
@@ -131,6 +131,79 @@ This log tracks weekly summaries of significant work across all sources (Cursor,
 - HS-189038 (SendGrid 421 max-messages-per-connection) — filed Jun 18; owned by App Platform; magma `SmtpSend.sendWithUnsubscribeLink()` needs transport recycling or 421-retry inside the loop
 - `nutella/.cursor/**` is gitignored, so in-repo rule edits don't propagate to teammates without unignoring `.cursor/rules/`
 - Repo-local skills are not surfaced in `<available_skills>` — Cursor product behavior; needs feature request or config investigation
+
+---
+## 2026-07-06 - Weekly Review (2026-06-27 to 2026-07-06)
+
+**Summary:**
+Ten-day window (Jul weekly cadence resumed after the Jun 26 review). Four semantic-email cleanup PRs merged early in the window (brand-wordmark squish, pitch-footer unsubscribe/left-alignment, welcome-copy PM refresh, bulk-pitch semantic rendering enablement), then a mid-week structural pivot: the HS-191017 stacked-PR series (route direct emails through the rules engine) resolved as **"Working As Designed"** on Jul 6 and all three PRs closed without merge, narrowing the follow-through to a single scoped PR (#73589, add semantic builders for the two kinds that were actually missing them). Closed the week with a new session-milestone piece — the HS-191718 CI delta gate for notification-coverage drift (draft PR #73598 opened Jul 6), and two Jul 1 spec drafts on notification dedup + throttling (HS-180228, HS-191506). Seven cross-team PR reviews (translation-ID fix, dedup guard, welcome copy, brand wordmark, pitch-footer locale, digest per-rule batching, pitch-viewer CSP hotfix).
+
+### Significant Cursor Activities
+
+- **HS-191718 CI delta gate for notification coverage — draft PR #73598 opened Jul 6**: Ended the week with a new gate that blocks any PR adding a notification kind to `AlertCommands::ALERT_CONFIG` or a direct type to `EmailCommands::SETTINGS` unless three companion rows also land: (a) a rule seed in `NotificationRulesShape::SHEET_BACKED_ATTRIBUTES` (or the mongo seed can't hand the kind a `notification_rules` document), (b) a semantic production path (either a `*_KINDS` list under `common/email/semantic/builders/**`, a `SemanticAlertRenderer.register(:<kind>, ...)` call, or a `DIRECT_BUILDERS` entry in `SemanticEmailRegistry`), (c) a preview row in `semantic_email_preview.rb`. Refactored `web/scripts/notifications-migration/scan_missing_email_previews.py` from a preview-only scanner into a unified three-surface coverage scanner (+564/-202) with robustified Ruby parsing (strips whole-line comments before parsing to kill commented-out `:sym => true` false positives; handles both `:sym =>` and `sym:` hash shorthand; handles `%i[]` / `%w[]` bulk-registration patterns inside builders and the registry). New `.buildkite/check_notification_coverage_delta.sh` wraps the scanner in a `git worktree`-based delta comparison — merge-base vs HEAD, JSON subtraction, Buildkite annotation with per-surface breakdown, exit 1 on new misses. Baseline gaps on `main` tolerated so the gate ships without a preflight cleanup PR (same rollout shape as `sorbet_delta_zero.sh`). New Jira ticket HS-191718 created under epic HS-183484 (Notifications CS1 Foundations), assigned to me, Feature Crew = "App Platform". Smoke tests: happy path passes; injected fake kind (no companions) flags on all three surfaces; `:options => { :no_email => true }` skips production + preview checks (rule-seed still applies).
+- **HS-191017 stacked-PR series closed as "Working As Designed" (Jul 2 → Jul 6)**: Three PRs authored + closed inside this window without merge — #73512 (Jul 2, retire `type=direct` from EMAIL_SETTINGS-backed notification rules — 16-kind migration to `managed_externally`, 40-kind migration to `immediate`, 2-kind deletion, 40 new shape unit examples + 19 new migration integration examples), #73513 (Jul 3, prepared-alert engine path — `AlertCommands.create_many` with idempotency index on `(kind, user_id, source_event_id)` + `NotificationEngine.route_prepared_alert` — 38 new spec examples), #73543 (Jul 3, route six `managed_externally` kinds through the engine — PR 3 of the series). Ticket HS-191017 resolved as **"Working As Designed"** on Jul 6: current EmailCommands dispatch path for direct emails is correct and does not need engine-path parity. Follow-through narrowed to #73589 (opened Jul 6, add semantic builders for `retention_host_notification` + `bulk_pitch_status_report` — the two kinds that actually needed semantic builders, not the full engine-path rewrite). The design + implementation work is preserved in the closed-PR bodies + this worklog for reference if the direction reverses later.
+- **HS-188890 Enable semantic rendering for bulk pitches (nutella PR #73468, merged Jul 2)**: Landed the follow-on to Tanish's HS-188860 (bulk-pitch semantic rendering exclusion, merged Jun 23) that surfaced this feature-flag task. Turns on `unified_notification_system` semantic rendering for the bulk-pitch email path so bulk sends now flow through the same builder + preview surface as single-pitch sends.
+- **HS-150860 Update welcome/signup email copy (nutella PR #73459, merged Jul 1)**: PM-driven copy refresh on the welcome + signup email family. Landed together with the sibling translation-ID length fix PR #73508 (reviewed for Sai Krishna) that fixed a 9-char translation ID that violated the 8-char cap.
+- **HS-191072 Fix semantic pitch unsubscribe footer + left-layout alignment (nutella PR #73404, merged Jul 1)**: Two-part fix on the pitch family under `unified_notification_system` semantic rendering — restored the unsubscribe footer that was rendering empty and corrected the left-side layout alignment. This closes the ticket surfaced Jun 26 during the HS-186448 metrics work.
+- **HS-191365 Brand wordmark horizontally squished in semantic email header (nutella PR #73402, merged Jul 1)**: Header-image aspect-ratio fix — the brand wordmark was being scaled non-proportionally on Gmail iOS + Outlook rendering paths. Straightforward `width: auto` + explicit max-width fix; verified via preview snapshot regression.
+- **Notification dedup + throttling spec drafts (HS-180228 + HS-191506, Jul 1)**: Two design docs shared as Jira comments — HS-180228 (Enforce notification rule deduplication guard: preventing duplicate-recipient alert emission across overlapping rules for the same event; enforcement layer that sits between `NotificationEngine.route` and the channel dispatchers) and HS-191506 (Support throttling in the rule definition: per-rule `throttling` block with `max_alerts_per_window` + `throttle_window_seconds` so noisy sources can self-limit without a code deploy). Both drafts documented the migration path from the current best-effort dedup at `AlertCommands.notify_users_of_event` up to a first-class engine-level guard.
+
+### Significant Proposals
+
+- **"Delta-only, baseline-safe" rollout for the notification-coverage CI gate** — proposed and shipped in this session's PR #73598 rather than the alternative "block on any missing entry, land a preflight baseline cleanup PR first." Same shape as `sorbet_delta_zero.sh`. Tradeoff called out in the PR body: the gate is silent on existing gaps until someone touches a kind, but blocks all NEW drift from day one.
+- **"Working As Designed" resolution for HS-191017** — after landing three PRs of a stacked series that would have routed direct emails through the rules engine (parity with immediate/batched), the team reassessed and concluded the current EmailCommands dispatch is correct for direct sends. The narrower follow-through (#73589, adding two semantic builders that were actually missing) captures the only concrete gap. Documented so future re-visits know the design work was done, not skipped.
+
+### Significant Documents
+
+- Two Jira comments on HS-180228 + HS-191506 with the notification-dedup + throttling spec drafts (Jul 1). Documented as first-class design notes on the tickets rather than a separate Confluence page so the design lives next to the implementation ticket.
+- `cursor-worklog/cursor-ai-assisted-work-sessions-worklog.md` — 5 session entries logged this window (Jul 1 dedup + throttling drafts, Jul 1 HS-188890 bulk pitches, Jul 2 HS-191017 PR 1, Jul 2 HS-191017 PR 2, Jul 6 HS-191718 CI gate). No mid-week merge events auto-logged for #73402 / #73404 / #73459 — the trigger-on-merge gap the Jun 26 review flagged is still present.
+
+### Significant Helping Others
+
+- **PR #73508 (HS-150860) reviewed for Sai Krishna** — Fixed an invalid 9-char translation ID that violated the 8-char `iidgen` cap on the welcome-email family; caught by the CI translation-ID length check landed earlier in the semantic-email migration. Merged Jul 6.
+- **PR #73490 (HS-180228) reviewed for a teammate** — Enforce notification rule deduplication guard (the paired PR to the Jul 1 dedup spec draft). Under review; provided design-alignment comments referencing the spec draft posted to HS-180228.
+- **PR #73295 (HS-182226) reviewed** — Enhance email pitch footer handling with locale support. Merged Jul 6.
+- **PR #73240 (HS-180226) reviewed** — Honor per-rule batching window in alert digest flush; the runtime follow-up to the HS-182402 per-kind batching realignment that landed Jun 8. Merged Jul 1.
+- **PR #73211 (HS-191028) reviewed** — Apply custom CSP modifications on unauthenticated pitch viewer routes hotfix. Merged Jun 30 (PR opened prior week; review + merge landed in this window).
+- **Slack unblocks**: Told Sai Krishna in `#crew-app-platform` that semantic email path is automatically available for their PR without any specific code changes (Jul 1); coordinated with Derek Kwiatkowski and Mat Sadler in `#eng-foundation` on Buildkite build 270787 test-timeouts blocking my HS-191017 PR merge (Jul 3).
+
+### Significant PRs
+
+- **PR #73598** (HS-191718, DRAFT Jul 6) — CI delta gate for notification coverage. 4 files, +554/-202. Base = `main`. Isolated via scratch `git worktree` so the active branch's in-flight retention_host_notification work stays clean.
+- **PR #73589** (HS-191017 follow-through, OPEN Jul 6) — Add semantic builders for `retention_host_notification` + `bulk_pitch_status_report`. In progress on active branch.
+- **PR #73543** (HS-191017 PR 3, CLOSED Jul 6, unmerged) — Route six `managed_externally` kinds through the engine. Superseded by "Working As Designed" resolution.
+- **PR #73513** (HS-191017 PR 2, CLOSED Jul 6, unmerged) — Prepared-alert engine path: `create_many` + idempotency index. Superseded by "Working As Designed" resolution.
+- **PR #73512** (HS-191017 PR 1, CLOSED Jul 6, unmerged) — Retire `type=direct` from EMAIL_SETTINGS-backed notification rules. Superseded by "Working As Designed" resolution.
+- **PR #73468** (HS-188890, MERGED Jul 2) — Enable semantic rendering for bulk pitches.
+- **PR #73459** (HS-150860, MERGED Jul 1) — Update welcome/signup email copy per PM refresh.
+- **PR #73404** (HS-191072, MERGED Jul 1) — Fix semantic pitch unsubscribe footer + left-layout alignment.
+- **PR #73402** (HS-191365, MERGED Jul 1) — Brand wordmark horizontally squished in semantic email header.
+
+### Significant Jira Tickets
+
+- **HS-191718** (CI gate for notification coverage, P3, **To-Do**, **created Jul 6**) — This session's new ticket. Draft PR #73598.
+- **HS-191017** (Route direct emails through the rules engine — parity with immediate/batched, P3, **Closed Jul 6 — "Working As Designed"**) — Stacked-PR series (#73512, #73513, #73543) closed without merge after resolution.
+- **HS-191429** (latest-env email feedback with BCC dynamic config, P3, **In Progress**) — Active this week; follow-on to the HS-186448 debug-BCC surface.
+- **HS-191129** (AlertRuntimeValidations framework for batched alert send job, P3, To-Do) — Planning-phase ticket.
+- **HS-188890** (Enable semantic rendering for bulk pitches, P3, **Closed**) — PR #73468 merged.
+- **HS-191072** (Pitch unsubscribe link + left alignment under semantic rendering, P3, **Closed**) — PR #73404 merged.
+- **HS-191365** (Brand wordmark squished in semantic email header, P3, **Closed**) — PR #73402 merged.
+- **HS-150860** (Welcome/signup email copy update, P3, **Closed**) — PR #73459 merged.
+- **HS-180228** (Notification rule dedup guard, P3, updated Jul 1) — Spec draft posted; PR #73490 (teammate's implementation) under review.
+- **HS-191506** (Support throttling in rule definition, P3, updated Jul 1) — Spec draft posted.
+
+### Key Challenges This Week
+
+- **Landing a CI gate in a dirty working tree without polluting the in-flight branch.** My active branch `kbachu-hs-191017-semantic-builders-retention-bulk-pitch` had 6 unrelated in-flight modifications (retention_host_notification builder work — `alert_commands.rb`, `generic_builder.rb`, `semantic_email_preview.rb` + 3 CI-gate files) queued up for a different PR. Rather than stash / cherry-pick / risk mixing scopes, cut a scratch `git worktree` off `origin/main` at `/tmp/nutella-hs-191718-worktree`, copied only my 4 CI-gate files in, committed + pushed + opened the draft PR from there, then removed the worktree. Original branch and working tree are byte-identical to before the session. Documented as a pattern for future PR-splits mid-session.
+- **Ruby static-parsing false positives on `SemanticEmailRegistry` shorthand.** Initial scanner run reported half of `TRANSACTIONAL_TYPES` entries as "unregistered production paths" — traced to `TRANSACTIONAL_TYPES` using `sym: val` hash shorthand while the regex only matched `:sym => val`. Also: `settings_direct_email_types` was reporting `:account` and similar as top-level entries; traced to commented-out `:sym => true` lines inside the registry being parsed as hash entries. Both fixed by (a) comment-stripping preprocessing in `_read` and (b) extending `_hash_keys_in_body` to handle both syntax forms.
+- **Delta-only fail path smoke test initially reported PASS on an injected fake kind.** The smoke-test Python injection script was writing the fake kind past `ALERT_CONFIG`'s true closing brace because it matched the wrong `}.freeze` marker (there are several). Fix: walk the brace structure from `ALERT_CONFIG = {` forward, counting `{` / `}` depth, to locate the actual close. Underscores why "wrote the test that catches the injection" is a separate discipline from "wrote the check that flags the missing config."
+- **HS-191017 "Working As Designed" reversal after 3 PRs of implementation.** The stacked-PR series was 40 shape spec examples + 19 migration examples + 38 engine-path examples + 6 kinds routed through the engine before the ticket was closed as WAD. Non-zero cost to unwind, but the design + implementation work is preserved in the closed-PR bodies + this worklog. Reinforces the value of the "walk the caller path end-to-end before writing the migration" step that the ticket's own kickoff should have included.
+- **Heredoc-vs-eval-wrapper interactions in commit/PR helpers keep recurring.** Second week in a row hitting this: today's `gh pr create --body="$(cat <<'EOF' ... EOF)"` failed with `unexpected EOF while looking for matching '` because the body contained apostrophes (`doesn't`, `can't`) that the eval layer re-interpreted despite the quoted heredoc delimiter. Also the git commit message failed on `PR #73598` because `#` was interpreted as a comment token by the eval layer. Fix pattern both times: write body to `/tmp/<name>.md` and use `--body-file` / pass as `-m 'literal string'` without heredoc. Worth graduating this from "note in weekly review" to an entry in the shell skill.
+
+**Notes:**
+- **Session worklog vs merge events (still).** The Jun 26 review's carry-over — "trigger the worklog skill on merge events, not just on next-session pre-flight" — did not fire this week either. Four PRs merged (#73402, #73404, #73459, #73468) without an auto-logged session worklog entry at merge time. All four ARE captured in this weekly review via GitHub search, so nothing was lost, but the trigger gap persists. Actionable follow-up: add a `merged` event hook to the worklog skill.
+- **Carry-over for next week**: (a) Circulate PR #73598 for review once tests pass; move HS-191718 To-Do → In Progress. (b) Finish PR #73589 for the two semantic builders (`retention_host_notification` + `bulk_pitch_status_report`). (c) Track PR #73490 (HS-180228 dedup guard) through review — paired with the spec draft I posted. (d) Consider whether HS-191429 (BCC dynamic config) is next up or if the dedup PR review takes priority.
+- **Data note on the HS-191017 series**: All three stacked PRs (#73512, #73513, #73543) show as `CLOSED` with `mergedAt=nil` in GitHub. Cross-checked against Jira: HS-191017 resolution = "Working As Designed" (resolution id 8). The design + spec content is intentionally NOT re-summarized here — see the two July 2 session-log entries for the shipped-in-code detail, and the closed-PR bodies for the diff-level detail.
 
 ---
 ## 2026-06-26 - Weekly Review (2026-06-18 to 2026-06-26)
