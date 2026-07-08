@@ -6,6 +6,34 @@ Weekly summaries and YTD running summary are in [weekly-summary-worklog.md](week
 
 ---
 
+## 2026-07-06 - HS-191017: Add `reason` attribute to `email_send_total{outcome=suppressed}` (commit 0db97d19eab)
+
+**Repository:** highspot/nutella
+**Branch:** `kbachu-hs-191017-semantic-builders-retention-bulk-pitch`
+**Commit:** `0db97d19eab`
+
+**Files Changed:**
+- `web/common/email/email_commands.rb` — new `disable_email_reason` sibling; `disable_email?` delegates; `_send_skipped_reason` sentinel now carries the specific cause symbol
+- `web/common/email/email_metrics.rb` — `SUPPRESSED_REASONS` enum; `emit_send` gains optional `reason:` kwarg (attached only when non-nil); `classify_send_reason` companion helper
+- `web/common/email/semantic_email_commands.rb` — semantic immediate + batched + legacy-fallback digest paths thread `reason:` through
+- `web/common/email/README_SEMANTIC_EMAIL.md` — documented reason enum + updated troubleshooting entry
+- 5 spec files — unit coverage for `emit_send reason` kwarg, `classify_send_reason`, updated `disable_email?` stubs to co-stub `disable_email_reason`, magma-integration coverage for every SUPPRESSED_REASONS entry
+
+**Summary:**
+Dashboard investigation of `otel_email_send_total{outcome=suppressed}` showed the bucket lumped six distinct causes together — account-lifecycle (`:suspended_recipient`, `:sender_domain_disabled`), preference (`:user_opt_out`, `:sender_opt_out`, `:pitch_owner_opt_out`), and tenant policy (`:domain_admin_disabled`). Operators couldn't tell whether a spike was expected (user opt-out) or actionable (admin lockout).
+
+**Design:**
+Contract-preserving: `disable_email?` stays boolean-returning (all 8 magma-integration `.to eq(true)/.to eq(false)` assertions unchanged); the new `disable_email_reason` returns the specific cause or nil. Ruby truthiness bridges the two — `nil` is falsy, symbols are truthy, so existing `if disable_email?(...)` callers keep working. The `data[:_send_skipped_reason]` sentinel now carries the specific reason symbol (was the meta-symbol `:suppressed`); `classify_send_outcome` maps all SUPPRESSED_REASONS to the existing `"suppressed"` outcome string, while the new `classify_send_reason` returns the raw symbol for the `reason:` attribute. Legacy `:suppressed` stamps now fall through to `"failure"` — a loud signal for stale callers.
+
+**Notes:**
+- The pre-commit rubocop hook auto-corrected two files (empty-line-after-guard-clause + hash indentation); re-staged and committed cleanly on the second try.
+- Unrelated pre-existing WIP files (pitch_relationship_builder.rb, semantic_email_preview.rb, collaborator_builder_spec.rb) left unstaged — not part of this change.
+- Push completed to origin.
+
+**Tests:** 39/39 email_metrics_spec, 224/224 email_commands_spec, 101/101 semantic_email_commands_spec, 54/54 pipeline + channel_router — all green.
+
+---
+
 ## 2026-05-18 - HS-155824: Fix `email_tracking_details_v1` job timeouts (PR #71197)
 
 **Repository:** highspot/nutella
