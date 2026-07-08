@@ -6,6 +6,28 @@ Weekly summaries and YTD running summary are in [weekly-summary-worklog.md](week
 
 ---
 
+## 2026-07-08 - HS-191017: Route replica-set state-change OperationFailures to `reason=transient_mongo` (commit 95a0a610811)
+
+**Repository:** highspot/nutella
+**Branch:** `kbachu-hs-191017-semantic-builders-retention-bulk-pitch`
+**Commit:** `95a0a610811`
+
+**Files Changed:**
+- `web/common/email/semantic_email_commands.rb` — extended `transient_mongo_error?` to cover `Mongo::Error::OperationFailure` when `#code` matches a replica-set-state-change code; introduced `MONGO_REPL_STATE_TRANSIENT_CODES` (private constant)
+- `web/spec/unit/common/email/semantic_email_commands_spec.rb` — 5 positive tests (one per code: 10107 / 189 / 91 / 11602 / 13435) + 1 negative test for duplicate-key (11000)
+
+**Summary:**
+NRQL log-facet investigation of the digest-scope `otel_email_render_fallback_total{reason=exception, scope=digest, delivery_mode=batched}` bucket in latest0/su0 over 3 days: 41 events were `Mongo::Error::SocketError` (mongobetween UDS socket EOF — already covered by the predicate on this branch) and 1 event was `Mongo::Error::OperationFailure` code=10107 `NotWritablePrimary` on shard-00-01 during a primary election. Both classes of event are transient infra flaps, not app bugs, but only the socket-error side was routing to `reason=transient_mongo`; the replica-set state-change side fell into the generic `exception` bucket, which was diluting the "true code path bug" signal.
+
+**Design:**
+`OperationFailure` is a broad class (spans dup-key, permission denied, etc.), so we can't blanket the whole class. Instead the predicate now inspects `exception.code` and only routes the five documented replset-state-change codes to `transient_mongo`. Codes chosen from the driver's official retryable-error taxonomy — `NotWritablePrimary` (10107), `PrimarySteppedDown` (189), `ShutdownInProgress` (91), `InterruptedDueToReplStateChange` (11602), `NotWritablePrimaryOrSecondary` (13435). Guarded with `respond_to?(:code)` for driver version safety.
+
+**Follow-up:** The pre-existing "OperationFailure with no code" negative test in the spec stays green — `.new(msg)` constructor leaves `#code` nil, and `nil` isn't in the transient set. Post-merge, `reason=exception` in the digest scope becomes a genuine page-worthy signal instead of a noisy dumping ground.
+
+**Tests:** 12/12 `transient_mongo_error?` specs green; 107/107 in the full `semantic_email_commands_spec.rb`.
+
+---
+
 ## 2026-07-06 - HS-191017: Add `reason` attribute to `email_send_total{outcome=suppressed}` (commit 0db97d19eab)
 
 **Repository:** highspot/nutella
