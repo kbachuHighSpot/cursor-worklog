@@ -6,6 +6,31 @@ Weekly summaries and YTD running summary are in [weekly-summary-worklog.md](week
 
 ---
 
+## 2026-07-08 - HS-191017: Domain-scoped FF fallback for direct-email dispatchers with no User (commit 9afac14c883)
+
+**Repository:** highspot/nutella
+**Branch:** `kbachu-hs-191017-semantic-builders-retention-bulk-pitch`
+**Commit:** `9afac14c883`
+
+**Files Changed:**
+- `web/common/email/semantic_email_commands.rb` — `enabled_with_reason` (and the `enabled?` shim) gain optional `domain_id:` kwarg; new branch consults `rollout_flag_enabled_for_domain?(domain_id)` after all User-oriented FF checks fail
+- `web/common/email/email_commands.rb` — `check_notification_rule` resolves `domain_id` up front and threads it into the gate; `no_domain` short-circuit stays after the gate for callers that reach it
+- `web/common/email/README_SEMANTIC_EMAIL.md` — describes the domain-scoped fallback semantics on the `unified_notification_system` flag row
+- `web/spec/unit/common/email/semantic_email_commands_spec.rb` — 3 new specs (fallback fires; fallback returns ff_off when domain-scoped flag is off; keeps pre-change behavior when domain_id is nil)
+- `web/spec/unit/common/email/email_commands_notification_rules_spec.rb` — 1 spec asserts `domain_id: data[:domain_id]` reaches the gate
+
+**Summary:**
+NRQL faceting of `otel_notification_rules_email_total{outcome=skipped,reason=flag_disabled}` in latest0/su0 over 3 days surfaced 41 gate-off events across 6 direct email types even though `unified_notification_system` was 100% enabled AND `semantic_email_enabled_categories` was `["*"]`. Root cause: `flag_enabled_for_user?` requires an `is_a?(User)` argument, and `send_ops` / `send_external_share_email_verification_code` pass bare-String recipients with `from=nil`. Every branch of `enabled_with_reason` — user, recipient-array, user-context resolve, `from` — evaluated against nil / non-User and returned false, falling through to `{ enabled: false, reason: :ff_off }`. The domain-level flag rollout was never consulted.
+
+**Design:**
+Symmetric with the pre-existing `if alert` branch that consults `rollout_flag_enabled_for_domain?(alert.domain_id)` when `to_user` is nil. Add the same treatment for direct-email dispatchers: `enabled_with_reason` accepts an optional `domain_id:` kwarg; when all User-oriented branches fail and the caller supplied a `domain_id`, evaluate the domain-scoped rollout flag and (if true) proceed to `decide_category(kind_or_type, nil, domain_id)`. `check_notification_rule` calls `resolve_domain_id_for_direct_email` (existing helper — reads `to_user&.domain_id || from&.domain_id || data[:domain_id]`) up front and threads the result into the gate; the `no_domain` short-circuit still fires after the gate returns disabled if truly no domain resolves. Behavior is additive: callers that pass no `domain_id` keep the pre-change gate contract.
+
+**Follow-up:** Post-deploy the same NRQL faceted on `flag_reason` (added in fbff8f8b591) should show `ff_off` bucket empty out for `ops` and `external_share_email_verification_code` (Blocker A). The remaining `flag_disabled` events on `bulk_pitch_status_report` / comment templates will surface as `flag_reason=category_disabled` (Blocker B — missing NotificationRule seed). The HS-191533 migration on this branch handles the bulk-pitch case; comment / reply templates still need a seed migration in a follow-up.
+
+**Tests:** 165/165 across the three touched spec files.
+
+---
+
 ## 2026-07-08 - HS-191017: Split direct-email `skipped/flag_disabled` by LD gate sub-cause (commit fbff8f8b591)
 
 **Repository:** highspot/nutella
