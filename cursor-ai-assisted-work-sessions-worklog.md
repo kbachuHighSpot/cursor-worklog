@@ -6,6 +6,29 @@ Weekly summaries and YTD running summary are in [weekly-summary-worklog.md](week
 
 ---
 
+## 2026-07-08 - HS-191017: Split direct-email `skipped/flag_disabled` by LD gate sub-cause (commit fbff8f8b591)
+
+**Repository:** highspot/nutella
+**Branch:** `kbachu-hs-191017-semantic-builders-retention-bulk-pitch`
+**Commit:** `fbff8f8b591`
+
+**Files Changed:**
+- `web/common/email/email_commands.rb` — `check_notification_rule` swaps `SemanticEmailCommands.enabled?` → `.enabled_with_reason` and threads the sub-cause; `emit_rule_metric` gains optional `flag_reason:` kwarg
+- `web/common/notifications/rules/notification_metrics.rb` — `emit_email` gains optional `flag_reason:` kwarg (only stamped when present); docstring notes it mirrors the alert-side counter's sub-reason axis
+- `web/common/email/README_SEMANTIC_EMAIL.md` — attribute list for `notification_rules_email_total` gains `flag_reason`; LD-eval-exception troubleshooting row lists both alert-path and direct-path signals
+- `web/spec/unit/common/notifications/rules/notification_metrics_spec.rb` — 2 new `emit_email` cases (attached / omitted)
+- `web/spec/unit/common/email/email_commands_notification_rules_spec.rb` — 3 cases assert `flag_reason` reaches the metric, including a discriminator between `:ff_off` and `:unsupported`
+
+**Summary:**
+NRQL investigation of `otel_notification_rules_email_total{outcome=skipped,reason=flag_disabled}` in latest0/su0 over 3 days showed 41 gate-off events (bulk_pitch_status_report, ops, external_share_email_verification_code, comment_participant_notification_template, reply_participant_notification_template, comment_notification_template). The alert-path counter already faceted its `skipped_flag_disabled` on `reason` (ff_off / category_disabled / unsupported / exception), so a missing builder was distinguishable from an LD rollout miss. The direct-email path threw that granularity away by calling boolean `enabled?` — all four sub-causes collapsed into one bucket, and `ops` (`:unsupported`, terminal state — no semantic path) looked identical to `bulk_pitch_status_report` (`:ff_off`, will resolve as the flag ramps).
+
+**Design:**
+Added `flag_reason` as a NEW attribute (not overloading the existing `reason=flag_disabled`) so existing NRQL queries keep matching. `NotificationMetrics.emit_email` stamps it only when non-nil, matching the pattern for `reason` / `rule`. `check_notification_rule` calls `enabled_with_reason` (already used by the alert path) and passes `gate[:reason]` through. The alert side and email side of the metric stack can now be queried on the same sub-reason axis.
+
+**Tests:** 54/54 in the touched spec files (35 in `email_commands_notification_rules_spec.rb` + 19 in `notification_metrics_spec.rb`).
+
+---
+
 ## 2026-07-08 - HS-191017: Route replica-set state-change OperationFailures to `reason=transient_mongo` (commit 95a0a610811)
 
 **Repository:** highspot/nutella
