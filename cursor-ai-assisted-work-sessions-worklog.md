@@ -6,6 +6,30 @@ Weekly summaries and YTD running summary are in [weekly-summary-worklog.md](week
 
 ---
 
+## 2026-07-08 - HS-191017: Alias comment/reply email_types onto their owning alert kind at rule resolution (commit 585a597bdbb)
+
+**Repository:** highspot/nutella
+**Branch:** `kbachu-hs-191017-semantic-builders-retention-bulk-pitch`
+**Commit:** `585a597bdbb`
+
+**Files Changed:**
+- `web/db/notification_rules_shape.rb` — new constant `TEMPLATE_TO_OWNING_ALERT_KIND` (7 entries → 4 owning alert kinds)
+- `web/common/notifications/rules/notification_rule_resolver.rb` — `canonical_rule_name` helper; `resolve_with_outcome` normalizes the incoming kind up front so the cache lookup, opt-out check, and override merge all key on the canonical alert kind
+- `web/common/email/README_SEMANTIC_EMAIL.md` — describes the aliasing on the `unified_notification_system` flag row
+- `web/spec/unit/common/notifications/rules/notification_rule_resolver_spec.rb` — 4 new specs: alias resolves the owning-kind's rule; reply and initial variants share a cache slot; non-aliased names untouched; assertion that mapping keys equal COMMENT_TEMPLATE_NAMES
+
+**Summary:**
+`create_meeting_comment_notification` fans one product event to seven render-time template names (`comment_*_notification_template`, `reply_*_notification_template`) but the four `notifications_for_meeting_*` / `notification_for_comment_deletion` alert kinds are the sole policy surface (priority, channels, batching, opt-outs). The seed migration deliberately excludes the seven template names via `NON_DIRECT_EMAIL_NAMES` → `COMMENT_TEMPLATE_NAMES` — but `EmailCommands.check_notification_rule` and `SemanticEmailCommands.semantic_category_enabled?` looked up rules by the direct email_type name, missed every time, and reported the six comment-family types as `flag_disabled/category_disabled` in latest0/su0 (25 events/3d).
+
+**Design:**
+Rejected two alternatives after user pushback: (1) seeding 7 rules would duplicate policy for the same product event and split the opt-out surface into 2; (2) a two-shot resolver "fallback" would waste a Mongo hit per call when the first miss is guaranteed by design. Instead normalize at the resolver's entry point: `canonical_rule_name(kind)` consults `NotificationRulesShape::TEMPLATE_TO_OWNING_ALERT_KIND`; the cache, opt-out check, and override merge all see the canonical alert kind. One Mongo lookup per call, one cache slot per product event across all seven aliases, zero data-migration work, no new opt-out surfaces. A resolver spec asserts the mapping keys equal `COMMENT_TEMPLATE_NAMES` so any future dispatch tag added to that set is required to declare its owning kind.
+
+**Follow-up:** Post-deploy, the same NRQL faceted on `flag_reason` (from `fbff8f8b591`) should show the four comment-family types (`comment_notification_template`, `comment_participant_notification_template`, `reply_participant_notification_template`, plus any group / reply variants that fire) drop out of `category_disabled` and route through `outcome=allowed` on `otel_notification_rules_email_total`. Only `bulk_pitch_status_report` remains blocked until the HS-191533 seed migration lands.
+
+**Tests:** 191/191 across `notification_rule_resolver_spec.rb` (45), `email_commands_notification_rules_spec.rb` (36), and `semantic_email_commands_spec.rb` (110).
+
+---
+
 ## 2026-07-08 - HS-191017: Domain-scoped FF fallback for direct-email dispatchers with no User (commit 9afac14c883)
 
 **Repository:** highspot/nutella
