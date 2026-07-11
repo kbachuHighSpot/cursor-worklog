@@ -6529,3 +6529,111 @@ Wire a Buildkite CI gate that fails PRs which add a new notification kind to `Al
 - **Jira ticket created in-session.** HS-191718 under epic HS-183484 (Notifications CS1 Foundations), assigned to Kiran Bachu, Feature Crew = "App Platform" (customfield_11613 → option id 18501), type Task, status To-Do.
 
 ---
+
+<!-- push-deferred: 2026-07-10 14:52 -->
+## 2026-07-10 - Link meeting cards in the weekly_meeting_digest email (semantic wire-drift fix)
+
+**Type:** milestone
+**Repository:** nutella
+**Branch:** `kbachu-hs-191017-semantic-builders-retention-bulk-pitch` (in-flight; no PR yet — bundled with the retention/bulk-pitch builder work)
+**Commit:** `1a6c6bb2c8b`
+**PR:** n/a (deferred; will roll into the branch's follow-up PR)
+**Jira:** n/a (user-reported production regression triaged in-session against a screenshot)
+**Files Changed:**
+- `web/common/email/email_commands.rb` (+26)
+- `web/spec/unit/common/email/email_commands_spec.rb` (+109, five new examples)
+
+**Summary:**
+Production `weekly_meeting_digest` cards were rendering the meeting title as plain black text and dropping the right-aligned "View Meeting" CTA. Root cause: `enrich_weekly_digest_meetings!` (which the digest already invokes) populates `:thumbnail_url` / `:description` / `:meeting_details` but never sets `:url`, and `MeetingDossierEmailHandler.transform_meetings_object` doesn't either, so the semantic builder's `if url.present?` guards silently degraded every card. New private `attach_dossier_meeting_urls!` step alongside enrichment stamps `:url` + mirrored `:meeting_url` with the same `?tracking_metric_name=dossier_meeting_prep` shape the legacy Velocity template `weekly_meeting_digest_html.vm` used, so existing click dashboards keep counting.
+
+**Changes Made:**
+- **`send_weekly_meeting_digest`**: two new calls to `attach_dossier_meeting_urls!(user, group)` — one for `upcoming_meetings`, one for `past_meetings` — right after the existing enrichment step.
+- **New `attach_dossier_meeting_urls!` private class method**: walks the day-keyed meeting payload via the existing `each_meeting_in_payload` helper. For every meeting with a `meeting_id`, sets `meeting[:url] ||= "#{base_url}/engagement#meetings/#{meeting_id}?tracking_metric_name=dossier_meeting_prep"` and mirrors to `meeting[:meeting_url]`. Base URL resolves from `user.domain.base_url` with a `G.home_base_url` fallback wrapped in `begin/rescue StandardError`. The outer walker is also `rescue`d so any failure degrades to text-only cards rather than dropping the email.
+- **`||=` on both keys**: respects any URL already on the wire so callers who stamp their own don't get stomped.
+- **Meetings without `meeting_id` are skipped** rather than emitting a URL with a nil id.
+- **New spec block `describe ".send_weekly_meeting_digest"`** with 5 examples locking the wire-shape contract: upcoming days get the tenant-scoped URL on both `:url` and `:meeting_url`, past days get the same shape, `||=` protects a caller-supplied URL, meeting_id-less meetings are skipped, and `G.home_base_url` fallback kicks in when the domain lookup raises. All 5 pass in ~20ms.
+
+**Notes:**
+- **Diagnosis was the meat of the session.** User shared two screenshots (production render + semantic MJML preview side-by-side) and observed "no links". Traced first that both are the *semantic* path (production isn't legacy Velocity — the section title "Prep for upcoming meetings" and the "Monday, June 29" weekday+date group heading are semantic-only; legacy Velocity uses different copy). Then confirmed the divergence was wire-data drift: preview `mock_data.rb` seeds `url` + `thumbnail_url` + `meeting_details`, production `MeetingDossierEmailHandler` doesn't populate `url`. Presented three fix options via `AskQuestion`; user picked "both" (enrich handler + keep preview mock rich).
+- **Scoped deliberately to `weekly_meeting_digest` only.** The shared `enrich_digest_meeting!` runs for five other meeting kinds (`daily_meeting_recap`, `immediate_meeting_recap`, `weekly_meeting_recap`, `daily_meeting_summary`, `meeting_completion_notification`). Some of them already put a `meeting_url` on the wire from a different source; others use a distinct `tracking_metric_name` (`view_meeting_from_email` vs `dossier_meeting_prep`). Painting the shared enricher would break their existing click analytics. Documented in the commit body.
+- **Thumbnail + Host/Duration/Opportunity/Account/Attendees meta line intentionally not force-populated.** Enrichment already tries to attach them via `ItemQueries.for_meeting_id` + `EngagementMeetingQueries.find_list_record`. If a tenant hasn't imported meetings as `Content-Kind=Meeting` items or doesn't have `engagement_meeting_list_records`, the card correctly degrades to text-only. That's a data-import concern, not a wire-shape concern — flagged in the session summary as a possible follow-up.
+- **RuboCop auto-corrected `Style/RescueModifier` + `Style/RescueStandardError` on first commit attempt** (the initial `(user&.domain&.base_url rescue nil)` modifier-form). Re-ran specs after autocorrect (still green), re-staged, second commit landed cleanly. No `--no-verify` used.
+- **Comment-hygiene one-liner clean.** No dated PM-review attribution, no opaque taxonomy tags, no ticket-ID prose in the added `# Stamps :url ...` comment — only a stable cross-reference to the sibling legacy template file (allowed; that's an in-repo peer, not an operational source).
+- **Pre-flight worklog check green.** Session log pushed 2 days ago, weekly review 4 days ago, no dangling entries — well inside the 7-day thresholds.
+
+---
+
+## 2026-07-11 - HS-191017: Suppress email for :send_immediately + :no_email alerts (regression fix)
+
+**Type:** milestone
+**Repository:** nutella
+**Branch:** `kbachu-hs-191017-semantic-builders-retention-bulk-pitch` (in-flight; no PR yet — bundled with the retention/bulk-pitch builder work)
+**Commit:** `8d86d8cf3e0`
+**PR:** n/a (deferred; will roll into the branch's follow-up PR)
+**Jira:** n/a (user-reported regression triaged in-session)
+
+**Files Changed:**
+- `web/common/models/commands/alerts/alert_commands.rb` (+7 / -1, three surgical hunks)
+
+**Summary:**
+The `:no_email => true` option in `ALERT_CONFIG` is meant as a hard-suppression signal ("in-app / push-only, do not email"), but only the batched-digest dispatch branches honored it — the three `:send_immediately` branches (`AlertCommands.create`, `.send_emails`, `.send_emails_async`) dispatched unconditionally, so any kind flagged with BOTH `:send_immediately => true` AND `:no_email => true` still emailed the recipient. Today exactly one kind carries that combination (`:enrollment_errors_added`), which the user was receiving as legacy-formatted email. Added `return if options[:no_email]` (symbol- or string-keyed depending on the site's convention) at the top of each `:send_immediately` branch so `:no_email` short-circuits before dispatch. In-app alert creation + toast delivery are unaffected — only the email is skipped.
+
+**Changes Made:**
+- **`AlertCommands.create` (~line 5380):** Added `unless options["no_email"]` guard to the `EmailCommands.send_alert(to, [], alert)` call in the `if options["send_immediately"]` branch. String-keyed because the caller's `alert.options` is a Mongo-persisted Hash.
+- **`AlertCommands.send_emails` (~line 5411):** Added `return if options[:no_email]` right after the existing `return if alerts.blank?` at the top of the `if options[:send_immediately]` branch. Symbol-keyed because the caller passes an in-memory `options` hash. Covers both the per-recipient fan-out path and the multi-recipient single-send path.
+- **`AlertCommands.send_emails_async` (~line 5443):** Same guard, same shape — thread-pool variant of `send_emails`.
+- **One-line comment on each guard** (`:no_email is a hard suppression; it wins even when :send_immediately is set.`) so the next reader doesn't reintroduce the bypass.
+
+**Notes:**
+- **Diagnosis path.** Investigation started as "why is `enrollment_errors_added` rendering legacy?" — first suspect was a missing `NotificationRule` seed (which would flip the kind to the semantic path). That would have shipped as a separate DB-seed PR. User pointed out the deeper issue: with `:no_email => true` the ALERT_CONFIG INTENT is that no email fires at all — a rule seed would enshrine the wrong behavior. Root-cause search then found the dispatch bypass: `!options[:no_email]` gates existed only on the `elsif` (test-env batched) branch, not on the `if options[:send_immediately]` branch.
+- **Blast surface confirmed narrow.** `grep ":send_immediately.*:no_email\|:no_email.*:send_immediately"` on `alert_commands.rb` returned exactly one hit (`:enrollment_errors_added`). Every other `:send_immediately` kind keeps sending as before; every other `:no_email` kind keeps not-sending as before. Zero behavior change beyond the one intended kind.
+- **Confirmed intent alignment via `NotificationRulesShape.build_alert_config_rule`.** That method (which is what generates rule seeds from ALERT_CONFIG entries) already omits `"email"` from the resulting rule's `channels` list when `:no_email => true`. So the rules pipeline was already respecting the flag correctly — this fix aligns the legacy dispatch pipeline with the rules pipeline's contract.
+- **Comment-hygiene one-liner clean.** No dated attribution, no ticket-ID prose, no upstream-source references — just describes the constraint that ships.
+- **Pre-commit hooks passed cleanly on first attempt.** All 3 commits (this fix + the two enrichment commits below) landed without any `--no-verify`, no auto-corrections.
+
+---
+
+## 2026-07-11 - HS-191017: Rich item-card metadata + reply-chip subtitle for semantic email
+
+**Type:** milestone
+**Repository:** nutella
+**Branch:** `kbachu-hs-191017-semantic-builders-retention-bulk-pitch` (in-flight; no PR yet)
+**Commits:** `9a7d9dd3f8c` (rich metadata), `be68aefa2cd` (reply-chip subtitle)
+**PR:** n/a (deferred; will roll into the branch's follow-up PR)
+**Jira:** n/a (user-reported "improve metadata" against screenshots of production emails)
+
+**Files Changed:**
+- `web/common/email/semantic/builders/base.rb` (major: new helpers + subtitle helpers + build_item_card signature)
+- `web/common/email/semantic/builders/alert/immediate/learning_builder.rb` (session_info + due_date_info threading for 8 learning kinds)
+- `web/common/email/semantic/preview/mock_data.rb` (`mock_course`, `mock_learning_path`, `item.from` stub)
+- `web/common/email/semantic/preview/semantic_email_preview.rb` (delegate helpers + preview swaps)
+- `web/common/email/semantic/templates/semantic_email.mjml.erb` (new subtitle `<div>` on reply chip)
+- `web/common/email/email_commands.rb` (job_title + is_partner enrichment on comment / commenter hashes)
+- `web/common/email/semantic/builders/direct/meeting_email_builder.rb` (subtitle wiring)
+- `web/common/email/semantic/builders/direct/comment_notification_builder.rb` (subtitle wiring)
+- Specs: 8 builder-spec fixture updates (`is_partner?: false, job_title: nil` on shared `let(:from_user)`), extended `direct_email_builder_spec.rb` reply-chip coverage, extended `learning_builder_spec.rb` (session + due-date specs), extended `share_builder_spec.rb` (owner + child-count specs + kind-display refactor stubs), new `base_reply_subtitle_spec.rb` (12 helper cases)
+
+**Summary:**
+User asked "improve metadata" against a screenshot of a production email (learning kind, sparse item card). Two-tier work landed as two commits on the branch. **Tier 1-5** upgrades the entity card that anchors most alert emails: every card gains `Owner: {name}` (from `item.from`, deduped against `item.author`), the "in {spot}" phrase is rewritten as `Spot: {name}` for consistency with the other label:value segments, courses + learning-paths gain `N lessons` / `N courses` from `item.assignments.size` (zero extra Mongo reads), waitlist-registered kinds gain `Session: {date}` from the alert's `session_info` payload, and seven learning kinds gain `Due: {date}` or `Ends: {date}` from `due_date_info`. `item_kind_display` was refactored to read `Content::Kind::DISPLAY_NAMES` directly instead of routing through `List::LIST_DISPLAY_MAP` with a capitalization-tolerance fallback. Preview mocks (`mock_course`, `mock_learning_path`) were added so the preview surface renders the same enrichments production sees. **Tier 6** adds a small gray subtitle line to every reply chip between the author name and the timestamp, composing `{job_title}` and/or `Partner` badge from the commenter's `User` record with dedup + guard.
+
+**Changes Made:**
+- **`base.rb` new helpers (Tier 1-5):** `item_owner_display_name(item)` (from-user display name with `item.author` dedup), `session_date_meta_segment(session_info)` (formatted session date from payload), `due_date_meta_segment(due_date_info)` (label + date + optional timezone), `item_child_count_segment(item)` (assignments-based count for courses / LPs with singular/plural i18n). `build_item_card` signature extended with `session_info:` and `due_date_info:` keyword args (both optional; unrelated callers unaffected).
+- **`base.rb` refactor (Tier 1):** `item_kind_display` now reads `Content::Kind::DISPLAY_NAMES` directly; `item_home_spot_reference` swapped from "in {spot}" to "Spot: {name}" via a new i18n key.
+- **`base.rb` subtitle helpers (Tier 6):** `reply_subtitle(from_user)` (extracts job_title + is_partner? from a User) and `compose_reply_subtitle(job_title:, is_partner:)` (bullet-joins pre-extracted parts). `build_reply` return hash gains a `subtitle:` field. Both entry points share the same formatter so the meeting- and comment-notification builders (which assemble reply hashes from wire payloads, not User objects) can reuse the composer without duplication.
+- **`learning_builder.rb` payload threading:** Extracts `session_info` from `alert_data` for `session_learner_registered_from_waitlist(_calendar)` and threads it as `session_info:` to `build_item_card`. New `build_due_date_info` helper extracts and normalizes due-date fields for 7 course/learning-path due-date + ending-soon kinds and threads as `due_date_info:` to `build_item_card`. Grouping distinguishes "Due:" (learner-specific deadline) from "Ends:" (course-scheduled close).
+- **`semantic_email.mjml.erb`:** New `<div>` between the reply author name and the timestamp with `font-size: 14px; color: #888888; line-height: 16px; padding-bottom: 4px;` gated on `subtitle && !subtitle.to_s.empty?` so the row silently omits when there's nothing to render.
+- **`email_commands.rb` upstream enrichment (Tier 6):** `stamp_comment_notify_reply_chips!` extends its existing batched `UserQueries.for_domain` lookup to also stamp `job_title` + `is_partner` on each comment hash — zero additional Mongo reads. `send_comment_notification_email` stamps the same pair on the single-comment `commenter` hash it hands to `CommentNotificationBuilder`. Both sites use scoped `rescue StandardError` blocks so a sparse/mocked User can't abort enrichment for the rest of the payload.
+- **`meeting_email_builder.rb` + `comment_notification_builder.rb`:** Read the stamped `job_title` / `is_partner` off the comment hash and set `reply[:subtitle]` via `EmailContentBuilder::Base.compose_reply_subtitle(...)`. Missing keys yield a nil subtitle (row omitted by template guard).
+- **Preview mocks (Tier 5):** New `mock_course` (with `is_training_container?`, `Content::Kind::COURSE`, `assignments.size = 5` default) and `mock_learning_path` (`Content::Kind::LEARNING_PATH`, `course_count = 3` default). `mock_item` stubs `.from` so the "Owner:" segment renders in previews. `SemanticEmailPreview` exposes `self.mock_course` / `self.mock_learning_path` delegates so the preview handlers can dispatch based on kind. `build_immediate_single_email` swaps `default_item` for `default_course` / `default_lp` on relevant learning kinds.
+- **Spec coverage:** New `base_reply_subtitle_spec.rb` covers composer + reply_subtitle + build_reply wiring with 12 cases (dedup, guard, mock-raise, missing-respond_to, whitespace-only, both-present, single-signal). `direct_email_builder_spec.rb` extended with 2 new integration examples (single-comment path + daily-notify path). `learning_builder_spec.rb` extended with 4 waitlist-session + 7 due-date specs. `share_builder_spec.rb` extended with 3 owner-segment + 5 child-count specs + refactored 4 `stub_const` calls to `Content::Kind::DISPLAY_NAMES`. **Fixture updates:** 8 builder specs (`collaborator`, `feedback`, `generic`, `learning`, `ownership_transfer`, `request_access`, `session_proctor`, `share`) had `job_title: nil, is_partner?: false` added to their shared `let(:from_user)` `instance_double("User", ...)` blocks — necessary because `build_reply` now legitimately calls `is_partner?` and RSpec verifying doubles raise `MockExpectationError` (< `Exception`, not `StandardError`) which the pre-existing `safe_is_partner?` rescue doesn't catch.
+
+**Notes:**
+- **Diagnosis was a real "why is X missing?" thread.** User's ask was open-ended ("improve metadata"). Broke it down via `AskQuestion` into 6 tiers, presented each proposal with impact + blast surface + effort estimate, got explicit go-ahead per tier. Notable branch points: (a) `item.author` (free-form text) vs `item.from` (owning User) — user chose `item.from` (labeled "Owner:"); (b) "in {spot}" vs "Spot: {name}" — user chose the latter; (c) whether to add subtitle only via `build_reply` or also enrich MeetingEmailBuilder + CommentNotificationBuilder — user chose "all reply chips get subtitle" (which required the two upstream enrichment sites).
+- **Zero-Mongo commitments held across all four data sources.** Owner comes from `item.from` (already loaded on Item). Child count comes from `item.assignments` (in-memory array on the Item). Session date comes from `alert_data[:session_info]` (already on the alert payload). Due date comes from `alert_data[:summary]` (same). Subtitle inputs are stamped in the SAME batched User lookup that already runs for avatar / author_url. Verified via read of each source before committing.
+- **Regression avoidance across 10 `build_reply` callers.** `build_reply` is on `Base` and called by 9 semantic alert builders plus `CommentNotificationBuilder`. Because `subtitle:` is an additive field and the template gates rendering on presence, all 10 automatically emit the subtitle when their user carries the data — no per-builder wiring required. But the added `safe_is_partner?` call inside `reply_subtitle` triggered `MockExpectationError` on the 8 builder specs whose `let(:from_user)` `instance_double("User", ...)` didn't stub `is_partner?`. Rather than broaden the production `rescue` (which was scoped to `StandardError` by design), added the stub to each fixture. Ran full builder-spec suite (645 examples) after: 645/645 pass (excluding pre-existing `session_proctor_builder_spec.rb` `TimeHelpers` NameError which is 10/10 baseline).
+- **RuboCop clean on all 3 commits, first attempt.** No auto-corrections, no `--no-verify`.
+- **Comment-hygiene clean.** New comments describe constraints that ship (dedup rules, gating rationale, batched-lookup reuse) — no dated PM-review attribution, no ticket-ID prose, no upstream-source references.
+- **Split into 3 commits per user preference** (`AskQuestion` upfront): (1) `:no_email` fix, (2) rich metadata, (3) reply-chip subtitle. `base.rb` was hunk-split between commits 2 and 3 via a temporary snapshot-and-revert dance to keep commit boundaries clean. `share_builder_spec.rb` and `learning_builder_spec.rb` were snapshotted the same way so their Tier 6 fixture stubs land in commit 3 alongside the code that requires them.
+- **Session context.** Continuation of the multi-day retention/bulk-pitch semantic-email polish thread on the same branch (which already has 8 prior commits on top of `main`: fallback restoration, section CTA restoration, weekday-case fix, weekly-digest meeting URLs, section CTAs + comment-notify meeting links, reply-chip avatar restoration).
+
+---
