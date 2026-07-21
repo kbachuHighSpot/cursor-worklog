@@ -6637,3 +6637,69 @@ User asked "improve metadata" against a screenshot of a production email (learni
 - **Session context.** Continuation of the multi-day retention/bulk-pitch semantic-email polish thread on the same branch (which already has 8 prior commits on top of `main`: fallback restoration, section CTA restoration, weekday-case fix, weekly-digest meeting URLs, section CTAs + comment-notify meeting links, reply-chip avatar restoration).
 
 ---
+
+<!-- push-deferred: 2026-07-12 16:45 -->
+## 2026-07-12 - HS-191017: Scorecard enrichment + retention meeting date + digest BSON safety
+
+**Type:** milestone
+**Repository:** nutella
+**Branch:** `kbachu-hs-191017-semantic-builders-retention-bulk-pitch`
+**PR:** #73589
+**Commits:** `7fee9f06b26` (BSON), `abc34c2e2fc` (scorecard enrichment), `2daf81abf05` (retention start_date)
+
+**Files Changed:**
+- `web/common/email/email_commands.rb` (BSON hunk at ~L524 + `:item_id` stamp at ~L2372)
+- `web/common/email/semantic/builders/direct/digest_email_builder.rb` (`:to_user_id` property + `EntityFetch.user` re-hydration in `build_legacy_digest`)
+- `web/common/email/semantic/builders/direct/analytics_builder.rb` (`:item_id` property + `hydrate_presented_item` + `build_item_card` delegation with prepended subscription meta)
+- `web/common/email/semantic/builders/alert/immediate/retention_notification_builder.rb` (outer `start_date` fallback in `build_meeting_item`)
+- `web/spec/unit/common/email/email_commands_spec.rb` (`to_user_id: nil` assertion update)
+- `web/spec/unit/common/email/direct_email_builder_spec.rb` (4 new `AnalyticsBuilder` specs covering hydration success, nil-meta hydration, hydration-nil fallback, no-id short-circuit)
+- `web/spec/unit/common/email/builders/alert/immediate/retention_notification_builder_spec.rb` (3 new pins: production `start_date` shape, both-keys precedence, symbol-key `:start_date`)
+
+**Summary:**
+Three shipped commits on top of the existing PR #73589 branch. **Commit 1 (BSON fix)** rewired the `alerts_send_v1` digest data hash to carry `:to_user_id` (String) instead of a raw `User` — the User instance was breaking `BSON::Error::UnserializableClass` inside a swallowed rescue when `send_email` enqueued the job to Mongo, silently dropping every digest send. `DigestEmailBuilder` now re-hydrates via `EntityFetch.user` (cache hit under load) so `build_item_card` still gets a `to_user` for timezone-correct timestamps. **Commit 2 (Tier B scorecard enrichment)** closes the metadata gap on scorecard/report subscription emails: `AnalyticsBuilder.build_subscription_item` now hydrates the Item from a BSON-safe `:item_id` stamped by `send_email`'s subscription-kind enrichment block and delegates to `build_item_card`, so subscription cards inherit the same kind label / owner / home spot / length / updated_at / thumbnail as alert cards. The subscription-specific "Weekly • Sent Mar 12, 2026" segment is prepended to the returned bulleted meta line. Absent id, deleted item, or permission revoked all fall through to today's flat wire-only card — strictly additive. **Commit 3 (Bugbot retention fix)** addresses a real bug the Bugbot review caught: `build_meeting_item` only read `meeting_start_date` on the outer top_meetings hash, but NovaCore's `HostNotificationDispatchWorker` ships `start_date` there (`meeting_start_date` is the sibling key on the nested `meeting_details` hash produced by `ShareBuilder.extract_meeting_details`). Production retention emails were dropping the card meta date line. Reads either key now, preferring outer `start_date` (production truth).
+
+**Changes Made:**
+- **`email_commands.rb` — BSON fix (~L524):** Changed the `data` hash passed to `send_email` from `:to_user => to_user` to `:to_user_id => to_user&.id`. Added a 3-line comment documenting why the raw User was unserializable and how re-hydration works downstream.
+- **`digest_email_builder.rb` — property + hydration:** Renamed `property :to_user` to `property :to_user_id`. In `build_legacy_digest`, read `to_user_id = data[:to_user_id]` and re-hydrate via `EntityFetch.user(to_user_id, treat_nil_as_missing: Hspt::EntityCache::GRANDFATHER_TRUE)` (nil-safe short-circuit when absent).
+- **`email_commands.rb` — `:item_id` stamp (~L2372):** Inside the subscription-kind enrichment block (`proctor_replaced_by_deactivate` / `analytics_report_subscription` / `scorecard_email_subscription`), added `data[:item_id] = item.id` alongside the existing `item_*` fields. BSON-safe String, so it survives job enqueue.
+- **`analytics_builder.rb` — property + delegation:** New `property :item_id` on `AnalyticsData`. Refactored `build_subscription_item` to short-circuit `hydrate_presented_item` when `data[:item_id]` is blank (avoids the always-called overhead), delegate to `build_item_card(hydrated, data[:item_url], nil)` on hydration success, and prepend the subscription meta ("Weekly • Sent Mar 12, 2026") to the returned bulleted meta line. Hydration failure falls through to the pre-existing flat card builder unchanged.
+- **`retention_notification_builder.rb` — key fallback (L192-L198):** `start_date = (meeting["start_date"].to_s.empty? ? meeting["meeting_start_date"] : meeting["start_date"]).to_s`. Added a 4-line comment explaining the outer-vs-nested key split and why we read either.
+- **Spec coverage:** 4 new `AnalyticsBuilder` specs pin hydration success (meta prefix), nil-meta hydration (subscription line still shows), hydration-nil fallback (no `build_item_card` call), no-id short-circuit (no `hydrate_presented_item` call). 3 new retention specs pin production `start_date` shape, both-keys precedence (outer wins over nested), symbol-keyed `:start_date` (Mongo round-trip). `email_commands_spec.rb` assertion updated for the BSON key rename.
+
+**Notes:**
+- **Bugbot caught a real one.** The retention `start_date` mismatch would have shipped the entire batch of retention emails with blank card meta lines (silent regression vs legacy Velocity). Confirmed via the docstring at `email_commands.rb#send_retention_host_notification` which explicitly documents the outer NovaCore key. Existing spec fixtures used the fictional `meeting_start_date` key on the outer hash, so the drift was invisible to test coverage — this is why the 3 new pins matter: they exercise the actual production shape.
+- **BSON fix was uncommitted from the prior day's session.** Discovered during pre-commit sweep — `digest_email_builder.rb` and one `email_commands.rb` hunk had been modified but never committed. Split them into their own commit so they land as a self-contained safety fix rather than getting muddied with the Tier B enrichment.
+- **`git add -p` hunk split for `email_commands.rb`.** Two logically-separate hunks (BSON at L524, `:item_id` stamp at L2372) needed to land in different commits. Fed `printf 'y\nn\n' | git add -p` to stage only hunk 1 for commit 1, then plain `git add` for commit 2.
+- **Full email-suite regression:** `spec/unit/common/email/` 1879/1879 pass, 6 pending (up from 1875 by the 4 new AnalyticsBuilder specs). Retention builder spec: 32/32 (up from 29 by the 3 new start_date pins).
+- **RuboCop clean on all 3 commits, first attempt.** No auto-corrections, no `--no-verify`, no pre-commit hook nagging.
+- **Comment-hygiene clean.** Each new comment names the constraint that ships today (why `to_user_id`, why the fallback chain, why `:item_id` is nil-safe) — no dated review attribution, no ticket ID prose, no NovaCore-service coupling that would rot on rename.
+- **Session context.** Continuation of the same PR #73589 branch as yesterday's HS-191017 metadata + reply-chip subtitle work. Also included an unshipped investigation into the red CTA button color on an MFA settings updated email (traced to per-tenant `brand.colors.action-primary` override in the customer's domain config — not a code bug, working as designed; user asked to hold off on any fix).
+
+---
+
+## 2026-07-20 - HS-191718: Coverage-gate fix hints + notifications-platform skill overhaul
+
+**Type:** milestone
+**Repository:** nutella + ai-plugins (multi-repo)
+**Branch:** `kbachu-hs-191718-notification-coverage-ci-gate` (nutella) / `add-notifications-platform` (ai-plugins)
+**PR:** nutella #73598 branch; ai-plugins #add-notifications-platform branch
+**Files Changed:**
+- nutella: `.buildkite/check_semantic_email_coverage_delta.sh`
+- nutella: `web/scripts/notifications-migration/scan_missing_email_previews.py`
+- ai-plugins: `notifications-platform/skills/notifications-platform/SKILL.md`
+
+**Summary:**
+Wired the semantic-email coverage gate's per-surface Fix hints to name the owning `notifications-platform` skill step, and substantially corrected/expanded that skill after a dry run surfaced gaps.
+
+**Changes Made:**
+- **Gate + scanner fix hints:** the six `SURFACES` fix strings in the CI gate and the mirrored `FIX_HINTS` in the standalone scanner now each end with the `notifications-platform` skill (highspot/ai-plugins) step that owns the surface (rule seed / production builder / preview).
+- **notifications-platform skill:** added the missing Step 5 "Wire the semantic production builder" (the CI gate's third surface — `GenericBuilder` `*_KINDS` for alert kinds, `*_TYPES` maps in `SemanticEmailRegistry` for direct types); fixed the Step 2 seed-migration template split (HS-192654 for alert kinds vs HS-191533 for direct types) and noted the alert-kind seed reads the Step 4 `SHEET_BACKED_ATTRIBUTES` overlay; made the email copy a mandatory Step 1 user input; clarified the legacy `.vm` templates are preview-only copies while the production render lives in `magma`.
+
+**Notes:**
+- **Dry run drove the corrections.** Walking a sample kind (`sample_content_review_ready`) through all steps read-only against the live tree exposed that the skill only covered 2 of the gate's 3 surfaces (missing the production builder) and pointed at the wrong seed template for alert kinds.
+- **Delta-gate clarification for the user:** the PR's `Rule seed missing (direct): 3 → 0 (Δ -3)` is the earlier `SHEET_BACKED_ATTRIBUTES` fix landing (negative delta = gaps removed, gate PASS); the remaining `play_suggestions_digest` preview gap is a separate pre-existing surface (Δ 0, tolerated).
+- **Scope reversal:** a `migrate-notification-kind` plugin was scaffolded (with inlined conventions from 8 `semantic-email-*.mdc` rules) then removed at the user's request ("we don't need migration skill") — left no committed trace.
+- **digest-framework** plugin work from earlier in the session remains on the same ai-plugins branch.
+
+---
