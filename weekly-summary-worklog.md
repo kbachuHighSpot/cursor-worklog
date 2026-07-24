@@ -4,11 +4,12 @@ This log tracks weekly summaries of significant work across all sources (Cursor,
 
 ## Running Summary
 
-*Last updated: 2026-07-06*
+*Last updated: 2026-07-24*
 
 ### Overall Key Accomplishments (Jan-Jun 2026)
 
 **Significant Cursor Activities:**
+- **Semantic-email regression gates + observability hardening (Jul 7-24)**: NRQL-driven direct-email/digest observability (HS-191017) — comment/reply `email_type`→owning-kind aliasing at rule resolution, domain-scoped FF fallback for User-less dispatchers, a `flag_reason` metric sub-cause axis, and replica-set `OperationFailure` → `transient_mongo` routing — plus correctness fixes (weekly-meeting-digest card links, a `:no_email` hard-suppression bypass, rich item-card metadata + reply-chip subtitles, and a digest BSON-safety fix that was silently dropping every digest send). Landed PR #73589 (Jul 13), #73976 (WGLL-video rule seed), #74047 (ICS/metadata/digest fixes), #74177 (Email Index Review #2 card anchoring). Shipped TWO CI regression gates for semantic email: HS-191718 coverage-**delta** (checks *existence* of rule seed / production builder / preview) and a new in-process RSpec **snapshot-regression** gate (byte-level HTML + `email_data` diff vs a committed fixture catalogue, with a hybrid baseline→HEAD `email-snapshot-drift` Buildkite annotation). Merged the notifications-platform Cursor plugin (ai-plugins #83) documenting the full add-notification workflow including both gates.
 - **HS-182399 Semantic Email Text & Styling Fixes (May 6 – May 15)**: Drove a multi-week PM-review-driven cleanup of semantic-email rendering quality. PR #70801 (43 files, +8,052/-815) covering 8 builder families' `[RULE:inlined_card_title]` violations (Pattern A allowlist + Pattern B helper extraction), assessment-family rebuild (7 `assessment_submitted` variations + `amf_assessment_submitted` + `amf_single_assessment_submitted` rich cards via Apollo `meeting_info` plumbing), `share_meeting` enrichment (render-time `engagement_meeting_list_records` Mongo lookup + meeting thumbnail via `ThumbnailPresenter`/`UrlPresenter` chain), `lesson_progress_reset` production entity-reversal fix, plus 153 i18n keys regenerated via `iidgen` after Buildkite caught 22 length violators + 130 descriptive keys + 1 case-collision. Migrated semantic-email gate from DynamicConfig to LaunchDarkly-only controls (LD PR #328 — `unified_notification_system`, `semantic_email_enabled_categories`, `semantic_email_category_overrides`) so PM-batch rollout per-category becomes UI-driven.
 - **Notifications-Migration Test Tooling (May 8 – May 15)**: Built out `compare_email_previews.py` from a parity-only checker into a comprehensive PM-rubric tooling. Added 14 new migration rule checks (`[RULE:missing_card]`, `[RULE:body_after_following_reference]`, `[RULE:semantic_card_without_legacy_link]`, `[RULE:noun_entity_type_mismatch]`, `[RULE:reply_completeness]`, `[RULE:card_meta]`, `[RULE:default_avatar]`, `[RULE:cta_presence]`, `[RULE:header_parity]`, `[RULE:footer_parity]`, `[RULE:card_url_type]`, `[RULE:item_count]`, `[RULE:card_count]`, `[RULE:duplicate_sections]`, `[RULE:body_copy_length]`, etc.). Snapshot regression catalogue (186 baseline JSON files). Verdict bucket refactor (`warn_same`/`warn_structured`). Run summary auto-discovery of all reason types with severity icons + per-verdict breakdowns + strict/lenient success rates + `--rule-category` Mongo-backed filter + `--reason-type` matching backlog tags verbatim. PR #70903 (notifications-migration test scripts, 7 files, +7,171) merged May 11. Documented `--semantic-only-rubric` mode + `validate_rule_category.sh` wrapper in README.
 - **Nutella MCP Hackweek Build-Out (Apr 23 – May 1)**: Drove the Mission Autonomous Nutella MCP project end-to-end. Created the `nutella-mcp` repo and synthetic-data seeder, shipped pitch tools, then ran a 6-month gap analysis (commits + Jira HISPI + Slack) to prioritize new tools. Closed ~10 of the gaps the same week — admin endpoints for spot + domain notification settings, SMTP relays, item processing status, reprocess polling, unsubscribe lookup, and a full feature-flag suite (`get_feature_flag_status` v2.0 → v2.1 with Mongo+LD+EvaluationReason, `list_enabled_features` `include_launchdarkly` opt-in, new `get_launchdarkly_flag_details` admin tool). Fixed two latent toolkit bugs along the way (array query-param encoding, dropped `static_query`). Tool surface grew from ~50 → ~65 HTTP tools; refreshed architecture docs and proposal so a new reader can land on either and get the correct picture. Added `debug-item-processing` skill packaging the diagnostic playbook from a real "unreadable item" investigation.
@@ -119,18 +120,102 @@ This log tracks weekly summaries of significant work across all sources (Cursor,
 - Worklog automation gap: migration scripts and investigations weren't auto-logged because rules lacked specific significance criteria and mid-session logging instructions (Apr 6)
 
 ### Current Focus (This Week)
-- **HS-191718 Notification-coverage CI delta gate**: Draft PR #73598 opened Jul 6 — Buildkite step that fails PRs which add a new `ALERT_CONFIG` / `EmailCommands::SETTINGS` kind without a rule seed, semantic production path, AND preview row. Delta-only + baseline-safe. Awaiting review; smoke-tested locally on all three surfaces + the `:no_email` escape hatch.
-- **HS-191017 Direct emails through rules engine — resolved "Working As Designed"**: The 3-PR stacked series (#73512 / #73513 / #73543) was closed without merge on Jul 6 after the ticket resolved as "Working As Designed" — the current EmailCommands dispatch path was deemed correct. Follow-on PR #73589 (Add semantic builders for `retention_host_notification` + `bulk_pitch_status_report`, opened Jul 6) narrows to just the two kinds that actually needed semantic builders.
-- **HS-191129 AlertRuntimeValidations framework**: Planning framework for pre-flight validation of batched-alert send jobs (recipient shape, rule shape, delivery-strategy consistency). To-Do; queued after HS-191718 lands.
-- **HS-191429 latest-env email feedback (BCC dynamic config)**: In Progress. Follow-on to the debug-BCC surface that shipped in HS-186448 (#73129) — wiring the BCC target list to a dynamic config knob so per-domain observation can flip without a deploy.
-- **HS-180228 notification rule dedup guard** (reviewing PR #73490): Enforcement layer preventing duplicate-recipient alert emission across rules for the same event.
+- **Semantic email snapshot-regression gate (in-flight branch, PR pending)**: New blocking `spec/integration` RSpec gate that byte-diffs every previewable kind's normalized HTML + `email_data` against a committed fixture catalogue, with a hybrid baseline→HEAD `email-snapshot-drift` Buildkite annotation on failure. Validated end-to-end through the integration harness (forced `FOOTER_ADDRESS` drift → 691 kinds → one aggregated annotation; clean run auto-removes the stale report). Byte-level sibling to the HS-191718 existence gate.
+- **HS-191718 coverage-delta CI gate**: In Code Review — the existence gate (rule seed / production builder / preview). Fix hints now name the owning notifications-platform skill step.
+- **HS-191129 AlertRuntimeValidations framework**: In Progress — pre-flight validation for batched-alert send jobs (recipient/rule/delivery-strategy shape).
+- **HS-191017 direct-email observability + gating**: In Progress — NRQL-driven metric + FF-fallback hardening; landed as in-branch commits + PR #73589 (merged Jul 13).
+- **notifications-platform Cursor plugin (ai-plugins #83, merged)**: add-notification + digest-framework skills; add-notification now documents the snapshot-regression gate (Step 8b).
 
 ### Current Blockers
-- HS-151210 (Pinterest font request) remains Blocked
-- HS-183419 follow-on: `tracking_tag` wraps semantic alert URLs via `tracked_url`, but a few digest/direct-email paths still bypass it — surface in next backlog sweep
+- **HS-193844** (verification-code email tracking-parity regression) — Untriaged; the semantic verification-code email's header + footer URLs miss the `?source_alert` / `?source=email.<tag>` wrap that legacy production applies.
 - HS-189038 (SendGrid 421 max-messages-per-connection) — filed Jun 18; owned by App Platform; magma `SmtpSend.sendWithUnsubscribeLink()` needs transport recycling or 421-retry inside the loop
+- HS-183419 follow-on: `tracking_tag` wraps semantic alert URLs via `tracked_url`, but a few digest/direct-email paths still bypass it — surface in next backlog sweep
+- HS-151210 (Pinterest font request) remains Blocked
 - `nutella/.cursor/**` is gitignored, so in-repo rule edits don't propagate to teammates without unignoring `.cursor/rules/`
 - Repo-local skills are not surfaced in `<available_skills>` — Cursor product behavior; needs feature request or config investigation
+
+---
+## 2026-07-24 - Weekly Review (2026-07-21 to 2026-07-24, partial week)
+
+**Summary:**
+Short mid-week window centered on a new blocking regression gate for semantic emails and shipping the notifications-platform Cursor plugin. Built an in-process RSpec snapshot-regression gate that renders every previewable email kind and diffs normalized HTML + `email_data` against a committed fixture catalogue, with a hybrid baseline→HEAD Buildkite annotation on failure; validated end-to-end through the integration harness. Merged the notifications-platform plugin into ai-plugins (#83) and extended its `add-notification` skill to cover the new gate. One cross-team review (otel-collector NR include-filter for `notification_rules` metrics).
+
+### Significant Cursor Activities
+- **Semantic email snapshot-regression CI gate (session milestone; branch in-flight, PR pending)**: New blocking `spec/integration` RSpec gate that renders every previewable kind through the same `SemanticEmailPreview` methods the controller uses and byte-diffs normalized HTML + `email_data` against a committed fixture catalogue (`spec/integration/common/email/semantic/snapshots/`). Motivation: the builders and the two shared MJML wrappers (`semantic_email.mjml.erb` + `external_recipient_email.mjml.erb`) are shared, so one change can silently regress an unrelated kind — the coverage-delta gate checks *existence*, this checks the *bytes*. Volatile content (timestamps, tracking params, MJML version) is normalized via patterns ported from `compare_email_previews.py`. Record mode (`UPDATE_EMAIL_SNAPSHOTS=1`) regenerates fixtures; check mode drives off the committed set. Added a **hybrid annotation**: on failure the run aggregates a per-kind baseline→HEAD unified diff into one `email-snapshot-drift` Buildkite annotation (the committed fixture IS main's approved baseline — main re-runs the gate — so no second boot of main is needed). Validated end-to-end by perturbing the shared `FOOTER_ADDRESS` constant → 691 kinds drifted into a single aggregated annotation; reverted and confirmed the clean run auto-removes the stale report. Runtime ≈ 29s render + 7s load for 723 examples.
+- **notifications-platform plugin merged (ai-plugins #83, merged Jul 22)**: Landed the notifications-platform Cursor plugin (add-notification + digest-framework skills). Extended the `add-notification` skill with a new "Step 8b" documenting the snapshot-regression gate — how to run it locally whenever a notification is added / modified / enhanced, how to record a new kind's fixture, and how to resolve a `Snapshot drift` failure (re-record an intended change vs fix an unexpected regression).
+
+### Significant Helping Others
+- **otel-collector-ops #405 (HS-193244) reviewed for Chris K** — Allow `notification_rules` OTEL metrics through the New Relic include filter, so the direct-email `flag_reason` / rules-engine counters shipped the prior fortnight actually reach NR. Closed Jul 22.
+- **Slack (#eng-observability, Jul 22)** — flagged the pain of per-scale-unit PR splits to Chris K on the otel include-filter rollout.
+
+### Significant Jira Tickets
+- **HS-193844** (Semantic email tracking-parity regression in verification-code email — header + footer links, P3, **Untriaged**, created Jul 23) — new bug: verification-code email URLs miss the `?source_alert` / `?source=email.<tag>` tracking wrap that legacy production applies.
+- **HS-193051** (Digital Room activity card shows first DR item instead of the DR name, P3, **Closed** Jul 23) — fixed by PR #74177 the prior week.
+- **HS-191718** (coverage-delta CI gate, P3, **Code Review**) — the snapshot gate is its byte-level sibling.
+
+**Notes:**
+- Snapshot-gate work is on an in-flight branch; PR to follow. This session was not auto-logged to the session worklog — reconstructed here — so the merge/session trigger gap persists.
+
+---
+## 2026-07-20 - Weekly Review (2026-07-14 to 2026-07-20)
+
+**Summary:**
+Three semantic-email PRs merged (WGLL-video rule seed, a batch of ICS/metadata/digest fixes, and Email Index Review #2 card-anchoring fixes), plus the HS-191718 coverage-gate polish that wired each per-surface Fix hint to the owning notifications-platform skill step and substantially corrected that skill after a read-only dry run. Reviewed localization-duplication fixes (nutella + magma) and Chris K's throttling-guard removal (+ its deployment script).
+
+### Significant Cursor Activities
+- **HS-191718 coverage-gate fix hints + notifications-platform skill overhaul (Jul 20)**: Wired the six per-surface Fix strings in `.buildkite/check_semantic_email_coverage_delta.sh` and the mirrored `FIX_HINTS` in `scan_missing_email_previews.py` to each name the owning notifications-platform skill step (rule seed / production builder / preview). A read-only dry run of a sample kind through every step exposed that the skill covered only 2 of the gate's 3 surfaces (missing the production builder) and pointed at the wrong seed-migration template for alert kinds — corrected both, made email copy a mandatory Step 1 input, and clarified that legacy `.vm` templates are preview-only copies while production renders in magma. A `migrate-notification-kind` plugin was scaffolded then removed at the user's request (no committed trace); digest-framework plugin work remained on the same ai-plugins branch.
+- **HS-191129 semantic email fixes (PR #74047, merged Jul 15)**: ICS render-time rebuild, metadata dedupe, digest polish, and missing metrics — a batch of semantic-email correctness fixes.
+- **HS-192654 seed WGLL-video notification rules (PR #73976, merged Jul 15)**: Idempotent dated seed migration for `skill_wgll_video_{approved,pending_approval}` so their rule lookup returns a document instead of `:blocked`.
+- **HS-193051 Email Index Review #2 (PR #74177, merged Jul 17)**: Fixed pitch / Digital Room activity-card anchoring, section titles, and the external-share CTA.
+
+### Significant PRs
+- **PR #74177** (HS-193051, MERGED Jul 17) — pitch/DR activity card anchoring + section titles + external-share CTA.
+- **PR #74047** (HS-191129, MERGED Jul 15) — ICS rebuild, metadata dedupe, digest polish, missing metrics.
+- **PR #73976** (HS-192654, MERGED Jul 15) — seed WGLL-video notification rules.
+
+### Significant Helping Others
+- **nutella #74102 + magma #9144 (HS-192879) reviewed for Scott Fletcher** — localization duplication fixes across both repos (merged Jul 16).
+- **nutella #74222 + #74268 (HS-193249) reviewed for Chris K** — remove throttling guard from notification rules + its deployment script (merged Jul 20).
+- **launchdarkly-flags #632/#644, nutella #73847/#73901 (HS-180228 / HS-191506) reviewed for Chris K** — dedup + throttle per-domain flags and the dedup-window rename migration.
+
+### Significant Jira Tickets
+- **HS-150860** (Welcome/signup email copy, P3, **Deployed** Jul 17).
+- **HS-155824** (email_tracking_details_v1 slow query, P2, **Closed** Jul 15).
+- **HS-183875** (Notifications CS1 Foundations — UX + Rules Engine, Closed Beta, P1, **In Dev**).
+- **HS-188911** (Training video playback aborts mid-stream on enterprise networks, P3, To-Do) — triaged/assigned.
+
+**Notes:**
+- Carry-over: circulate HS-191718 for review; the byte-level snapshot-regression gate (next week) is the sibling to this existence gate.
+
+---
+## 2026-07-13 - Weekly Review (2026-07-07 to 2026-07-13)
+
+**Summary:**
+NRQL-driven observability + correctness hardening of the direct-email and digest paths (HS-191017), landing as PR #73589 (merged Jul 13) plus several in-branch commits. Four Jul 8 commits added metric granularity and routed transient Mongo flaps out of the "real bug" bucket; mid-week fixes covered a weekly-meeting-digest link regression, a `:no_email` hard-suppression bypass, rich item-card metadata + reply-chip subtitles, and a BSON-safety fix that was silently dropping digest sends. Six cross-team reviews (dedup guard + flags, bulk-pitch builder, CDN single-HTML serving).
+
+### Significant Cursor Activities
+- **HS-191017 direct-email observability + gating (4 commits, Jul 8)**: All NRQL-driven from latest0/su0. (1) Alias the seven comment/reply render-time `email_type`s onto their four owning alert kinds at rule resolution (`TEMPLATE_TO_OWNING_ALERT_KIND` + `canonical_rule_name`) so the comment family stops reporting `category_disabled` — one Mongo lookup, one cache slot per product event, zero new opt-out surfaces. (2) Domain-scoped FF fallback for direct-email dispatchers that pass bare-String recipients with no `User` (`ops`, `external_share_email_verification_code`) so a 100%-enabled domain flag is actually consulted. (3) Split the direct-email `skipped/flag_disabled` bucket by LD sub-cause via a new `flag_reason` metric attribute, so a terminal `:unsupported` kind is distinguishable from a will-resolve `:ff_off`. (4) Route replica-set state-change `OperationFailure` codes (10107/189/91/11602/13435) to `reason=transient_mongo` so the digest `exception` bucket becomes a genuine page-worthy signal.
+- **weekly_meeting_digest meeting-card links (Jul 10)**: Production digest cards were rendering meeting titles as plain text with no "View Meeting" CTA — `enrich_weekly_digest_meetings!` never set `:url`. New `attach_dossier_meeting_urls!` stamps the tenant-scoped `?tracking_metric_name=dossier_meeting_prep` URL so click dashboards keep counting; scoped deliberately to this one kind to avoid breaking five sibling meeting kinds' analytics.
+- **`:no_email` hard-suppression fix (Jul 11)**: The `:no_email => true` ALERT_CONFIG signal was only honored on batched-digest branches, so a kind flagged BOTH `:send_immediately` AND `:no_email` (`enrollment_errors_added`) still emailed. Added `return if options[:no_email]` at each `:send_immediately` branch; aligns the legacy dispatch path with the rules pipeline (which already omits `email` from such a kind's channels).
+- **Rich item-card metadata + reply-chip subtitle (Jul 11)**: Entity cards gain Owner / Spot / `N lessons` / Session / Due-date segments (all zero-extra-Mongo), and every reply chip gains a job-title / Partner subtitle line — additive across 10 `build_reply` callers.
+- **Scorecard enrichment + retention meeting date + digest BSON safety (PR #73589, merged Jul 13)**: BSON fix rewired the `alerts_send_v1` digest hash to carry `:to_user_id` instead of an unserializable raw `User` (which was silently dropping every digest send inside a swallowed rescue); scorecard/report subscription cards now hydrate the Item and reuse `build_item_card`; and a Bugbot-caught fix reads the outer `start_date` key NovaCore ships for retention emails.
+
+### Significant PRs
+- **PR #73589** (HS-191429 / HS-191017 branch, MERGED Jul 13) — migrate missing kinds, PM feedback, metrics; carried the retention/bulk-pitch builders + BSON + scorecard + retention-date fixes.
+
+### Significant Helping Others
+- **nutella #73490 (HS-180228) reviewed for Chris K** — enforce notification-rule dedup guard (merged Jul 8).
+- **nutella #73568 (HS-191533) reviewed for Tanish** — semantic email builder for bulk pitch status report (merged Jul 8).
+- **nutella #73672 + terraform #5553 (HS-191818) reviewed for noobmaster** — serve single uploaded HTML files via authenticated CDN.
+- **launchdarkly-flags #632/#644 (HS-191506 / HS-180228) reviewed for Chris K** — throttle + dedup per-domain flags (Jul 13).
+- **Slack**: #alerts-content-cdn-production (Jul 8) — explained an S3-overload CDN spike is expected/transient (browser-side retries noted as a follow-up to investigate); #eng-qa-ff-request (Jul 13) — coordinated "All categories" FF enablement for su0/su2 with Nathan, Nav, Chris.
+
+### Significant Jira Tickets
+- **HS-191017** (Route direct emails through rules engine, P3, **In Progress**) — observability/gating hardening this week.
+- **HS-155824** (email_tracking_details_v1 slow query, P2, In Progress) — closed the following week.
+
+**Notes:**
+- Much of this week's work landed as in-branch commits on `kbachu-hs-191017-semantic-builders-retention-bulk-pitch` rather than discrete PRs; reconstructed here from the session worklog (which was well-populated this week).
 
 ---
 ## 2026-07-06 - Weekly Review (2026-06-27 to 2026-07-06)
