@@ -6703,3 +6703,31 @@ Wired the semantic-email coverage gate's per-surface Fix hints to name the ownin
 - **digest-framework** plugin work from earlier in the session remains on the same ai-plugins branch.
 
 ---
+
+## 2026-07-25 - HS-194013: Switch semantic-email snapshot gate to manifest-hybrid storage
+
+**Type:** milestone
+**Repository:** nutella + ai-plugins (multi-repo)
+**Branch:** `kbachu-hs-194013-semantic-email-snapshot-regression-gate` (nutella) / `kbachu-add-notification-snapshot-gate-step` (ai-plugins)
+**PR:** nutella [#74613](https://github.com/highspot/nutella/pull/74613) (commit `cc0211e70cc`); ai-plugins branch commit `f62f1b6`
+**Files Changed:**
+- nutella: `web/spec/integration/common/email/semantic/semantic_email_snapshot_regression_spec.rb` (rewritten for manifest storage)
+- nutella: `web/spec/integration/common/email/semantic/snapshots.manifest.json` (new; deleted the 724-file `snapshots/` fixture dir)
+- nutella: `.buildkite/email_snapshots_restore.sh`, `email_snapshots_upload.sh`, `run_semantic_email_snapshot_rewarm.sh` (new)
+- nutella: `.buildkite/run_rb_integration_bktec.sh`, `CODEOWNERS`
+- ai-plugins: `notifications-platform/skills/add-notification/SKILL.md`
+
+**Summary:**
+Replaced the committed HTML/JSON fixture catalogue (~11 MB, 724 files) on PR #74613 with a manifest-hybrid layout: a committed `snapshots.manifest.json` (kind → sha256, ~92 KB) is the correctness source of truth, while the baseline bytes move to content-addressed blobs in the `highspot-build-state` build cache. Dry-run validated end-to-end against local MinIO.
+
+**Changes Made:**
+- **Spec:** gate is now `render → normalize → sha256 → compare-to-manifest`, so pass/fail has zero S3 dependency. Restored blobs are used only to render unified diffs; a cache miss degrades the annotation to a checksum note but still blocks. Added a "manifest covers every renderable kind" new-kind guard.
+- **CI wiring (mirrors `run_js_unit_bktec.sh`):** restore (PR/main shards, graceful 404), upload (main/release only, bounded to manifest-referenced blobs), and a main-only re-warm orchestrator that regenerates blobs and tripwires on `manifest != committed`.
+- **SKILL.md:** Step 8b + reference table updated from committed-fixture workflow to `git add snapshots.manifest.json`.
+
+**Notes:**
+- **Dry-run evidence (MinIO):** record→upload→wipe→restore→check green (724 examples, 0 failures; 651 deduped blobs, 10 MB → 583 KB gz). Forced footer regression → 691 failures with real diffs from the restored blob. Deleted S3 object (simulated 14-day expiry) → gate still blocks (691) via checksum, annotation degrades gracefully.
+- **Design bet (per user):** rely on per-merge re-warm keeping the 14-day cache warm; deferred a force-regenerate runbook until proven necessary.
+- **Env gotcha:** a stale `BUNDLE_PATH` (sandbox cache) in the shell made the observability pre-commit hook fail with `Bundler::GemNotFound`; cleared it rather than bypassing the hook.
+
+---
