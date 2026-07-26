@@ -6757,3 +6757,23 @@ Closed the two caveats called out in the final review of PR #74613: (1) the drif
 - **Validated:** rubocop clean, `ruby -c` clean, module-`@rendered` marker pattern verified, and the upload guard exercised (all-present → uploads, one-missing → skips, PR branch → skips). Full integration-harness re-run of the gate still pending on CI.
 
 ---
+
+## 2026-07-26 - HS-194013: Align snapshot new-kind guard with record mode
+
+**Type:** follow-up
+**Repository:** nutella
+**Branch:** `kbachu-hs-194013-semantic-email-snapshot-regression-gate`
+**PR:** [#74613](https://github.com/highspot/nutella/pull/74613) (commit `3f70e8eb7ef`)
+**Files Changed:** `web/spec/integration/common/email/semantic/semantic_email_snapshot_regression_spec.rb`
+
+**Summary:**
+Fixed a dead-end loop in the "manifest covers every renderable kind" guard surfaced while walking the new-kind workflow. The guard demanded a manifest entry for every registry kind, but record mode (`UPDATE`) skips kinds that render nil/empty — so a registered-but-non-rendering kind failed the guard with a message pointing at `UPDATE`, which could never record it.
+
+**Changes Made:**
+- Guard now enumerates registry `(cat, kind)` pairs, rejects those already in the manifest, renders only those remaining candidates, and flags just the ones that actually render (non-nil/non-empty). Non-rendering registered kinds are left to the `semantic-email-coverage-delta` gate.
+- Rendering only un-baselined candidates keeps the common no-new-kind path free of an extra full render pass.
+
+**Notes:**
+- Refactored an intermediate leading-dot method chain into assignments to dodge a `Layout/MultilineMethodCallIndentation` cop crash (rubocop 1.59.0) that would otherwise noise up the pre-commit hook.
+
+---
