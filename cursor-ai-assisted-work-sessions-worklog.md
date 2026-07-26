@@ -6731,3 +6731,29 @@ Replaced the committed HTML/JSON fixture catalogue (~11 MB, 724 files) on PR #74
 - **Env gotcha:** a stale `BUNDLE_PATH` (sandbox cache) in the shell made the observability pre-commit hook fail with `Bundler::GemNotFound`; cleared it rather than bypassing the hook.
 
 ---
+
+## 2026-07-25 - HS-194013: Fix snapshot-gate caveats (re-warm wiring + parallel-safe annotations)
+
+**Type:** follow-up
+**Repository:** nutella
+**Branch:** `kbachu-hs-194013-semantic-email-snapshot-regression-gate`
+**PR:** [#74613](https://github.com/highspot/nutella/pull/74613) (commit `545761b74ee`)
+**Files Changed:**
+- `web/spec/integration/common/email/semantic/semantic_email_snapshot_regression_spec.rb`
+- `.buildkite/run_rb_integration_bktec.sh`, `.buildkite/email_snapshots_upload.sh`
+- deleted `.buildkite/run_semantic_email_snapshot_rewarm.sh`
+
+**Summary:**
+Closed the two caveats called out in the final review of PR #74613: (1) the drift annotation used a single Buildkite context that parallel shards could clobber, and (2) the dedicated main-only re-warm step was never wired into `pipeline.yml` (and, discovered here, still pointed at the pre-rename `..._hybrid_spec.rb`, so it was dead).
+
+**Changes Made:**
+- **Re-warm folded into the integration runner (no dedicated boot):** the `main` integration run already renders every kind, so check mode now writes HEAD's bytes into the blob dir and `run_rb_integration_bktec.sh` re-publishes them on `main`/`release` from that same render. Gated on a `build/email-snapshot-rendered.marker` the spec drops only when it actually rendered, so under file-level bktec splitting exactly one shard uploads. Deleted the standalone re-warm script.
+- **Partial-archive guard:** `email_snapshots_upload.sh` now skips entirely when any manifest-referenced blob is absent, so a shard that rendered only a subset can never publish an incomplete baseline.
+- **Parallel-safe annotation:** drift annotation context is now `email-snapshot-drift-${BUILDKITE_PARALLEL_JOB}`.
+
+**Notes:**
+- **Cheaper than a dedicated step:** a separate main-only re-warm would boot the full integration stack (~15-25 min) on every merge purely to refresh a diff-only cache; folding it into the run that already rendered costs ~583 KB of upload.
+- **No lost safety:** the deleted script's "manifest != committed" tripwire is subsumed by the check gate running on `main` — any drift there fails the build directly.
+- **Validated:** rubocop clean, `ruby -c` clean, module-`@rendered` marker pattern verified, and the upload guard exercised (all-present → uploads, one-missing → skips, PR branch → skips). Full integration-harness re-run of the gate still pending on CI.
+
+---
