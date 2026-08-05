@@ -6777,3 +6777,25 @@ Fixed a dead-end loop in the "manifest covers every renderable kind" guard surfa
 - Refactored an intermediate leading-dot method chain into assignments to dodge a `Layout/MultilineMethodCallIndentation` cop crash (rubocop 1.59.0) that would otherwise noise up the pre-commit hook.
 
 ---
+
+## 2026-08-05 - Freeze meeting-recap preview clock to stop semantic-email snapshot drift
+
+**Type:** milestone
+**Repository:** nutella
+**Branch:** hs-194417-expose-deals-access
+**PR:** https://github.com/highspot/nutella/pull/75095 (commit 15bab2f0713)
+**Files Changed:**
+- web/common/email/semantic/preview/mock_data.rb
+
+**Summary:**
+PR #75095 (an unrelated Deals-access change) was red on the semantic-email snapshot gate — `meeting_emails/daily_meeting_recap.{email_data.json,html}` drifted. Root-caused to a calendar-dependent flake in the preview fixture, not the PR, and fixed it at the source.
+
+**Changes Made:**
+- Added `MEETING_PREVIEW_TIME` (fixed clock) and repointed the meeting recap/digest block's `Date.today` / `Time.now` anchors at it, mirroring the existing `COMMENT_PREVIEW_TIME` fix.
+
+**Notes:**
+- Mechanism: `daily_meeting_recap` mock data anchored meeting dates on the live clock; the builder renders a variable-length `group_title` date heading ("Wednesday, August 10") that feeds the body-derived preheader, which `truncate_preheader` cuts to a fixed length *before* the snapshot spec normalizes dates to `[[VOLATILE]]`. As the calendar advanced past the manifest's record date (~Jul 28), the date-string length changed, shifting the truncation boundary and the trailing word ("lined up..." → "lined...") → checksum drift. Would fail any PR whose CI ran on a mismatched date.
+- No manifest re-record needed: the frozen render matched the committed baseline (identical on both this branch and release/26-5-2). Validated with 39/39 meeting-kind gate examples passing.
+- Same latent bug still exists on main/latest — a forward-port is worth doing.
+
+---
