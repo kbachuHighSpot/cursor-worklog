@@ -6799,3 +6799,24 @@ PR #75095 (an unrelated Deals-access change) was red on the semantic-email snaps
 - Same latent bug still exists on main/latest — a forward-port is worth doing.
 
 ---
+
+## 2026-08-05 - Follow-up: main already fixed; aligned release fix naming
+
+**Type:** milestone
+**Repository:** nutella
+**Branch:** hs-194417-expose-deals-access
+**PR:** https://github.com/highspot/nutella/pull/75095 (commit 3c858ba2996)
+**Files Changed:**
+- web/common/email/semantic/preview/mock_data.rb
+
+**Summary:**
+Corrects the prior entry's claim that main still had the meeting-recap snapshot bug. main was already fixed ~8h earlier by #75103 (Pankaj Khandelwal, "Freeze meeting digest preview time"), which uses MEETING_DIGEST_PREVIEW_TIME aliased to COMMENT_PREVIEW_TIME plus a preview_time local. No forward-port PR was needed.
+
+**Changes Made:**
+- Renamed my release-branch constant MEETING_PREVIEW_TIME to match main (MEETING_DIGEST_PREVIEW_TIME = COMMENT_PREVIEW_TIME) and threaded a preview_time local through the recap block, so the freeze region now matches main line-for-line.
+
+**Notes:**
+- My stale local branch (kbachu-hs-190624) predated #75103, which is why the bug looked unfixed on "main" initially. release/26-5-2 forked before #75103, so the fix still had to reach it via #75095.
+- Gate re-validated: 39/39 meeting-kind examples pass.
+
+---
