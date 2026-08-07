@@ -4,7 +4,7 @@ This log tracks weekly summaries of significant work across all sources (Cursor,
 
 ## Running Summary
 
-*Last updated: 2026-07-24*
+*Last updated: 2026-08-07*
 
 ### Overall Key Accomplishments (Jan-Jun 2026)
 
@@ -120,19 +120,79 @@ This log tracks weekly summaries of significant work across all sources (Cursor,
 - Worklog automation gap: migration scripts and investigations weren't auto-logged because rules lacked specific significance criteria and mid-session logging instructions (Apr 6)
 
 ### Current Focus (This Week)
-- **Semantic email snapshot-regression gate (in-flight branch, PR pending)**: New blocking `spec/integration` RSpec gate that byte-diffs every previewable kind's normalized HTML + `email_data` against a committed fixture catalogue, with a hybrid baseline→HEAD `email-snapshot-drift` Buildkite annotation on failure. Validated end-to-end through the integration harness (forced `FOOTER_ADDRESS` drift → 691 kinds → one aggregated annotation; clean run auto-removes the stale report). Byte-level sibling to the HS-191718 existence gate.
-- **HS-191718 coverage-delta CI gate**: In Code Review — the existence gate (rule seed / production builder / preview). Fix hints now name the owning notifications-platform skill step.
+- **HS-195231 duplicate alert emails + digest-window gate (PR #75234, open)**: Double-send guard tagging engine-routed alerts so legacy builders skip their bespoke immediate send, plus a `SendAlertsJob` digest-window gate keyed on the unified flag. Bugbot review addressed (email-send-failure fallback + per-recipient engine-routed drop in mixed batches). Awaiting test/merge.
 - **HS-191129 AlertRuntimeValidations framework**: In Progress — pre-flight validation for batched-alert send jobs (recipient/rule/delivery-strategy shape).
-- **HS-191017 direct-email observability + gating**: In Progress — NRQL-driven metric + FF-fallback hardening; landed as in-branch commits + PR #73589 (merged Jul 13).
-- **notifications-platform Cursor plugin (ai-plugins #83, merged)**: add-notification + digest-framework skills; add-notification now documents the snapshot-regression gate (Step 8b).
+- **HS-183879 Amazon Pinpoint deprecation [Internal GA]**: Dev Ready — email transport migration follow-on.
+- **notifications-platform Cursor plugin**: add-notification + digest-framework skills; now documents direct-kind engine routing + `externally_managed` taxonomy (ai-plugins #101) and the snapshot-regression gate workflow.
+
+### Recently Shipped (last fortnight)
+- **HS-194013 snapshot gate → manifest-hybrid storage (merged)** — committed checksum manifest + content-addressed blobs, re-warm folded into the integration runner.
+- **HS-191017 direct-email engine routing (merged)** — direct kinds now flow through the notification engine with Alert records; classification/dedup-off migration landed.
+- **Mongo-flag deprecations (merged)** — `email_sendgrid_use_email_events`, `enable_reply_to_for_notifications`, `email_notifications_cc`.
+- **HS-194271 silent-drop fix + HS-194854 admin-403 fix (merged)**.
 
 ### Current Blockers
-- **HS-193844** (verification-code email tracking-parity regression) — Untriaged; the semantic verification-code email's header + footer URLs miss the `?source_alert` / `?source=email.<tag>` wrap that legacy production applies.
-- HS-189038 (SendGrid 421 max-messages-per-connection) — filed Jun 18; owned by App Platform; magma `SmtpSend.sendWithUnsubscribeLink()` needs transport recycling or 421-retry inside the loop
+- **HS-193844** (verification-code email tracking-parity regression) — To-Do; the semantic verification-code email's header + footer URLs miss the `?source_alert` / `?source=email.<tag>` wrap that legacy production applies.
+- HS-189038 (SendGrid 421 max-messages-per-connection) — filed Jun 18; owned by App Platform; magma `SmtpSend.sendWithUnsubscribeLink()` needs transport recycling or 421-retry inside the loop. Related in-flight: HS-195036 (SmtpSend empty-TO failure, magma #9211 under review).
 - HS-183419 follow-on: `tracking_tag` wraps semantic alert URLs via `tracked_url`, but a few digest/direct-email paths still bypass it — surface in next backlog sweep
 - HS-151210 (Pinterest font request) remains Blocked
 - `nutella/.cursor/**` is gitignored, so in-repo rule edits don't propagate to teammates without unignoring `.cursor/rules/`
 - Repo-local skills are not surfaced in `<available_skills>` — Cursor product behavior; needs feature request or config investigation
+
+---
+## 2026-08-07 - Weekly Review (2026-08-01 to 2026-08-07)
+
+**Summary:**
+High-throughput week closing out the direct-email rules-engine work (HS-191017) and a batch of mongo-flag deprecations, plus two customer-facing notification-email bug fixes. Landed the direct-kind engine routing + classification/dedup-off migration, removed three legacy email mongo flags, fixed a cross-scale-unit admin 403 in magma, and froze the meeting-recap preview clock to stop a calendar-dependent snapshot flake. Opened HS-195231 (duplicate alert emails + digest-window gate) and addressed its Bugbot review.
+
+### Significant Cursor Activities
+- **Duplicate alert emails + digest-window gate (HS-195231, PR #75234, opened Aug 7)**: Two related fixes surfaced from customer duplicate-email reports. `AlertCommands.create` now tags engine-routed alerts so legacy per-kind builders skip their bespoke immediate send (eliminating back-to-back and now-plus-digest duplicates), and `SendAlertsJob` only applies per-kind `batching_window_minutes` when the unified flag is on so flag-off domains keep their single previous-day digest. Follow-up in the same session addressed the Bugbot review: preserve the legacy email fallback when the engine's synchronous send fails (`channels_failed`/`email_failed?` on the engine Result), and reject engine-routed alerts per-recipient in `send_emails`/`send_emails_async` so mixed per-user-rollout batches don't blast `alerts.first` to everyone.
+- **Meeting-recap preview clock freeze (PR #75095, Aug 5)**: Root-caused a red semantic-email snapshot gate on an unrelated PR to a calendar-dependent flake — the recap block's live-clock date heading shifted the preheader truncation boundary as the calendar advanced past the manifest record date. Froze the clock at the source (`MEETING_DIGEST_PREVIEW_TIME`), aligning the release-branch fix line-for-line with the main fix (#75103, Pankaj) after confirming main was already patched.
+
+### Significant PRs
+- **HS-191017 direct-email engine routing (merged Aug 4)**: PR #74933 (route direct email kinds through the notification engine) + PR #74932 (realign `notification_rules` classification + dedup-off migration). Companion docs in ai-plugins #101 (direct-kind engine routing + `externally_managed` taxonomy).
+- **HS-194854 admin 403 fix (magma #9202, merged Aug 4)**: `notification_rules` & `email_replay` admin pages 403'd on non-su0 scale units; fixed the authorization path.
+- **Mongo-flag deprecations (merged Aug 4)**: PR #74992 (`email_sendgrid_use_email_events`) + PR #75001 (`enable_reply_to_for_notifications`) — dead-code + flag removal (HS-190612, HS-190624; HS-190610 also closed).
+
+### Significant Helping Others
+- **HS-194858 SendAlertsJob review (PRs #74972 + #74996, merged Aug 3-4)**: Reviewed Chris K's dispatcher pre-filter, multi-domain batching, and calendar-anchored Daily/Weekly digest windows (main + release/26-5-2 backport).
+- **HS-195036 magma SmtpSend review (#9211, open)**: Reviewing the empty-TO-addresses failure in `mail_v2` jobs.
+- **HS-194013 review (#75103, merged Aug 5)**: Reviewed the meeting-digest preview-time freeze that fixed the snapshot flake on main.
+
+### Significant Jira Tickets
+- **HS-191017** (route direct emails through the rules engine, P3, **Closed**), **HS-190612 / HS-190624 / HS-190610** (mongo-flag deprecations, P1, **Closed**), **HS-194854** (admin 403 on non-su0, P3, **Closed**).
+- **HS-195231** (duplicate email for batched `feedback_spot`, P1, **In Progress**) — PR #75234 open, Bugbot review addressed.
+
+**Notes:**
+- HS-195231 still open (awaiting test/merge). Carry-over blockers unchanged (HS-193844 verification-code tracking parity; HS-189038 SendGrid 421).
+- Session worklog captured only the Aug 5 preview-clock work; the HS-191017 / flag-deprecation merges (Aug 3-4) were reconstructed from GitHub + Jira.
+
+---
+## 2026-07-31 - Weekly Review (2026-07-25 to 2026-07-31)
+
+**Summary:**
+Focused week hardening the semantic-email snapshot regression gate (HS-194013) and fixing a rules-engine silent-drop bug. Reworked the snapshot gate to manifest-hybrid storage (committed checksums + content-addressed blobs in the build cache), folded the re-warm into the integration runner, and aligned the new-kind guard with record mode. Shipped HS-194271 fixing emails silently dropped for `send_immediately` kinds seeded as batched rules.
+
+### Significant Cursor Activities
+- **Snapshot gate → manifest-hybrid storage (HS-194013, PR #74613)**: Replaced the committed ~11 MB / 724-file HTML+JSON fixture catalogue with a committed `snapshots.manifest.json` (kind→sha256, ~92 KB) as the correctness source of truth, moving baseline bytes to content-addressed blobs in the `highspot-build-state` cache. Gate is now `render → normalize → sha256 → compare-to-manifest` with zero S3 dependency; a cache miss degrades the diff annotation to a checksum note but still blocks. Dry-run validated end-to-end against local MinIO.
+- **Re-warm wiring + parallel-safe annotations (PR #74613 follow-up)**: Folded the main-only blob re-warm into the integration runner (which already renders every kind) instead of a dedicated ~15-25 min boot; added a render marker so exactly one shard uploads under file-level splitting, a partial-archive guard, and per-shard annotation contexts.
+- **New-kind guard aligned with record mode (Jul 26)**: Fixed a dead-end loop where the "manifest covers every renderable kind" guard demanded a manifest entry for kinds that record mode skips (nil/empty render); guard now renders only un-baselined candidates and flags just those that actually render.
+
+### Significant PRs
+- **HS-194271 silent-drop fix (PR #74760, merged Jul 30)**: Rules engine was silently dropping emails for `send_immediately` kinds seeded as batched rules; fixed the drop and the associated metrics.
+- **Snapshot-gate validation (PR #74651, closed Jul 27)**: Throwaway `[do-not-merge]` PR to exercise the semantic-email snapshot gate end-to-end in CI.
+
+### Significant Helping Others
+- **launchdarkly-flags #644 + #632 (reviewed, merged Jul 29)**: `notification_dedup_enabled` (HS-180228) and `notification_throttle_enabled` (HS-191506) per-domain flags.
+- **HS-193255 Sorbet gate (PR #74654, Jul 27)** and **HS-0 lint-skip on main builds (PR #74536)** — CI-hygiene reviews.
+
+### Significant Jira Tickets
+- **HS-194271** (silent drops for send_immediately-as-batched, P3, **Closed**).
+- **HS-194190** (remove credentials logged in a content-cdn S3 bucket, P1, **Closed** Jul 27) — security cleanup.
+- **HS-179437** (Notifications CS1 Foundations epic, P1, **Closed** Jul 30).
+
+**Notes:**
+- Snapshot-gate hardening was auto-logged to the session worklog (Jul 25-26); the HS-194271 fix and reviews were reconstructed from GitHub + Jira.
 
 ---
 ## 2026-07-24 - Weekly Review (2026-07-21 to 2026-07-24, partial week)
