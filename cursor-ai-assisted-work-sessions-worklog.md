@@ -6820,3 +6820,35 @@ Corrects the prior entry's claim that main still had the meeting-recap snapshot 
 - Gate re-validated: 39/39 meeting-kind examples pass.
 
 ---
+
+## 2026-08-12 - Remove semantic->legacy failure fallback + details.type digest idempotency guards
+
+**Type:** milestone
+**Repository:** nutella
+**Branch:** kiran.bachu-hs-195424-digest-idempotency-details-type
+**PR:** https://github.com/highspot/nutella/pull/75443 (commit 1fb02421d70)
+**Files Changed:**
+- web/common/email/email_commands.rb
+- web/common/email/semantic_email_commands.rb
+- web/common/email/email_tracking.rb (prior commit 9fbe7c119ac)
+- web/spec/unit/common/email/email_commands_spec.rb
+- web/spec/unit/common/email/semantic_email_commands_spec.rb
+- web/spec/unit/common/email/semantic_email_pipeline_spec.rb
+- web/spec/unit/common/email/email_tracking_spec.rb (prior commit)
+
+**Summary:**
+Bundled two related fixes for duplicate / inconsistent notifications on the semantic (unified) email path into PR #75443. Part 1 (already committed) keys the two digest idempotency guards off `details.type` instead of the top-level `type` that semantic rendering overwrites to `:semantic_email` — this was the every-~30-min duplicate "Content Expiry" digest reported in Slack. Part 2 (this session) removes the semantic->legacy failure fallback so a failed semantic render/build no longer silently re-sends via the legacy pipeline.
+
+**Changes Made:**
+- Immediate alerts: nil/exception render now drops the send, logs, and emits a failure metric (no legacy re-render).
+- Digests: a failed supported entry is dropped and un-marked so it re-sweeps; digest-level build/render failure drops the whole digest and clears the sent-list so every alert re-sweeps; mixed-pipeline rebuild only touches surviving alerts.
+- Direct emails: widened the drop from engine-routed-only to ALL direct types with a registered builder (transactional/auth included, e.g. pitch/MFA) per "remove legacy path entirely after GA" direction; types with no builder still route legacy.
+- Removed dead `build_legacy_alert_email_data`; updated specs to assert drop-on-failure (435 email examples, 0 failures).
+- Updated PR title + description to cover both fixes.
+
+**Notes:**
+- Routing fallbacks (FF off / no rule / no builder) are intentionally preserved — those are mid-rollout routing decisions, not failure fallbacks.
+- Checked PR #75453 ([HS-195629] direct email duplicate send fix): related but no overlap — it guards post-send bookkeeping in `NotificationEngine.notify` (different file/layer); complementary, no merge conflict.
+- Scope caveat flagged to user: two logically distinct changes under one PR/Jira (HS-195424); offered to split the fallback-removal commit onto its own branch if a reviewer prefers.
+
+---
