@@ -6852,3 +6852,34 @@ Bundled two related fixes for duplicate / inconsistent notifications on the sema
 - Scope caveat flagged to user: two logically distinct changes under one PR/Jira (HS-195424); offered to split the fallback-removal commit onto its own branch if a reviewer prefers.
 
 ---
+
+## 2026-08-14 - SES v2 Phase 0: doc plan phase, LD flag conflict, Bugbot triage across 3 repos
+
+**Type:** milestone
+**Repository:** magma, nutella, launchdarkly-flags (+ SES migration tech-spec Google Doc)
+**Branch:** kiran.bachu-ses-v2-phase-0 (all three repos)
+**PR:**
+- magma https://github.com/highspot/magma/pull/9226 (commits b69cd01634, e8ad11775c)
+- nutella https://github.com/highspot/nutella/pull/75498 (commit 251ffbcdf1b)
+- launchdarkly-flags https://github.com/highspot/launchdarkly-flags/pull/797 (rebased, baf920c)
+**Files Changed:**
+- magma: workflow/core/.../mail/amazon/ses/AmazonSesApiSend.java + AmazonSesApiSendTest.java
+- nutella: web/client/helpers/Enums.ts, web/client/modals/PitchItemsView/PitchItemsView.js
+- launchdarkly-flags: crew_flags/app-platform/features.yaml
+
+**Summary:**
+Follow-up session on the Pinpoint→SES v2 migration (HS-195782). Added a Phase 5 (consolidate SMTP amazon_ses onto SES v2) to the tech-spec Google Doc Project Plan, resolved a merge conflict on the LD flag PR, and triaged/fixed all Cursor Bugbot review comments across the magma and nutella PRs.
+
+**Changes Made:**
+- Doc: appended Phase 5 (opt-out pitch SMTP path → SES v2 API; recipient-visible group mode + List-Unsubscribe + per-destination idempotency; retire AmazonSesUserSend/SmtpConnector) as an adjacent follow-up table (the Docs MCP can't add a row to an existing table).
+- LD flags #797: rebased onto latest main; the remote branch had a botched merge commit that dropped app-platform's company_settings_notifications_v2 flag and was still behind main. Reconstructed the YAML so BOTH flags coexist; force-with-lease pushed. PR now MERGEABLE.
+- magma #9226 (3 Bugbot mediums, commit b69cd01634): de-dup recipients across to/cc/bcc (LinkedHashSet, mirrors Pinpoint email-keyed map); detect bulk failures by BulkEmailEntryResult.status != SUCCESS (not just error text); log destination position not the recipient email (PII).
+- magma #9226 (1 Bugbot high, commit e8ad11775c): throwing on ANY per-destination failure caused whole-job retry → duplicate resends of already-accepted recipients. Now only a TOTAL failure raises a retriable MailException(send); partial failures are logged (per-destination + summary) without retry. 8/8 unit tests green.
+- nutella #75498 (1 Bugbot medium, commit 251ffbcdf1b): pitch modal only treated sendgrid/pinpoint/amazon_ses as Highspot providers, so amazon_ses_v2 sends skipped success notification + hs:pitch:created. Added amazonSESV2 to pitchEmailProviders enum + the highspotEmailProvider check. Server-side get_email_account_type already mapped AMAZON_SES_V2.
+
+**Notes:**
+- Replied on every Bugbot thread with the resolving commit SHA.
+- Deferred item: targeted retry of only the failed bulk destinations needs per-destination idempotency — folded into the doc's Phase 5, not Phase 0.
+- All three PRs remain BLOCKED only on required review/test gates (not code); conflicts and comments are cleared.
+
+---
