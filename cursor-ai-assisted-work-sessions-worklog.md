@@ -6883,3 +6883,38 @@ Follow-up session on the Pinpoint→SES v2 migration (HS-195782). Added a Phase 
 - All three PRs remain BLOCKED only on required review/test gates (not code); conflicts and comments are cleared.
 
 ---
+
+## 2026-08-21 - Batched digest: card-wrap text-only alerts + section-title focused subjects
+
+**Type:** milestone
+**Repository:** nutella
+**Branch:** kiran.bachu-focused-digest-section-title-subject
+**PR:** https://github.com/highspot/nutella/pull/75878 (draft; commits 95061136623, 2e515a3a29f, 58d3f5b284f, d7205d672ba)
+**Files Changed:**
+- web/common/email/semantic/builders/alert/digests/digest_builder.rb
+- web/common/jobs/alerts/send_alerts_job.rb
+- web/common/email/email_commands.rb
+- web/common/email/semantic_email_commands.rb
+- web/common/email/semantic/preview/semantic_email_preview.rb
+- web/spec/unit/common/email/builders/alert/digests/digest_builder_spec.rb
+- web/spec/unit/common/jobs/alerts/send_alerts_job_spec.rb
+- web/spec/unit/common/email/email_commands_spec.rb
+- web/spec/unit/common/email/email_commands_notification_rules_spec.rb
+- spec/integration/common/email/semantic/snapshots.manifest.json
+
+**Summary:**
+Two PM-driven fixes for sub-daily (focused) grouped notification emails plus a preview classification correction, all under new ticket HS-196272. (1) Batched digests now wrap an alert's bare body text in its own content-only card so the card is the per-alert separator, and de-duplicate repeated section/group titles within an urgency tier. (2) Focused rule-grouped emails derive their subject from the rendered section title ("You have N new '<title>' notifications") instead of the humanized rule name; entity-grouped focused emails keep their entity-anchored subject. To guarantee an exact subject (never the generic "You have N new notifications"), focused flushes are split so each email carries exactly one section title.
+
+**Changes Made:**
+- DigestBuilder: added `wrap_body_only_in_cards!` (framework-capped only), `dedupe_group_titles!`, and `build_focused_subject` (from distinct section titles); threaded a new `focused` flag through `email_commands` → `semantic_email_commands` → `build_digest_email`.
+- SendAlertsJob: `grouped_subject` returns the entity-anchored subject only for entity-grouped flushes and nil for rule-grouped (builder derives it); `group_key` splits rule-grouped focused flushes by a `title_signature` (kind + variation) so each email holds one title; removed `humanized_rule_label`.
+- Preview: added `sampler_capped_text_only_cards`; moved `scheduled_subscription` (+11 variations) from `batched_spot` to a new `immediate_spot` category to clear pre-existing preview drift (HS-195652 realigned that rule to Immediate).
+- Re-recorded the batched-digest snapshot manifest; unit suites green (89 send-job examples + digest-builder focused-subject/card-wrap coverage).
+- Created HS-196272 (task under HS-183875, App Platform crew, assigned to me, To-Do) and opened draft PR #75878.
+
+**Notes:**
+- Checked overlap with PR #75678 (Chris K, 5-min unified sweep): changes are orthogonal (subject/rendering vs scheduling/routing); only a trivial tail conflict expected in `send_alerts_job_spec.rb` on rebase.
+- Generic-subject fallback retained only for the rare data-driven title the kind+variation signature can't distinguish.
+- Worked around a RuboCop cop crash on the distinct-titles multiline chain by splitting it into two statements.
+
+---

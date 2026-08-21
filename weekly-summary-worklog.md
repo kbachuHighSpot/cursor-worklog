@@ -4,11 +4,12 @@ This log tracks weekly summaries of significant work across all sources (Cursor,
 
 ## Running Summary
 
-*Last updated: 2026-08-07*
+*Last updated: 2026-08-21*
 
 ### Overall Key Accomplishments (Jan-Jun 2026)
 
 **Significant Cursor Activities:**
+- **Unified-notifications duplicate-email + digest-correctness hardening (Aug 7-21)**: Closed out a run of customer-facing duplicate/inconsistent notification-email bugs on the semantic/unified path. Stopped duplicate alert emails and gated the digest window on the unified flag (HS-195231, PR #75234 + hotfix #75277); keyed the digest idempotency guards off `details.type` and removed the semantic→legacy failure fallback so failed renders drop-and-re-sweep (HS-195424, #75443); added send idempotency + runtime alert/rule-drift validation + account-less direct sends for the batched job (HS-191129, #75459/#75467/#75680); grouped same-type alerts into focused sub-daily emails (HS-195333, #75533) and then card-wrapped text-only alerts + derived focused subjects from section titles with one-title-per-email splitting (HS-196272, #75878). Kicked off the Pinpoint→SES v2 migration with a new SES v2 API sender behind `use_amazon_ses_v2` across magma #9226 + nutella #75498 + LD #797 (recipient de-dup, partial-vs-total failure handling to avoid retry duplicates), all Bugbot comments triaged.
 - **Semantic-email regression gates + observability hardening (Jul 7-24)**: NRQL-driven direct-email/digest observability (HS-191017) — comment/reply `email_type`→owning-kind aliasing at rule resolution, domain-scoped FF fallback for User-less dispatchers, a `flag_reason` metric sub-cause axis, and replica-set `OperationFailure` → `transient_mongo` routing — plus correctness fixes (weekly-meeting-digest card links, a `:no_email` hard-suppression bypass, rich item-card metadata + reply-chip subtitles, and a digest BSON-safety fix that was silently dropping every digest send). Landed PR #73589 (Jul 13), #73976 (WGLL-video rule seed), #74047 (ICS/metadata/digest fixes), #74177 (Email Index Review #2 card anchoring). Shipped TWO CI regression gates for semantic email: HS-191718 coverage-**delta** (checks *existence* of rule seed / production builder / preview) and a new in-process RSpec **snapshot-regression** gate (byte-level HTML + `email_data` diff vs a committed fixture catalogue, with a hybrid baseline→HEAD `email-snapshot-drift` Buildkite annotation). Merged the notifications-platform Cursor plugin (ai-plugins #83) documenting the full add-notification workflow including both gates.
 - **HS-182399 Semantic Email Text & Styling Fixes (May 6 – May 15)**: Drove a multi-week PM-review-driven cleanup of semantic-email rendering quality. PR #70801 (43 files, +8,052/-815) covering 8 builder families' `[RULE:inlined_card_title]` violations (Pattern A allowlist + Pattern B helper extraction), assessment-family rebuild (7 `assessment_submitted` variations + `amf_assessment_submitted` + `amf_single_assessment_submitted` rich cards via Apollo `meeting_info` plumbing), `share_meeting` enrichment (render-time `engagement_meeting_list_records` Mongo lookup + meeting thumbnail via `ThumbnailPresenter`/`UrlPresenter` chain), `lesson_progress_reset` production entity-reversal fix, plus 153 i18n keys regenerated via `iidgen` after Buildkite caught 22 length violators + 130 descriptive keys + 1 case-collision. Migrated semantic-email gate from DynamicConfig to LaunchDarkly-only controls (LD PR #328 — `unified_notification_system`, `semantic_email_enabled_categories`, `semantic_email_category_overrides`) so PM-batch rollout per-category becomes UI-driven.
 - **Notifications-Migration Test Tooling (May 8 – May 15)**: Built out `compare_email_previews.py` from a parity-only checker into a comprehensive PM-rubric tooling. Added 14 new migration rule checks (`[RULE:missing_card]`, `[RULE:body_after_following_reference]`, `[RULE:semantic_card_without_legacy_link]`, `[RULE:noun_entity_type_mismatch]`, `[RULE:reply_completeness]`, `[RULE:card_meta]`, `[RULE:default_avatar]`, `[RULE:cta_presence]`, `[RULE:header_parity]`, `[RULE:footer_parity]`, `[RULE:card_url_type]`, `[RULE:item_count]`, `[RULE:card_count]`, `[RULE:duplicate_sections]`, `[RULE:body_copy_length]`, etc.). Snapshot regression catalogue (186 baseline JSON files). Verdict bucket refactor (`warn_same`/`warn_structured`). Run summary auto-discovery of all reason types with severity icons + per-verdict breakdowns + strict/lenient success rates + `--rule-category` Mongo-backed filter + `--reason-type` matching backlog tags verbatim. PR #70903 (notifications-migration test scripts, 7 files, +7,171) merged May 11. Documented `--semantic-only-rubric` mode + `validate_rule_category.sh` wrapper in README.
@@ -120,24 +121,84 @@ This log tracks weekly summaries of significant work across all sources (Cursor,
 - Worklog automation gap: migration scripts and investigations weren't auto-logged because rules lacked specific significance criteria and mid-session logging instructions (Apr 6)
 
 ### Current Focus (This Week)
-- **HS-195231 duplicate alert emails + digest-window gate (PR #75234, open)**: Double-send guard tagging engine-routed alerts so legacy builders skip their bespoke immediate send, plus a `SendAlertsJob` digest-window gate keyed on the unified flag. Bugbot review addressed (email-send-failure fallback + per-recipient engine-routed drop in mixed batches). Awaiting test/merge.
-- **HS-191129 AlertRuntimeValidations framework**: In Progress — pre-flight validation for batched-alert send jobs (recipient/rule/delivery-strategy shape).
+- **HS-196272 batched-digest card-wrap + section-title focused subjects (PR #75878, draft)**: Wrap text-only alerts in content-only cards, de-dup section titles within a tier, derive focused sub-daily subjects from section titles, and split focused flushes so each email carries exactly one title. Snapshots re-recorded; awaiting review.
+- **HS-195782 Pinpoint→SES v2 migration (magma #9226, nutella #75498, Code Review)**: SES v2 API sender behind `use_amazon_ses_v2`; Bugbot cleared, blocked on required review/test gates.
+- **HS-191129 AlertRuntimeValidations framework (Code Review)**: send idempotency + runtime alert/rule-drift validation for the batched-alert send job (consolidated in #75680).
 - **HS-183879 Amazon Pinpoint deprecation [Internal GA]**: Dev Ready — email transport migration follow-on.
-- **notifications-platform Cursor plugin**: add-notification + digest-framework skills; now documents direct-kind engine routing + `externally_managed` taxonomy (ai-plugins #101) and the snapshot-regression gate workflow.
 
 ### Recently Shipped (last fortnight)
-- **HS-194013 snapshot gate → manifest-hybrid storage (merged)** — committed checksum manifest + content-addressed blobs, re-warm folded into the integration runner.
-- **HS-191017 direct-email engine routing (merged)** — direct kinds now flow through the notification engine with Alert records; classification/dedup-off migration landed.
-- **Mongo-flag deprecations (merged)** — `email_sendgrid_use_email_events`, `enable_reply_to_for_notifications`, `email_notifications_cc`.
-- **HS-194271 silent-drop fix + HS-194854 admin-403 fix (merged)**.
+- **HS-195333 focused grouped emails (merged Aug 14)** — group same-type alerts into one focused email within sub-daily windows.
+- **HS-195424 semantic-path duplicate email fix (merged Aug 12)** — `details.type` idempotency guards + drop-on-failure (no legacy fallback).
+- **HS-195231 duplicate alert emails + digest-window gate (merged Aug 7, hotfix #75277)** — engine-routed double-send guard + unified-flag digest-window gate.
+- **HS-193844 semantic email header/footer tracking parity (merged Aug 10)** — `?source_alert` / `?source=email.<tag>` wrap now applied to header + footer URLs.
+- **HS-191129 send idempotency + runtime validation (merged Aug 18, #75680)**.
 
 ### Current Blockers
-- **HS-193844** (verification-code email tracking-parity regression) — To-Do; the semantic verification-code email's header + footer URLs miss the `?source_alert` / `?source=email.<tag>` wrap that legacy production applies.
 - HS-189038 (SendGrid 421 max-messages-per-connection) — filed Jun 18; owned by App Platform; magma `SmtpSend.sendWithUnsubscribeLink()` needs transport recycling or 421-retry inside the loop. Related in-flight: HS-195036 (SmtpSend empty-TO failure, magma #9211 under review).
 - HS-183419 follow-on: `tracking_tag` wraps semantic alert URLs via `tracked_url`, but a few digest/direct-email paths still bypass it — surface in next backlog sweep
 - HS-151210 (Pinterest font request) remains Blocked
 - `nutella/.cursor/**` is gitignored, so in-repo rule edits don't propagate to teammates without unignoring `.cursor/rules/`
 - Repo-local skills are not surfaced in `<available_skills>` — Cursor product behavior; needs feature request or config investigation
+
+---
+## 2026-08-21 - Weekly Review (2026-08-14 to 2026-08-21)
+
+**Summary:**
+Focused on unified-notifications digest correctness and the Pinpoint→SES v2 migration. Landed the consolidated HS-191129 send-idempotency + runtime-validation PR, opened the HS-196272 batched-digest card-wrap + focused-subject work, kept the SES v2 sender PRs moving through Bugbot, and reviewed several crewmates' notification PRs.
+
+### Significant Cursor Activities
+- **HS-196272 batched-digest card-wrap + focused subject (PR #75878, draft, opened Aug 20)**: Wrap text-only alerts in content-only cards, de-dup section titles within a tier, derive focused sub-daily subjects from section titles, and split focused flushes so each email carries exactly one title. Moved `scheduled_subscription` to an `immediate_spot` preview category (pre-existing drift) and re-recorded snapshots. Created the ticket (App Platform, under HS-183875) and draft PR.
+- **HS-191129 send idempotency + runtime validation (PR #75680, merged Aug 18)**: Consolidated send-idempotency, runtime alert/rule-drift validation, account-less direct sends, and subject cleanup for the batched digest job.
+
+### Significant PRs
+- **nutella #75680 [HS-191129]** (merged Aug 18) — notification send idempotency + runtime validation + account-less direct sends + subject cleanup.
+- **nutella #75878 [HS-196272]** (draft) — batched-digest card-wrap + section-title focused subjects.
+- **magma #9226 / nutella #75498 [HS-195782]** (open) — Amazon SES v2 API sender + routing behind `use_amazon_ses_v2`; Bugbot review cleared.
+- **launchdarkly-flags #812** (open) — remove semantic-email category + notification dedup flags (flag cleanup).
+
+### Significant Helping Others
+- Reviewed Chris K's **#75678** (5-minute unified-notification domain sweep as `alerts_send_v2`, merged Aug 21), **#75799** (domain_id facet on email event metrics, merged Aug 20), and **#75587** (revert `scheduled_subscription` to Immediate, HS-195652, merged Aug 17).
+
+### Significant Jira Tickets
+- **HS-196272** (batched digest card-wrap + focused subject, P3, **In Progress**), **HS-191129** (AlertRuntimeValidations, P3, **Code Review**), **HS-195782** (SES v2 PoC behind FF, P3, **Code Review**), **HS-195652** (revert scheduled_subscription to Immediate, P1, **Ready for Test**), **HS-195333** (focused grouped emails, P1, **Code Review**).
+
+### Key Challenges This Week
+- A RuboCop cop crash on a multiline method chain in `digest_builder.rb` forced a two-statement refactor of the distinct-titles computation.
+- 64 intentional snapshot regressions from the card-wrap + title-dedup changes required re-recording the manifest and disambiguating intentional drift from real bugs.
+- Guaranteeing an exact focused subject required splitting flushes by kind+variation signature rather than accepting a generic count.
+
+**Notes:**
+- HS-196272 draft PR pending review; SES v2 sender PRs blocked only on required review/test gates.
+
+---
+## 2026-08-14 - Weekly Review (2026-08-07 to 2026-08-14)
+
+**Summary:**
+Heavy duplicate-email remediation and idempotency-hardening week on the semantic/unified email path, plus kickoff of the Pinpoint→SES v2 migration. Shipped the HS-195231 duplicate-send fix (with a same-day hotfix and revert-churn recovery), the details.type idempotency + drop-on-failure fix, the HS-191129 send-idempotency/validation work, and the HS-195333 focused-grouped-email grouping. Opened the SES v2 sender across magma + nutella + LD flags.
+
+### Significant Cursor Activities
+- **Semantic-path duplicate email fixes (HS-195424, PR #75443, merged Aug 12)**: Keyed the two digest idempotency guards off `details.type` (semantic rendering overwrites the top-level `type` to `:semantic_email`) to stop the ~30-min duplicate Content-Expiry digest, and removed the semantic→legacy failure fallback so a failed render drops-and-re-sweeps instead of silently re-sending via legacy.
+- **HS-195333 focused grouped emails (PR #75533, merged Aug 14)**: Group same-type alerts into a single focused email within sub-daily batching windows — the foundation the HS-196272 subject work builds on.
+- **SES v2 Phase 0 (magma #9226, nutella #75498, LD #797, Aug 13-14)**: New Amazon SES v2 API sender behind `use_amazon_ses_v2` — recipient de-dup, partial-vs-total failure handling (no whole-job retry duplicates), and pitch-modal provider recognition. Triaged all Bugbot review comments across the three PRs.
+
+### Significant PRs
+- **nutella #75234 [HS-195231]** (merged Aug 7) + hotfix **#75277** (26-5-2) — stop duplicate alert emails; gate digest window on the unified flag. Recovered from a revert-churn cycle (#75279/#75281).
+- **nutella #75443 [HS-195424]** (merged Aug 12) — details.type idempotency + drop-on-failure (no legacy fallback).
+- **nutella #75459 / #75467 [HS-191129]** (merged Aug 12-13) — send idempotency + AlertRuleValidator send-time drift drains.
+- **nutella #75336 [HS-193844]** (merged Aug 10) — semantic email header/footer tracking parity.
+
+### Significant Helping Others
+- Reviewed Chris K's **#74859** (internal email-notification REST API) and **#75434** (post preview data through the notifications API); Murali's **#75290** (speaker tagging semantic) and **#75453** (direct email duplicate send fix); Scott F's **#75514** (scope event duplicate detection by topic+entity); plus magma/nutella empty-recipient guards (#9211 / #75087).
+
+### Significant Jira Tickets
+- **HS-195231** (duplicate feedback_spot email, P1, **Closed** Aug 11), **HS-183484** (Notifications CS1 Highspot Beta, P1, **Closed** Aug 10), **HISPI-13360** (course-review digest consolidation, fdx.com, P2, **Closed** Aug 12), **HFX-1628** (hotfix request, Aug 7).
+
+### Key Challenges This Week
+- The HS-195231 fix went through a merge→revert→re-merge churn plus a same-day hotfix onto release/26-5-2 before it stuck.
+- Distinguishing genuine failure fallbacks (to remove) from intentional mid-rollout routing fallbacks (to keep) when removing the semantic→legacy path.
+
+**Notes:**
+- Some HS-195231 hotfix-churn merges reconstructed from GitHub + Jira; the HS-195424 and SES v2 Phase 0 sessions were captured directly in the session worklog.
 
 ---
 ## 2026-08-07 - Weekly Review (2026-08-01 to 2026-08-07)
